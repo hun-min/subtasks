@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks'; 
 import { useSystem } from './hooks/useSystem';
 import { Target, Task, db } from './db';
 
@@ -123,7 +122,7 @@ export default function App() {
         }
     } else {
         const existing = await db.targets.get(targetId);
-        if (existing) { await updateTargetUsage(targetId, existing.usageCount + 1); }
+        if (existing && existing.id) { await updateTargetUsage(existing.id, existing.usageCount + 1); }
     }
     await addTask({ targetId: targetId!, title: actValue, isCompleted: false, createdAt: new Date() });
     resetForm(); 

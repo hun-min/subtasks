@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: 'Protocol System',
         short_name: 'Protocol',
-        description: 'Execute your protocol.',
+        description: 'Focus on your objective.',
         theme_color: '#030712',
         background_color: '#030712',
         display: 'standalone',

@@ -114,12 +114,12 @@ export default function App() {
     let targetId = selectedTargetId;
     if (!targetId) {
         const existingTarget = await db.targets.where('title').equals(objValue).first();
-        if (existingTarget) {
+        if (existingTarget && existingTarget.id) {
             targetId = existingTarget.id;
-            await updateTargetUsage(targetId!, existingTarget.usageCount + 1);
+            await updateTargetUsage(existingTarget.id, existingTarget.usageCount + 1);
         } else {
             const newId = await addTarget({ title: objValue, defaultAction: actValue, notes: '', usageCount: 1, lastUsed: new Date() });
-            targetId = newId ?? null;
+            if (newId !== undefined) targetId = newId;
         }
     } else {
         const existing = await db.targets.get(targetId);

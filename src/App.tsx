@@ -297,7 +297,7 @@ export default function App() {
                             {editingId?.type === 'task' && editingId.id === topTask.id ? (
                                 <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-lg" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={(e) => e.key === 'Enter' && saveEdit()} autoFocus onClick={(e) => e.stopPropagation()} />
                             ) : (
-                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className="text-lg text-gray-300 cursor-pointer hover:text-white transition-colors select-none truncate w-full">{topTask.title}</span>
+                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className="text-lg text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{topTask.title}</span>
                             )}
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -339,7 +339,7 @@ export default function App() {
                                 {editingId?.type === 'task' && editingId.id === task.id ? (
                                     <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-lg" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={(e) => e.key === 'Enter' && saveEdit()} autoFocus onClick={(e) => e.stopPropagation()} />
                                 ) : (
-                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className="text-lg text-gray-300 cursor-pointer hover:text-white transition-colors select-none truncate w-full">{task.title}</span>
+                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className="text-lg text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{task.title}</span>
                                 )}
                             </div>
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

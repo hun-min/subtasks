@@ -8,6 +8,8 @@ export function useSystem() {
   useEffect(() => {
     const syncFromCloud = async () => {
       if (!navigator.onLine) return;
+      const { data: remoteSpaces } = await supabase.from('spaces').select('*');
+      if (remoteSpaces) await db.spaces.bulkPut(remoteSpaces);
       const { data: remoteTargets } = await supabase.from('targets').select('*');
       if (remoteTargets) await db.targets.bulkPut(remoteTargets);
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
@@ -47,11 +49,13 @@ export function useSystem() {
 
   const addSpace = async (space: Omit<Space, 'id'>) => {
     const id = await db.spaces.add(space) as number;
+    supabase.from('spaces').insert([{ ...space, id }]).then();
     return id;
   };
 
   const updateSpace = async (spaceId: number, title: string) => {
     await db.spaces.update(spaceId, { title });
+    supabase.from('spaces').update({ title }).eq('id', spaceId).then();
   };
 
   const deleteSpace = async (spaceId: number) => {
@@ -61,8 +65,11 @@ export function useSystem() {
     for (const targetId of targetIds) {
       const tasks = await db.tasks.where('targetId').equals(targetId).toArray();
       await db.tasks.bulkDelete(tasks.map(t => t.id!));
+      supabase.from('tasks').delete().eq('targetId', targetId).then();
     }
     await db.targets.where('spaceId').equals(spaceId).delete();
+    supabase.from('spaces').delete().eq('id', spaceId).then();
+    supabase.from('targets').delete().eq('spaceId', spaceId).then();
   };
 
   const addTarget = async (target: Omit<Target, 'id'>) => {

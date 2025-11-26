@@ -118,7 +118,8 @@ export default function App() {
             targetId = existingTarget.id;
             await updateTargetUsage(targetId!, existingTarget.usageCount + 1);
         } else {
-            targetId = await addTarget({ title: objValue, defaultAction: actValue, notes: '', usageCount: 1, lastUsed: new Date() });
+            const newId = await addTarget({ title: objValue, defaultAction: actValue, notes: '', usageCount: 1, lastUsed: new Date() });
+            targetId = newId ?? null;
         }
     } else {
         const existing = await db.targets.get(targetId);

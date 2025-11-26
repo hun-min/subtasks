@@ -10,15 +10,12 @@ const TrashIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="no
 const XIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const HistoryIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
 const UndoIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 0 0 0-6 2.3L3 13"></path></svg>;
-const UpIcon = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>;
-const DownIcon = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>;
-const ExpandIcon = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>;
 const FocusIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>;
 const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
 const ActionIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500"><path d="M9 18l6-6-6-6"></path></svg>;
 
 export default function App() {
-  const { activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, moveTaskUp, moveTaskDown, addTask, addTarget, updateTargetUsage } = useSystem();
+  const { activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, updateTargetUsage } = useSystem();
   
   const [objValue, setObjValue] = useState(''); 
   const [actValue, setActValue] = useState(''); 
@@ -31,12 +28,8 @@ export default function App() {
   const [editingId, setEditingId] = useState<{type: 'target'|'task', id: number} | null>(null);
   const [editValue, setEditValue] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
-  const [inlineAddValue, setInlineAddValue] = useState('');
-  const [inlineTargetId, setInlineTargetId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task', id: number, title: string } | null>(null);
   const [spotlightGroup, setSpotlightGroup] = useState<string | null>(null);
-
-  const targetHistory = useLiveQuery(() => selectedTargetId ? db.tasks.where('targetId').equals(selectedTargetId).reverse().limit(10).toArray() : [], [selectedTargetId]) || [];
 
   const groupedTasks = React.useMemo(() => {
     if (!activeTasks || !allTargets) return {};
@@ -136,12 +129,6 @@ export default function App() {
     resetForm(); 
   };
 
-  const handleInlineSubmit = async (targetId: number) => {
-      if (!inlineAddValue.trim()) return;
-      await addTask({ targetId: targetId, title: inlineAddValue, isCompleted: false, createdAt: new Date() });
-      setInlineAddValue('');
-  };
-
   const resetForm = () => {
     setObjValue(''); setActValue(''); setIsInputMode(false); setSelectedTargetId(null); setSuggestions([]); setFocusedInput('obj');
   };
@@ -231,17 +218,11 @@ export default function App() {
             const tasks = groupedTasks[title];
             if (!tasks || tasks.length === 0) return null;
 
-            const topTask = tasks[0]; // 이건 하위 할일 중 맨 위
+            const topTask = tasks[0];
             const targetId = topTask.targetId!;
             const isExpanded = expandedGroup === title;
             const isSpotlighted = spotlightGroup === title;
-            const queueTasks = tasks.slice(1); // 대기열
-            const hiddenCount = queueTasks.length;
-            
-            // [중요] 접혔을 때는 queueTasks 중 2개만 Stack 효과로 보여줌
-            // 펼쳤을 때는 tasks 전체(topTask 포함)를 보여주거나, 
-            // 디자인 상 Objective(헤더) 아래에 TopTask도 리스트의 일부로 보여주는 게 자연스러움.
-            const visibleQueue = isExpanded ? queueTasks : queueTasks.slice(0, 2); 
+            const queueTasks = tasks.slice(1); 
 
             const wrapperClass = spotlightGroup
                 ? (isSpotlighted ? 'scale-100 z-50 opacity-100' : 'opacity-10 blur-sm pointer-events-none') 

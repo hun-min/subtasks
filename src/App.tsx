@@ -284,7 +284,7 @@ export default function App() {
                     <div className="relative">
                     <div 
                         className={`bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
-                            ${!isExpanded ? 'shadow-lg cursor-pointer' : 'mb-2'}
+                            ${!isExpanded ? 'shadow-lg cursor-pointer' : 'mb-0'}
                         `}
                         onContextMenu={(e) => handleTaskContextMenu(e, topTask)}
                         onClick={(e) => { 
@@ -331,7 +331,7 @@ export default function App() {
                     {isExpanded && queueTasks.map((task) => (
                         <div 
                             key={task.id}
-                            className="bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-2"
+                            className="bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0"
                             onContextMenu={(e) => handleTaskContextMenu(e, task)}
                         >
                             <div className="flex items-center gap-3 overflow-hidden w-full">

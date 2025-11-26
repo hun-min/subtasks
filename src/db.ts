@@ -1,7 +1,14 @@
 import Dexie, { Table } from 'dexie';
 
+export interface Space {
+  id?: number;
+  title: string;
+  createdAt: Date;
+}
+
 export interface Target {
   id?: number;
+  spaceId: number;
   title: string;
   defaultAction: string;
   notes: string;
@@ -18,6 +25,7 @@ export interface Task {
 }
 
 class SystemDB extends Dexie {
+  spaces!: Table<Space>;
   targets!: Table<Target>;
   tasks!: Table<Task>;
 
@@ -26,6 +34,21 @@ class SystemDB extends Dexie {
     this.version(1).stores({
       targets: '++id, title, usageCount, lastUsed',
       tasks: '++id, targetId, isCompleted, createdAt'
+    });
+    this.version(2).stores({
+      spaces: '++id, title, createdAt',
+      targets: '++id, spaceId, title, usageCount, lastUsed',
+      tasks: '++id, targetId, isCompleted, createdAt'
+    }).upgrade(async tx => {
+      const spaces = await tx.table('spaces').toArray();
+      if (spaces.length === 0) {
+        await tx.table('spaces').add({ title: '기본', createdAt: new Date() });
+      }
+      const defaultSpace = await tx.table('spaces').toArray();
+      const defaultSpaceId = defaultSpace[0].id;
+      await tx.table('targets').toCollection().modify(target => {
+        if (!target.spaceId) target.spaceId = defaultSpaceId;
+      });
     });
   }
 }

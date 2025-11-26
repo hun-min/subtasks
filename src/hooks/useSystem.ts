@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, Task, Target } from '../db';
+import { db, Task, Target, Space } from '../db';
 import { supabase } from '../supabase';
 
 export function useSystem() {
@@ -16,13 +16,15 @@ export function useSystem() {
     syncFromCloud();
   }, []);
 
+  const allSpaces = useLiveQuery(() => db.spaces.toArray());
   const activeTasks = useLiveQuery(() => db.tasks.filter(task => task.isCompleted === false).sortBy('createdAt'));
   const completedTasks = useLiveQuery(() => db.tasks.filter(task => task.isCompleted === true).reverse().limit(50).toArray());
   const allTargets = useLiveQuery(() => db.targets.toArray());
 
-  const searchTargets = async (query: string) => {
+  const searchTargets = async (query: string, spaceId?: number) => {
     if (!query) return [];
-    const results = await db.targets.where('title').startsWithIgnoreCase(query).sortBy('lastUsed');
+    let results = await db.targets.where('title').startsWithIgnoreCase(query).sortBy('lastUsed');
+    if (spaceId) results = results.filter(t => t.spaceId === spaceId);
     return results.reverse().slice(0, 10);
   };
 
@@ -41,6 +43,26 @@ export function useSystem() {
     const id = await db.tasks.add(task) as number;
     supabase.from('tasks').insert([{ ...task, id }]).then();
     return id;
+  };
+
+  const addSpace = async (space: Omit<Space, 'id'>) => {
+    const id = await db.spaces.add(space) as number;
+    return id;
+  };
+
+  const updateSpace = async (spaceId: number, title: string) => {
+    await db.spaces.update(spaceId, { title });
+  };
+
+  const deleteSpace = async (spaceId: number) => {
+    await db.spaces.delete(spaceId);
+    const targetsInSpace = await db.targets.where('spaceId').equals(spaceId).toArray();
+    const targetIds = targetsInSpace.map(t => t.id!);
+    for (const targetId of targetIds) {
+      const tasks = await db.tasks.where('targetId').equals(targetId).toArray();
+      await db.tasks.bulkDelete(tasks.map(t => t.id!));
+    }
+    await db.targets.where('spaceId').equals(spaceId).delete();
   };
 
   const addTarget = async (target: Omit<Target, 'id'>) => {
@@ -120,5 +142,5 @@ export function useSystem() {
     }
   };
 
-  return { activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, moveTaskUp, moveTaskDown, addTask, addTarget, updateTargetUsage };
+  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, moveTaskUp, moveTaskDown, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage };
 }

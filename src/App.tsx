@@ -14,7 +14,7 @@ const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="n
 const ActionIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500"><path d="M9 18l6-6-6-6"></path></svg>;
 
 export default function App() {
-  const { activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, updateTargetUsage } = useSystem();
+  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage } = useSystem();
   
   const [objValue, setObjValue] = useState(''); 
   const [actValue, setActValue] = useState(''); 
@@ -27,19 +27,26 @@ export default function App() {
   const [editingId, setEditingId] = useState<{type: 'target'|'task', id: number} | null>(null);
   const [editValue, setEditValue] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task', id: number, title: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task' | 'space', id: number, title: string } | null>(null);
   const [spotlightGroup, setSpotlightGroup] = useState<string | null>(null);
+  const [currentSpaceId, setCurrentSpaceId] = useState<number | null>(null);
+  const [editingSpaceId, setEditingSpaceId] = useState<number | null>(null);
+  const [editSpaceTitle, setEditSpaceTitle] = useState('');
+  const [showSpaceModal, setShowSpaceModal] = useState(false);
 
   const groupedTasks = React.useMemo(() => {
     if (!activeTasks || !allTargets) return {};
     const groups: Record<string, Task[]> = {};
     activeTasks.forEach(task => {
-        const title = allTargets.find(t => t.id === task.targetId)?.title || 'Uncategorized';
+        const target = allTargets.find(t => t.id === task.targetId);
+        if (!target) return;
+        if (currentSpaceId && target.spaceId !== currentSpaceId) return;
+        const title = target.title || 'Uncategorized';
         if (!groups[title]) groups[title] = [];
         groups[title].push(task);
     });
     return groups;
-  }, [activeTasks, allTargets]);
+  }, [activeTasks, allTargets, currentSpaceId]);
 
   const sortedGroupTitles = React.useMemo(() => {
     return Object.keys(groupedTasks).sort((a, b) => {
@@ -54,10 +61,20 @@ export default function App() {
   }, [groupedTasks]);
 
   useEffect(() => {
+    const initSpace = async () => {
+      const spaces = await db.spaces.toArray();
+      if (spaces.length > 0 && !currentSpaceId) {
+        setCurrentSpaceId(spaces[0].id!);
+      }
+    };
+    initSpace();
+  }, [allSpaces]);
+
+  useEffect(() => {
     const fetchSuggestions = async () => {
       if (focusedInput === 'obj') {
         if (objValue.trim().length > 0) {
-            const results = await searchTargets(objValue);
+            const results = await searchTargets(objValue, currentSpaceId || undefined);
             setSuggestions(results || []);
         } else {
             setSuggestions([]);
@@ -73,7 +90,7 @@ export default function App() {
     };
     fetchSuggestions();
     setSelectedIndex(-1);
-  }, [objValue, actValue, focusedInput]);
+  }, [objValue, actValue, focusedInput, currentSpaceId]);
 
   useEffect(() => {
       const handleClick = () => setContextMenu(null);
@@ -110,15 +127,15 @@ export default function App() {
   };
 
   const submitFinal = async () => {
-    if (!objValue.trim() || !actValue.trim()) return;
+    if (!objValue.trim() || !actValue.trim() || !currentSpaceId) return;
     let targetId = selectedTargetId;
     if (!targetId) {
-        const existingTarget = await db.targets.where('title').equals(objValue).first();
+        const existingTarget = await db.targets.where('title').equals(objValue).and(t => t.spaceId === currentSpaceId).first();
         if (existingTarget && existingTarget.id) {
             targetId = existingTarget.id;
             await updateTargetUsage(existingTarget.id, existingTarget.usageCount + 1);
         } else {
-            const newId = await addTarget({ title: objValue, defaultAction: actValue, notes: '', usageCount: 1, lastUsed: new Date() });
+            const newId = await addTarget({ spaceId: currentSpaceId, title: objValue, defaultAction: actValue, notes: '', usageCount: 1, lastUsed: new Date() });
             if (newId !== undefined) targetId = newId;
         }
     } else {
@@ -156,12 +173,47 @@ export default function App() {
   const getTargetTitle = (id?: number) => { const t = allTargets?.find(t => t.id === id); return t ? t.title : 'Uncategorized'; };
   const handleGroupContextMenu = (e: React.MouseEvent, title: string, targetId: number) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'group', id: targetId, title: title }); };
   const handleTaskContextMenu = (e: React.MouseEvent, task: Task) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'task', id: task.id!, title: task.title }); };
+  const handleSpaceContextMenu = (e: React.MouseEvent, spaceId: number, title: string) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'space', id: spaceId, title: title }); };
   const toggleSpotlight = () => { if (contextMenu) { if (spotlightGroup === contextMenu.title) { setSpotlightGroup(null); } else { setSpotlightGroup(contextMenu.title); } } };
   const handleGeneralDelete = async () => {
       if (!contextMenu) return;
       if (contextMenu.type === 'group') { if (window.confirm(`"${contextMenu.title}" 전체 삭제?`)) await deleteGroup(contextMenu.id); } 
+      else if (contextMenu.type === 'space') { 
+        if (window.confirm(`"${contextMenu.title}" 공간을 삭제하시겠습니까? 모든 목표와 할일이 삭제됩니다.`)) {
+          await deleteSpace(contextMenu.id);
+          const spaces = await db.spaces.toArray();
+          if (spaces.length > 0) setCurrentSpaceId(spaces[0].id!);
+        }
+      }
       else { if (window.confirm(`삭제?`)) await deleteTask(contextMenu.id); }
       setContextMenu(null);
+  };
+
+  const handleAddSpace = async () => {
+    const title = prompt('공간 이름:');
+    if (title) {
+      const id = await addSpace({ title, createdAt: new Date() });
+      setCurrentSpaceId(id);
+    }
+  };
+
+  const handleEditSpace = () => {
+    if (!contextMenu) return;
+    const space = allSpaces?.find(s => s.id === contextMenu.id);
+    if (space) {
+      setEditingSpaceId(space.id!);
+      setEditSpaceTitle(space.title);
+      setShowSpaceModal(true);
+    }
+    setContextMenu(null);
+  };
+
+  const saveSpaceEdit = async () => {
+    if (editingSpaceId && editSpaceTitle) {
+      await updateSpace(editingSpaceId, editSpaceTitle);
+      setShowSpaceModal(false);
+      setEditingSpaceId(null);
+    }
   };
 
   return (
@@ -181,9 +233,17 @@ export default function App() {
 
       <div className="w-full max-w-md mt-8 space-y-8 relative z-10">
         
-        <header className={`pl-1 flex justify-between items-end transition-all duration-500 ${spotlightGroup ? 'opacity-10 grayscale' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+        <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-10 grayscale' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm}>⦿</h1>
-          <button onClick={() => setShowHistory(!showHistory)} className={`text-[10px] px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${showHistory ? 'bg-blue-900 text-blue-200' : 'bg-gray-800 text-gray-400'}`}><HistoryIcon /> Log</button>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 bg-gray-900 rounded-full p-1">
+              {allSpaces?.map(space => (
+                <button key={space.id} onClick={() => setCurrentSpaceId(space.id!)} onContextMenu={(e) => handleSpaceContextMenu(e, space.id!, space.title)} className={`px-3 py-1 rounded-full text-sm transition-all ${currentSpaceId === space.id ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>{space.title}</button>
+              ))}
+              <button onClick={handleAddSpace} className="px-2 py-1 rounded-full text-sm text-gray-500 hover:text-white transition-all">+</button>
+            </div>
+            <button onClick={() => setShowHistory(!showHistory)} className={`text-[10px] px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${showHistory ? 'bg-blue-900 text-blue-200' : 'bg-gray-800 text-gray-400'}`}><HistoryIcon /> Log</button>
+          </div>
         </header>
 
         <div className={`relative w-full group z-50 transition-all duration-500 ${spotlightGroup ? 'opacity-0 pointer-events-none -translate-y-4' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
@@ -302,7 +362,7 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => handleDeleteTask(topTask.id!)} className={`text-gray-600 hover:text-red-400 transition-opacity ${isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><TrashIcon /></button>
-                            <button onClick={() => completeTask(topTask.id!)} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
+                            <button onClick={(e) => { completeTask(topTask.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
                         </div>
                     </div>
 
@@ -344,7 +404,7 @@ export default function App() {
                             </div>
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <button onClick={() => handleDeleteTask(task.id!)} className="text-gray-600 hover:text-red-400 transition-opacity opacity-0 group-hover:opacity-100"><TrashIcon /></button>
-                                <button onClick={() => completeTask(task.id!)} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
+                                <button onClick={(e) => { completeTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
                             </div>
                         </div>
                     ))}
@@ -362,7 +422,24 @@ export default function App() {
                 {contextMenu.type === 'group' && (
                     <button onClick={() => { toggleSpotlight(); setContextMenu(null); }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><FocusIcon />{spotlightGroup === contextMenu.title ? 'Exit Focus' : 'Focus'}</button>
                 )}
+                {contextMenu.type === 'space' && (
+                    <button onClick={handleEditSpace} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3">✏️ Edit</button>
+                )}
                 <button onClick={handleGeneralDelete} className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-colors flex items-center gap-3"><TrashIcon />Delete</button>
+            </div>
+        )}
+
+        {/* Space Edit Modal */}
+        {showSpaceModal && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={() => setShowSpaceModal(false)}>
+                <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-80" onClick={(e) => e.stopPropagation()}>
+                    <h3 className="text-lg font-bold text-white mb-4">공간 편집</h3>
+                    <input type="text" value={editSpaceTitle} onChange={(e) => setEditSpaceTitle(e.target.value)} placeholder="이름" className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg mb-4 outline-none" />
+                    <div className="flex gap-2">
+                        <button onClick={saveSpaceEdit} className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-500 transition-colors">저장</button>
+                        <button onClick={() => setShowSpaceModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors">취소</button>
+                    </div>
+                </div>
             </div>
         )}
 
@@ -371,7 +448,10 @@ export default function App() {
           <div className="mt-10 pt-6 border-t border-gray-800" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Completed Log</h2>
             <div className="space-y-2">
-              {completedTasks?.map((task) => {
+              {completedTasks?.filter(task => {
+                  const target = allTargets?.find(t => t.id === task.targetId);
+                  return target && (!currentSpaceId || target.spaceId === currentSpaceId);
+              }).map((task) => {
                   const targetTitle = getTargetTitle(task.targetId) || 'Unknown';
                   return (
                       <div 

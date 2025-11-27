@@ -9,13 +9,18 @@ export function useSystem() {
     const syncData = async () => {
       if (!navigator.onLine) return;
       
-      // 클라우드에서 로컬로만 동기화
+      // 클라우드 데이터로 로컬 완전 덮어쓰기
       const { data: remoteSpaces } = await supabase.from('spaces').select('*');
-      if (remoteSpaces) await db.spaces.bulkPut(remoteSpaces);
+      await db.spaces.clear();
+      if (remoteSpaces) await db.spaces.bulkAdd(remoteSpaces);
+      
       const { data: remoteTargets } = await supabase.from('targets').select('*');
-      if (remoteTargets) await db.targets.bulkPut(remoteTargets);
+      await db.targets.clear();
+      if (remoteTargets) await db.targets.bulkAdd(remoteTargets);
+      
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
-      if (remoteTasks) await db.tasks.bulkPut(remoteTasks);
+      await db.tasks.clear();
+      if (remoteTasks) await db.tasks.bulkAdd(remoteTasks);
     };
     syncData();
   }, []);

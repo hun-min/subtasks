@@ -64,8 +64,11 @@ export default function App() {
 
   useEffect(() => {
     const initSpace = async () => {
+      const saved = localStorage.getItem('currentSpaceId');
       const spaces = await db.spaces.toArray();
-      if (spaces.length > 0 && !currentSpaceId) {
+      if (saved && spaces.find(s => s.id === parseInt(saved))) {
+        setCurrentSpaceId(parseInt(saved));
+      } else if (spaces.length > 0) {
         setCurrentSpaceId(spaces[0].id!);
       }
     };
@@ -258,15 +261,15 @@ export default function App() {
 
         <div className={`relative w-full group z-50 transition-all duration-500 ${spotlightGroup ? 'opacity-0 pointer-events-none -translate-y-4' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <div className={`relative flex flex-col shadow-2xl rounded-2xl bg-gray-900 border border-gray-800`}>
-            <div className="flex items-center px-4 py-3">
+            <div className="flex items-center px-3 py-2">
                 <span className="text-blue-400 mr-2"><TargetIcon /></span>
-                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`w-full bg-transparent text-white rounded-t-2xl focus:outline-none font-medium text-lg placeholder-gray-600 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
+                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`w-full bg-transparent text-white rounded-t-2xl focus:outline-none font-medium text-base placeholder-gray-600 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
             </div>
             {isInputMode && (
-                <div className="px-4 pb-3 flex items-center">
+                <div className="px-3 pb-2 flex items-center">
                     <span className="text-gray-600 mr-2 ml-0.5">↳</span>
-                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('act')} placeholder="Next Action..." className="w-full bg-transparent text-gray-200 focus:outline-none text-base" autoFocus />
-                    <div className="absolute right-3 bottom-3"><button onClick={submitFinal} className="p-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors"><PlusIcon /></button></div>
+                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('act')} placeholder="Next Action..." className="w-full bg-transparent text-gray-200 focus:outline-none text-sm" autoFocus />
+                    <div className="absolute right-2 bottom-2"><button onClick={submitFinal} className="p-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors"><PlusIcon /></button></div>
                 </div>
             )}
           </div>
@@ -305,19 +308,19 @@ export default function App() {
               >
                 {/* 1. Objective (Target) */}
                 <div 
-                    className={`flex items-center justify-between px-4 py-2 bg-gray-900 border rounded-xl transition-all duration-500 cursor-pointer select-none z-30 mb-1 group
+                    className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border rounded-xl transition-all duration-500 cursor-pointer select-none z-30 mb-1 group
                         ${isSpotlighted ? 'border-blue-500 shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]' : 'border-gray-700 shadow-md hover:border-gray-500'}
                     `}
                     onContextMenu={(e) => handleGroupContextMenu(e, title, targetId)}
                     onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : title); }}
                     style={{ marginBottom: 0 }}
                 >
-                    <div className="flex items-center gap-3 w-full overflow-hidden">
+                    <div className="flex items-center gap-2 w-full overflow-hidden">
                         <span className={`flex-shrink-0 ${isSpotlighted ? 'text-blue-400' : 'text-gray-500'}`}><TargetIcon /></span>
                         {editingId?.type === 'target' && editingId.id === targetId ? (
-                            <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-lg" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={(e) => e.key === 'Enter' && saveEdit()} autoFocus onClick={(e) => e.stopPropagation()} />
+                            <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                         ) : (
-                            <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className="text-lg font-medium text-gray-200 cursor-pointer hover:text-white transition-colors truncate w-full">{title}</span>
+                            <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className="text-base font-medium text-gray-200 cursor-pointer hover:text-white transition-colors truncate w-full">{title}</span>
                         )}
                     </div>
                     
@@ -353,18 +356,18 @@ export default function App() {
                 >
                     <div className="relative">
                     <div 
-                        className={`bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
+                        className={`bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
                             ${!isExpanded ? 'shadow-lg cursor-pointer' : 'mb-0'}
                         `}
                         onClick={(e) => { e.stopPropagation(); if(!isExpanded) setExpandedGroup(title); }}
                         onContextMenu={(e) => handleTaskContextMenu(e, topTask)}
                     >
-                        <div className="flex items-center gap-3 overflow-hidden w-full">
+                        <div className="flex items-center gap-2 overflow-hidden w-full">
                             <span className="text-gray-500"><ActionIcon /></span>
                             {editingId?.type === 'task' && editingId.id === topTask.id ? (
-                                <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-lg" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={(e) => e.key === 'Enter' && saveEdit()} autoFocus onClick={(e) => e.stopPropagation()} />
+                                <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                             ) : (
-                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className="text-base text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{topTask.title}</span>
+                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className="text-sm text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{topTask.title}</span>
                             )}
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -381,7 +384,7 @@ export default function App() {
                                 top: `${(idx + 1) * 6}px`,
                                 left: 0,
                                 right: 0,
-                                height: '2.75rem',
+                                height: '2.25rem',
                                 opacity: 0.4,
                                 zIndex: -1 - idx,
                                 pointerEvents: 'auto',
@@ -398,16 +401,16 @@ export default function App() {
                     {isExpanded && queueTasks.map((task) => (
                         <div 
                             key={task.id}
-                            className="bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0"
+                            className="bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0"
                             onClick={(e) => e.stopPropagation()}
                             onContextMenu={(e) => handleTaskContextMenu(e, task)}
                         >
-                            <div className="flex items-center gap-3 overflow-hidden w-full">
+                            <div className="flex items-center gap-2 overflow-hidden w-full">
                                 <span className="text-gray-500"><ActionIcon /></span>
                                 {editingId?.type === 'task' && editingId.id === task.id ? (
-                                    <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-lg" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={(e) => e.key === 'Enter' && saveEdit()} autoFocus onClick={(e) => e.stopPropagation()} />
+                                    <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                                 ) : (
-                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className="text-base text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{task.title}</span>
+                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className="text-sm text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{task.title}</span>
                                 )}
                             </div>
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

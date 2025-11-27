@@ -412,9 +412,9 @@ export default function App() {
                         <div className="flex items-center gap-2 overflow-hidden w-full">
                             <span className="text-gray-500"><ActionIcon /></span>
                             {editingId?.type === 'task' && editingId.id === topTask.id ? (
-                                <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
+                                <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                             ) : (
-                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className="text-sm text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{topTask.title}</span>
+                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className="text-base text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{topTask.title}</span>
                             )}
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -456,9 +456,9 @@ export default function App() {
                             <div className="flex items-center gap-2 overflow-hidden w-full">
                                 <span className="text-gray-500"><ActionIcon /></span>
                                 {editingId?.type === 'task' && editingId.id === task.id ? (
-                                    <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
+                                    <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                                 ) : (
-                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className="text-sm text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{task.title}</span>
+                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className="text-base text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{task.title}</span>
                                 )}
                             </div>
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -506,7 +506,7 @@ export default function App() {
                                     }
                                 }}
                                 placeholder="Action..."
-                                className="w-full bg-transparent text-white text-sm outline-none"
+                                className="w-full bg-transparent text-white text-base outline-none"
                                 autoFocus
                             />
                         </div>

@@ -87,14 +87,20 @@ export function useSystem() {
   };
 
   const addTarget = async (target: Omit<Target, 'id'>) => {
-    const id = await db.targets.add(target) as number;
-    supabase.from('targets').insert([{ ...target, id }]).then();
+    const targetWithCompletion = { ...target, isCompleted: false };
+    const id = await db.targets.add(targetWithCompletion) as number;
+    supabase.from('targets').insert([{ ...targetWithCompletion, id }]).then();
     return id;
   };
 
   const completeTask = async (taskId: number) => {
     await db.tasks.update(taskId, { isCompleted: true });
     supabase.from('tasks').update({ isCompleted: true }).eq('id', taskId).then();
+  };
+
+  const completeTarget = async (targetId: number) => {
+    await db.targets.update(targetId, { isCompleted: true });
+    supabase.from('targets').update({ isCompleted: true }).eq('id', targetId).then();
   };
 
   const updateTaskTitle = async (taskId: number, newTitle: string) => {
@@ -115,6 +121,11 @@ export function useSystem() {
   const undoTask = async (taskId: number) => {
     await db.tasks.update(taskId, { isCompleted: false });
     supabase.from('tasks').update({ isCompleted: false }).eq('id', taskId).then();
+  };
+
+  const undoTarget = async (targetId: number) => {
+    await db.targets.update(targetId, { isCompleted: false });
+    supabase.from('targets').update({ isCompleted: false }).eq('id', targetId).then();
   };
 
   const deleteTask = async (taskId: number) => {
@@ -205,5 +216,5 @@ export function useSystem() {
     }
   };
 
-  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown };
+  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown };
 }

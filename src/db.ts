@@ -14,6 +14,7 @@ export interface Target {
   notes: string;
   usageCount: number;
   lastUsed: Date;
+  isCompleted?: boolean;
 }
 
 export interface Task {
@@ -48,6 +49,15 @@ class SystemDB extends Dexie {
       const defaultSpaceId = defaultSpace[0].id;
       await tx.table('targets').toCollection().modify(target => {
         if (!target.spaceId) target.spaceId = defaultSpaceId;
+      });
+    });
+    this.version(3).stores({
+      spaces: '++id, title, createdAt',
+      targets: '++id, spaceId, title, usageCount, lastUsed, isCompleted',
+      tasks: '++id, targetId, isCompleted, createdAt'
+    }).upgrade(async tx => {
+      await tx.table('targets').toCollection().modify(target => {
+        if (target.isCompleted === undefined) target.isCompleted = false;
       });
     });
   }

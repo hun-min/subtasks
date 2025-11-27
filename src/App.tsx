@@ -14,7 +14,7 @@ const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="n
 const ActionIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500"><path d="M9 18l6-6-6-6"></path></svg>;
 
 export default function App() {
-  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage } = useSystem();
+  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage } = useSystem();
   
   const [objValue, setObjValue] = useState(''); 
   const [actValue, setActValue] = useState(''); 
@@ -37,13 +37,18 @@ export default function App() {
   const [editingSpaceId, setEditingSpaceId] = useState<number | null>(null);
   const [editSpaceTitle, setEditSpaceTitle] = useState('');
   const [showSpaceModal, setShowSpaceModal] = useState(false);
+  const [hoveredTargetId, setHoveredTargetId] = useState<number | null>(null);
+  const [addingTaskToTarget, setAddingTaskToTarget] = useState<number | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [history, setHistory] = useState<number[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const groupedTasks = React.useMemo(() => {
     if (!activeTasks || !allTargets) return {};
     const groups: Record<string, Task[]> = {};
     activeTasks.forEach(task => {
         const target = allTargets.find(t => t.id === task.targetId);
-        if (!target) return;
+        if (!target || target.isCompleted) return;
         if (currentSpaceId && target.spaceId !== currentSpaceId) return;
         const title = target.title || 'Uncategorized';
         if (!groups[title]) groups[title] = [];
@@ -52,15 +57,15 @@ export default function App() {
     return groups;
   }, [activeTasks, allTargets, currentSpaceId]);
 
-  const sortedGroupTitles = React.useMemo(() => {
-    return Object.keys(groupedTasks).sort((a, b) => {
-        const targetA = allTargets?.find(t => t.title === a);
-        const targetB = allTargets?.find(t => t.title === b);
-        const timeA = targetA?.lastUsed ? new Date(targetA.lastUsed).getTime() : 0;
-        const timeB = targetB?.lastUsed ? new Date(targetB.lastUsed).getTime() : 0;
+  const activeTargets = React.useMemo(() => {
+    if (!allTargets || !currentSpaceId) return [];
+    const filtered = allTargets.filter(t => !t.isCompleted && t.spaceId === currentSpaceId);
+    return [...filtered].sort((a, b) => {
+        const timeA = a.lastUsed ? new Date(a.lastUsed).getTime() : 0;
+        const timeB = b.lastUsed ? new Date(b.lastUsed).getTime() : 0;
         return timeB - timeA;
     });
-  }, [groupedTasks, allTargets]);
+  }, [allTargets, currentSpaceId]);
 
   useEffect(() => {
     const initSpace = async () => {
@@ -108,6 +113,24 @@ export default function App() {
       window.addEventListener('click', handleClick);
       return () => window.removeEventListener('click', handleClick);
   }, []);
+
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.ctrlKey && e.key === 'z' && historyIndex >= 0) {
+              e.preventDefault();
+              const taskId = history[historyIndex];
+              undoTask(taskId);
+              setHistoryIndex(historyIndex - 1);
+          } else if (e.ctrlKey && e.key === 'y' && historyIndex < history.length - 1) {
+              e.preventDefault();
+              const taskId = history[historyIndex + 1];
+              completeTask(taskId);
+              setHistoryIndex(historyIndex + 1);
+          }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [history, historyIndex]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return;
@@ -172,8 +195,13 @@ export default function App() {
               await updateTaskTitle(editingId.id, editValue); 
           }
       }
-      // [✨ 핵심 수정] 저장이 되든 말든, 포커스가 빠지면 무조건 편집 모드 종료
       setEditingId(null); 
+  };
+
+  const handleCompleteTask = async (taskId: number) => {
+      await completeTask(taskId);
+      setHistory([...history.slice(0, historyIndex + 1), taskId]);
+      setHistoryIndex(historyIndex + 1);
   };
 
   const deleteTargetAsset = async (e: React.MouseEvent, id: number) => {
@@ -286,13 +314,12 @@ export default function App() {
         </div>
         
         {/* --- Tasks Groups --- */}
-        <div className="space-y-3 pb-2">
-          {sortedGroupTitles.map((title) => {
-            const tasks = groupedTasks[title];
-            if (!tasks || tasks.length === 0) return null;
-
+        <div className="space-y-2 pb-2">
+          {activeTargets.map((target) => {
+            const targetId = target.id!;
+            const title = target.title;
+            const tasks = groupedTasks[title] || [];
             const topTask = tasks[0];
-            const targetId = topTask.targetId!;
             const isExpanded = expandedGroup === title;
             const isSpotlighted = spotlightGroup === title;
             const queueTasks = tasks.slice(1); 
@@ -335,11 +362,25 @@ export default function App() {
                             <TrashIcon />
                         </button>
                         <span 
-                            onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : title); }}
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                if (tasks.length === 0) {
+                                    setAddingTaskToTarget(targetId);
+                                    setNewTaskTitle('');
+                                } else {
+                                    setExpandedGroup(isExpanded ? null : title);
+                                }
+                            }}
                             className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all"
                         >
                             {tasks.length}
                         </span>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); completeTarget(targetId); }} 
+                            className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"
+                        >
+                            <CheckIcon />
+                        </button>
                     </div>
                 </div>
 
@@ -353,7 +394,10 @@ export default function App() {
                         e.stopPropagation();
                         if (!isExpanded) setExpandedGroup(title);
                     }}
+                    onMouseEnter={() => setHoveredTargetId(targetId)}
+                    onMouseLeave={() => setHoveredTargetId(null)}
                 >
+                    {topTask && (
                     <div className="relative">
                     <div 
                         className={`bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
@@ -372,7 +416,7 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => handleDeleteTask(topTask.id!)} className={`text-gray-600 hover:text-red-400 transition-opacity ${isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><TrashIcon /></button>
-                            <button onClick={(e) => { completeTask(topTask.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
+                            <button onClick={(e) => { handleCompleteTask(topTask.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
                         </div>
                     </div>
 
@@ -397,6 +441,7 @@ export default function App() {
                         />
                     ))}
                     </div>
+                    )}
 
                     {isExpanded && queueTasks.map((task) => (
                         <div 
@@ -415,10 +460,54 @@ export default function App() {
                             </div>
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <button onClick={() => handleDeleteTask(task.id!)} className="text-gray-600 hover:text-red-400 transition-opacity opacity-0 group-hover:opacity-100"><TrashIcon /></button>
-                                <button onClick={(e) => { completeTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
+                                <button onClick={(e) => { handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
                             </div>
                         </div>
                     ))}
+
+                    {isExpanded && addingTaskToTarget !== targetId && (
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setAddingTaskToTarget(targetId);
+                                setNewTaskTitle('');
+                            }}
+                            className="mt-1 w-full py-0.5 text-[10px] text-gray-600 hover:text-gray-400 transition-all text-center"
+                        >
+                            +
+                        </button>
+                    )}
+
+                    {addingTaskToTarget === targetId && (
+                        <div className="flex items-center gap-2 bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-gray-500"><ActionIcon /></span>
+                            <input 
+                                type="text" 
+                                value={newTaskTitle} 
+                                onChange={(e) => setNewTaskTitle(e.target.value)} 
+                                onBlur={async () => {
+                                    if (newTaskTitle.trim()) {
+                                        await addTask({ targetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
+                                    }
+                                    setAddingTaskToTarget(null);
+                                    setNewTaskTitle('');
+                                }}
+                                onKeyDown={async (e) => {
+                                    if (e.key === 'Enter' && newTaskTitle.trim()) {
+                                        await addTask({ targetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
+                                        setAddingTaskToTarget(null);
+                                        setNewTaskTitle('');
+                                    } else if (e.key === 'Escape') {
+                                        setAddingTaskToTarget(null);
+                                        setNewTaskTitle('');
+                                    }
+                                }}
+                                placeholder="Action..."
+                                className="w-full bg-transparent text-white text-sm outline-none"
+                                autoFocus
+                            />
+                        </div>
+                    )}
 
                 </div>
               </div>
@@ -459,6 +548,33 @@ export default function App() {
           <div className="mt-10 pt-6 border-t border-gray-800" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Completed Log</h2>
             <div className="space-y-2">
+              {allTargets?.filter(target => target.isCompleted && (!currentSpaceId || target.spaceId === currentSpaceId)).map((target) => (
+                  <div 
+                    key={`target-${target.id}`} 
+                    className="flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all" 
+                  >
+                    <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
+                        <span className="text-blue-400/70"><TargetIcon /></span>
+                        <span className="text-sm text-gray-400 line-through decoration-gray-600 truncate">
+                            {target.title}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        <button 
+                            onClick={() => { if(window.confirm('Delete?')) deleteGroup(target.id!); }} 
+                            className="p-0.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                        >
+                            <TrashIcon />
+                        </button>
+                        <button 
+                            onClick={() => undoTarget(target.id!)} 
+                            className="p-0.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                        >
+                            <UndoIcon />
+                        </button>
+                    </div>
+                  </div>
+              ))}
               {completedTasks?.filter(task => {
                   const target = allTargets?.find(t => t.id === task.targetId);
                   return target && (!currentSpaceId || target.spaceId === currentSpaceId);
@@ -467,29 +583,28 @@ export default function App() {
                   return (
                       <div 
                         key={task.id} 
-                        className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all cursor-context-menu" 
+                        className="flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all cursor-context-menu" 
                         onContextMenu={(e) => handleTaskContextMenu(e, task)}
                       >
-                        <div className="flex items-center gap-3 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
-                            <span className="text-[10px] text-blue-400/70 bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-900/30 whitespace-nowrap">
+                        <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
+                            <span className="text-[10px] text-blue-400/70 bg-blue-900/20 px-1 py-0.5 rounded border border-blue-900/30 whitespace-nowrap">
                                 {targetTitle}
                             </span>
-                            <span className="text-lg text-gray-400 line-through decoration-gray-600 decoration-2 truncate">
+                            <span className="text-sm text-gray-400 line-through decoration-gray-600 truncate">
                                 {task.title}
                             </span>
                         </div>
                         
-                        {/* [✨ 수정됨] 우측 버튼: [휴지통] [되돌리기] 순서로 변경 */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                             <button 
                                 onClick={() => handleDeleteTask(task.id!)} 
-                                className="p-1 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                                className="p-0.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
                             >
                                 <TrashIcon />
                             </button>
                             <button 
                                 onClick={() => undoTask(task.id!)} 
-                                className="p-1 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                                className="p-0.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
                             >
                                 <UndoIcon />
                             </button>

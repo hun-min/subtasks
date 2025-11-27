@@ -100,7 +100,9 @@ export function useSystem() {
 
   const completeTarget = async (targetId: number) => {
     await db.targets.update(targetId, { isCompleted: true });
-    supabase.from('targets').update({ isCompleted: true }).eq('id', targetId).then();
+    supabase.from('targets').update({ isCompleted: true }).eq('id', targetId).then(({ error }) => {
+      if (error) console.log('Supabase sync skipped:', error.message);
+    });
   };
 
   const updateTaskTitle = async (taskId: number, newTitle: string) => {

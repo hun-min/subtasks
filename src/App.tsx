@@ -8,10 +8,15 @@ const PlusIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="non
 const TrashIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
 const XIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const HistoryIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
-const UndoIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 0 0 0-6 2.3L3 13"></path></svg>;
+const UndoIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>;
 const FocusIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>;
 const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
 const ActionIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500"><path d="M9 18l6-6-6-6"></path></svg>;
+const DiceIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 8h.01"></path><path d="M8 8h.01"></path><path d="M8 16h.01"></path><path d="M16 16h.01"></path><path d="M12 12h.01"></path></svg>;
+const LockIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
+const CalendarIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>;
+const ChevronLeft = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
+const ChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
 
 export default function App() {
   const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage } = useSystem();
@@ -41,6 +46,25 @@ export default function App() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [history, setHistory] = useState<number[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [gachaTask, setGachaTask] = useState<{task: Task, targetTitle: string} | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const getTaskAgeStyle = (createdAt: Date) => {
+      const diffMs = new Date().getTime() - new Date(createdAt).getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      if (diffDays > 3) return "text-red-400 opacity-60";
+      if (diffDays > 1) return "text-yellow-500";
+      return "text-gray-300";
+  };
+
+  const runGacha = () => {
+      if (!activeTasks || activeTasks.length === 0) return;
+      const randomTask = activeTasks[Math.floor(Math.random() * activeTasks.length)];
+      const targetTitle = getTargetTitle(randomTask.targetId) || 'Unknown';
+      setGachaTask({ task: randomTask, targetTitle });
+  };
 
   const groupedTasks = React.useMemo(() => {
     if (!activeTasks || !allTargets) return {};
@@ -65,6 +89,30 @@ export default function App() {
         return timeB - timeA;
     });
   }, [allTargets, currentSpaceId]);
+
+  const isWipLimitReached = activeTargets.length >= 3;
+
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  const completedDates = React.useMemo(() => {
+    const dates = new Set<string>();
+    completedTasks?.forEach(task => {
+      const d = task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt);
+      dates.add(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`);
+    });
+    return dates;
+  }, [completedTasks]);
+
+  const filteredCompletedTasks = React.useMemo(() => {
+    if (!completedTasks) return [];
+    if (!selectedDate) return completedTasks;
+    return completedTasks.filter(task => {
+      const taskDate = task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt);
+      const dateStr = `${taskDate.getFullYear()}-${taskDate.getMonth() + 1}-${taskDate.getDate()}`;
+      return dateStr === selectedDate;
+    });
+  }, [completedTasks, selectedDate]);
 
   useEffect(() => {
     const initSpace = async () => {
@@ -154,7 +202,7 @@ export default function App() {
                 submitFinal();
             }
         }
-    } else if (e.key === 'Escape') { resetForm(); setSpotlightGroup(null); setExpandedGroup(null); }
+    } else if (e.key === 'Escape') { resetForm(); setSpotlightGroup(null); setExpandedGroup(null); setGachaTask(null); }
   };
 
   const selectTarget = (item: Target) => {
@@ -166,6 +214,7 @@ export default function App() {
   };
 
   const submitFinal = async () => {
+    if (isWipLimitReached) return;
     if (!objValue.trim() || !actValue.trim() || !currentSpaceId) return;
     const trimmedObjValue = objValue.trim();
     const trimmedActValue = actValue.trim();
@@ -277,11 +326,40 @@ export default function App() {
           <div className="fixed inset-0 z-0 pointer-events-none transition-all duration-700 bg-gray-950/90 backdrop-blur-sm" />
       )}
 
+      {gachaTask && (
+          <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+              <div className="w-full max-w-sm text-center space-y-8">
+                  <div className="space-y-2">
+                      <h2 className="text-sm text-blue-400 font-bold tracking-widest uppercase">{gachaTask.targetTitle}</h2>
+                      <h1 className="text-3xl font-bold text-white leading-tight">{gachaTask.task.title}</h1>
+                  </div>
+                  <div className="p-4 bg-gray-900 border border-gray-800 rounded-xl text-gray-500 text-sm">
+                      이걸 처리하기 전까지는<br/>아무것도 할 수 없습니다.
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                      <button 
+                        onClick={() => { if(window.confirm('진짜 못하겠어?')) { deleteTask(gachaTask.task.id!); setGachaTask(null); }}}
+                        className="py-4 rounded-xl border border-red-900/50 text-red-500 hover:bg-red-900/20 font-bold transition-all"
+                      >
+                        포기 (삭제)
+                      </button>
+                      <button 
+                        onClick={() => { handleCompleteTask(gachaTask.task.id!); setGachaTask(null); }}
+                        className="py-4 rounded-xl bg-blue-600 text-white hover:bg-blue-500 font-bold shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all"
+                      >
+                        완료!
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       <div className="w-full max-w-md mt-8 space-y-8 relative z-10">
         
         <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-10 grayscale' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm}>⦿</h1>
           <div className="flex items-center gap-2">
+            <button onClick={runGacha} className="text-gray-400 hover:text-white transition-colors" title="Random Pick"><DiceIcon /></button>
             <div className="flex gap-1 bg-gray-900 rounded-full p-1">
               {allSpaces?.map(space => (
                 <button key={space.id} onClick={() => setCurrentSpaceId(space.id!)} onContextMenu={(e) => handleSpaceContextMenu(e, space.id!, space.title)} className={`px-3 py-1 rounded-full text-sm transition-all ${currentSpaceId === space.id ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>{space.title}</button>
@@ -293,6 +371,13 @@ export default function App() {
         </header>
 
         <div className={`relative w-full group z-50 transition-all duration-500 ${spotlightGroup ? 'opacity-0 pointer-events-none -translate-y-4' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+          {isWipLimitReached ? (
+              <div className="flex flex-col items-center justify-center py-6 bg-red-900/10 border border-red-900/30 rounded-2xl text-center space-y-2">
+                  <span className="text-red-500"><LockIcon /></span>
+                  <p className="text-sm text-red-400 font-medium">목표가 너무 많습니다 (3/3)</p>
+                  <p className="text-xs text-red-500/60">하나를 완료하거나 삭제해야 추가할 수 있습니다.</p>
+              </div>
+          ) : (
           <div className={`relative flex flex-col shadow-2xl rounded-2xl bg-gray-900 border border-gray-800`}>
             <div className="flex items-center px-3 py-2">
                 <span className="text-blue-400 mr-2"><TargetIcon /></span>
@@ -306,7 +391,8 @@ export default function App() {
                 </div>
             )}
           </div>
-          {suggestions.length > 0 && (
+          )}
+          {!isWipLimitReached && suggestions.length > 0 && (
             <ul className="absolute w-full mt-2 bg-gray-900/95 backdrop-blur-md border border-gray-800 rounded-2xl shadow-2xl overflow-hidden max-h-[50vh] overflow-y-auto z-50">
               {suggestions.map((item, index) => (
                 <li key={item.id} onClick={() => selectTarget(item)} className={`px-5 py-3 cursor-pointer flex justify-between items-center border-b border-gray-800 last:border-0 group ${index === selectedIndex ? 'bg-blue-900/20' : 'hover:bg-gray-800/50'}`}>
@@ -414,7 +500,7 @@ export default function App() {
                             {editingId?.type === 'task' && editingId.id === topTask.id ? (
                                 <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                             ) : (
-                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className="text-base text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{topTask.title}</span>
+                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className={`text-base cursor-pointer hover:text-white transition-colors select-none w-full break-words ${getTaskAgeStyle(topTask.createdAt)}`}>{topTask.title}</span>
                             )}
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -458,7 +544,7 @@ export default function App() {
                                 {editingId?.type === 'task' && editingId.id === task.id ? (
                                     <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                                 ) : (
-                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className="text-base text-gray-300 cursor-pointer hover:text-white transition-colors select-none w-full break-words">{task.title}</span>
+                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`text-base cursor-pointer hover:text-white transition-colors select-none w-full break-words ${getTaskAgeStyle(task.createdAt)}`}>{task.title}</span>
                                 )}
                             </div>
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -549,7 +635,57 @@ export default function App() {
         {/* History Log */}
         {showHistory && (
           <div className="mt-10 pt-6 border-t border-gray-800" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Completed Log</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Completed Log</h2>
+              <button 
+                onClick={() => { setShowCalendar(!showCalendar); if (!showCalendar) setCurrentDate(new Date()); }} 
+                className={`p-1.5 rounded-lg transition-colors ${showCalendar ? 'text-blue-400 bg-blue-400/10' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
+              >
+                <CalendarIcon />
+              </button>
+            </div>
+
+            {showCalendar && (
+              <div className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm font-bold text-gray-200">
+                    {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <div className="flex gap-1">
+                    <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))} className="p-1 text-gray-500 hover:text-white"><ChevronLeft /></button>
+                    <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))} className="p-1 text-gray-500 hover:text-white"><ChevronRight /></button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-1 text-center">
+                  {['S','M','T','W','T','F','S'].map((d, i) => <span key={`day-${i}`} className="text-[10px] text-gray-600 py-1">{d}</span>)}
+                  {(() => {
+                    const year = currentDate.getFullYear();
+                    const month = currentDate.getMonth();
+                    const daysInMonth = getDaysInMonth(year, month);
+                    const firstDay = getFirstDayOfMonth(year, month);
+                    const days = [];
+                    for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-8 w-8"></div>);
+                    for (let d = 1; d <= daysInMonth; d++) {
+                      const dateStr = `${year}-${month + 1}-${d}`;
+                      const isSelected = selectedDate === dateStr;
+                      const hasTask = completedDates.has(dateStr);
+                      days.push(
+                        <div key={d} onClick={(e) => { e.stopPropagation(); setSelectedDate(isSelected ? null : dateStr); }} className={`h-8 w-8 flex items-center justify-center rounded-full text-xs cursor-pointer transition-all relative ${isSelected ? 'bg-blue-600 text-white font-bold' : 'hover:bg-gray-800 text-gray-400'}`}>
+                          {d}
+                          {hasTask && !isSelected && <div className="absolute bottom-1 w-1 h-1 bg-blue-500 rounded-full"></div>}
+                        </div>
+                      );
+                    }
+                    return days;
+                  })()}
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-800 flex justify-between items-center">
+                  <span className="text-[10px] text-gray-500">{selectedDate ? `Selected: ${selectedDate}` : 'Select a date to filter'}</span>
+                  {selectedDate && <button onClick={() => setSelectedDate(null)} className="text-[10px] text-blue-400 hover:text-blue-300">Clear Filter</button>}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               {allTargets?.filter(target => target.isCompleted && (!currentSpaceId || target.spaceId === currentSpaceId)).map((target) => (
                   <div 
@@ -578,7 +714,7 @@ export default function App() {
                     </div>
                   </div>
               ))}
-              {completedTasks?.filter(task => {
+              {filteredCompletedTasks.filter(task => {
                   const target = allTargets?.find(t => t.id === task.targetId);
                   return target && (!currentSpaceId || target.spaceId === currentSpaceId);
               }).map((task) => {

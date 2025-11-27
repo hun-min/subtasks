@@ -61,7 +61,7 @@ export function useSystem() {
 
   const addSpace = async (space: Omit<Space, 'id'>) => {
     const id = await db.spaces.add(space) as number;
-    supabase.from('spaces').insert([space]).then(res => {
+    supabase.from('spaces').insert([{ ...space, id }]).then(res => {
       if (res.error) console.error('Space insert error:', res.error);
     });
     return id;

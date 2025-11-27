@@ -126,11 +126,17 @@ export default function App() {
               const taskId = history[historyIndex + 1];
               completeTask(taskId);
               setHistoryIndex(historyIndex + 1);
+          } else if (e.altKey && allSpaces) {
+              const num = parseInt(e.key);
+              if (num >= 1 && num <= allSpaces.length) {
+                  e.preventDefault();
+                  setCurrentSpaceId(allSpaces[num - 1].id!);
+              }
           }
       };
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [history, historyIndex]);
+  }, [history, historyIndex, allSpaces]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return;

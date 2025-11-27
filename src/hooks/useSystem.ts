@@ -156,5 +156,5 @@ export function useSystem() {
     }
   };
 
-  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, moveTaskUp, moveTaskDown, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage };
+  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown };
 }

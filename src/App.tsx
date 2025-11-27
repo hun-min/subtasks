@@ -14,7 +14,7 @@ const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="n
 const ActionIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500"><path d="M9 18l6-6-6-6"></path></svg>;
 
 export default function App() {
-  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage } = useSystem();
+  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown } = useSystem();
   
   const [objValue, setObjValue] = useState(''); 
   const [actValue, setActValue] = useState(''); 
@@ -29,7 +29,11 @@ export default function App() {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task' | 'space', id: number, title: string } | null>(null);
   const [spotlightGroup, setSpotlightGroup] = useState<string | null>(null);
-  const [currentSpaceId, setCurrentSpaceId] = useState<number | null>(null);
+  const [currentSpaceId, setCurrentSpaceId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('currentSpaceId');
+    return saved ? parseInt(saved) : null;
+  });
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [editingSpaceId, setEditingSpaceId] = useState<number | null>(null);
   const [editSpaceTitle, setEditSpaceTitle] = useState('');
   const [showSpaceModal, setShowSpaceModal] = useState(false);
@@ -69,6 +73,66 @@ export default function App() {
     };
     initSpace();
   }, [allSpaces]);
+
+  useEffect(() => {
+    if (currentSpaceId) {
+      localStorage.setItem('currentSpaceId', currentSpaceId.toString());
+    }
+  }, [currentSpaceId]);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === '1') {
+        e.preventDefault();
+        if (allSpaces && allSpaces[0]) setCurrentSpaceId(allSpaces[0].id!);
+      } else if (e.altKey && e.key === '2') {
+        e.preventDefault();
+        if (allSpaces && allSpaces[1]) setCurrentSpaceId(allSpaces[1].id!);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const tasks = Object.values(groupedTasks).flat();
+        if (!selectedTaskId && tasks.length > 0) {
+          setSelectedTaskId(tasks[0].id!);
+        } else {
+          const idx = tasks.findIndex(t => t.id === selectedTaskId);
+          if (idx < tasks.length - 1) setSelectedTaskId(tasks[idx + 1].id!);
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const tasks = Object.values(groupedTasks).flat();
+        const idx = tasks.findIndex(t => t.id === selectedTaskId);
+        if (idx > 0) setSelectedTaskId(tasks[idx - 1].id!);
+      } else if (e.key === 'Enter' && selectedTaskId) {
+        e.preventDefault();
+        const task = activeTasks?.find(t => t.id === selectedTaskId);
+        if (task) startEditing('task', task.id!, task.title);
+      } else if (e.key === ' ' && selectedTaskId) {
+        e.preventDefault();
+        completeTask(selectedTaskId);
+        setSelectedTaskId(null);
+      } else if (e.key === 'Delete' && selectedTaskId) {
+        e.preventDefault();
+        handleDeleteTask(selectedTaskId);
+        setSelectedTaskId(null);
+      } else if (e.altKey && e.key === 'ArrowUp' && selectedTaskId) {
+        e.preventDefault();
+        const task = activeTasks?.find(t => t.id === selectedTaskId);
+        if (task) {
+          const group = groupedTasks[getTargetTitle(task.targetId)];
+          if (group) moveTaskUp(task, group);
+        }
+      } else if (e.altKey && e.key === 'ArrowDown' && selectedTaskId) {
+        e.preventDefault();
+        const task = activeTasks?.find(t => t.id === selectedTaskId);
+        if (task) {
+          const group = groupedTasks[getTargetTitle(task.targetId)];
+          if (group) moveTaskDown(task, group);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [allSpaces, currentSpaceId, selectedTaskId, groupedTasks, activeTasks]);
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -128,21 +192,23 @@ export default function App() {
 
   const submitFinal = async () => {
     if (!objValue.trim() || !actValue.trim() || !currentSpaceId) return;
+    const trimmedObjValue = objValue.trim();
+    const trimmedActValue = actValue.trim();
     let targetId = selectedTargetId;
     if (!targetId) {
-        const existingTarget = await db.targets.where('title').equals(objValue).and(t => t.spaceId === currentSpaceId).first();
+        const existingTarget = await db.targets.where('title').equals(trimmedObjValue).and(t => t.spaceId === currentSpaceId).first();
         if (existingTarget && existingTarget.id) {
             targetId = existingTarget.id;
             await updateTargetUsage(existingTarget.id, existingTarget.usageCount + 1);
         } else {
-            const newId = await addTarget({ spaceId: currentSpaceId, title: objValue, defaultAction: actValue, notes: '', usageCount: 1, lastUsed: new Date() });
+            const newId = await addTarget({ spaceId: currentSpaceId, title: trimmedObjValue, defaultAction: trimmedActValue, notes: '', usageCount: 1, lastUsed: new Date() });
             if (newId !== undefined) targetId = newId;
         }
     } else {
         const existing = await db.targets.get(targetId);
         if (existing && existing.id) { await updateTargetUsage(existing.id, existing.usageCount + 1); }
     }
-    await addTask({ targetId: targetId!, title: actValue, isCompleted: false, createdAt: new Date() });
+    await addTask({ targetId: targetId!, title: trimmedActValue, isCompleted: false, createdAt: new Date() });
     resetForm(); 
   };
 
@@ -343,14 +409,12 @@ export default function App() {
                 >
                     <div className="relative">
                     <div 
-                        className={`bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
+                        className={`bg-gray-800 border px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
                             ${!isExpanded ? 'shadow-lg cursor-pointer' : 'mb-0'}
+                            ${selectedTaskId === topTask.id ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-600'}
                         `}
+                        onClick={(e) => { e.stopPropagation(); setSelectedTaskId(topTask.id!); if(!isExpanded) setExpandedGroup(title); }}
                         onContextMenu={(e) => handleTaskContextMenu(e, topTask)}
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
-                            if(!isExpanded) setExpandedGroup(title);
-                        }}
                     >
                         <div className="flex items-center gap-3 overflow-hidden w-full">
                             <span className="text-gray-500"><ActionIcon /></span>
@@ -391,7 +455,10 @@ export default function App() {
                     {isExpanded && queueTasks.map((task) => (
                         <div 
                             key={task.id}
-                            className="bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0"
+                            className={`bg-gray-800 border px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0
+                                ${selectedTaskId === task.id ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-600'}
+                            `}
+                            onClick={(e) => { e.stopPropagation(); setSelectedTaskId(task.id!); }}
                             onContextMenu={(e) => handleTaskContextMenu(e, task)}
                         >
                             <div className="flex items-center gap-3 overflow-hidden w-full">

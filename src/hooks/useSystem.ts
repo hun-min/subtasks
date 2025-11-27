@@ -9,10 +9,15 @@ export function useSystem() {
     const syncData = async () => {
       if (!navigator.onLine) return;
       
-      // 클라우드 데이터로 로컬 완전 덮어쓰기
       const { data: remoteSpaces } = await supabase.from('spaces').select('*');
       await db.spaces.clear();
-      if (remoteSpaces) await db.spaces.bulkAdd(remoteSpaces);
+      if (remoteSpaces && remoteSpaces.length > 0) {
+        await db.spaces.bulkAdd(remoteSpaces);
+      } else {
+        const defaultSpace = { id: 1, title: '기본', createdAt: new Date() };
+        await db.spaces.add(defaultSpace);
+        await supabase.from('spaces').insert([defaultSpace]);
+      }
       
       const { data: remoteTargets } = await supabase.from('targets').select('*');
       await db.targets.clear();
@@ -136,25 +141,67 @@ export function useSystem() {
 
   const moveTaskUp = async (currentTask: Task, allTasksInGroup: Task[]) => {
     const index = allTasksInGroup.findIndex(t => t.id === currentTask.id);
-    if (index > 1) {
+    if (index > 0) {
         const upperTask = allTasksInGroup[index - 1];
-        const tempTime = new Date(upperTask.createdAt);
-        await db.tasks.update(upperTask.id!, { createdAt: currentTask.createdAt });
-        await db.tasks.update(currentTask.id!, { createdAt: tempTime });
-        supabase.from('tasks').upsert([{ id: upperTask.id, createdAt: currentTask.createdAt }, { id: currentTask.id, createdAt: tempTime }]).then();
+        const upperTime = new Date(upperTask.createdAt).getTime();
+        const currentTime = new Date(currentTask.createdAt).getTime();
+
+        if (upperTime === currentTime) {
+             await db.tasks.update(upperTask.id!, { createdAt: new Date(currentTime + 1000) });
+             supabase.from('tasks').update({ createdAt: new Date(currentTime + 1000) }).eq('id', upperTask.id).then();
+        } else {
+             await db.tasks.update(upperTask.id!, { createdAt: currentTask.createdAt });
+             await db.tasks.update(currentTask.id!, { createdAt: upperTask.createdAt });
+             supabase.from('tasks').upsert([{ id: upperTask.id, createdAt: currentTask.createdAt }, { id: currentTask.id, createdAt: upperTask.createdAt }]).then();
+        }
     }
   };
 
   const moveTaskDown = async (currentTask: Task, allTasksInGroup: Task[]) => {
     const index = allTasksInGroup.findIndex(t => t.id === currentTask.id);
-    if (index > 0 && index < allTasksInGroup.length - 1) {
+    if (index < allTasksInGroup.length - 1) {
         const lowerTask = allTasksInGroup[index + 1];
-        const tempTime = new Date(lowerTask.createdAt);
-        await db.tasks.update(lowerTask.id!, { createdAt: currentTask.createdAt });
-        await db.tasks.update(currentTask.id!, { createdAt: tempTime });
-        supabase.from('tasks').upsert([{ id: lowerTask.id, createdAt: currentTask.createdAt }, { id: currentTask.id, createdAt: tempTime }]).then();
+        const lowerTime = new Date(lowerTask.createdAt).getTime();
+        const currentTime = new Date(currentTask.createdAt).getTime();
+
+        if (lowerTime === currentTime) {
+             await db.tasks.update(lowerTask.id!, { createdAt: new Date(currentTime - 1000) });
+             supabase.from('tasks').update({ createdAt: new Date(currentTime - 1000) }).eq('id', lowerTask.id).then();
+        } else {
+             await db.tasks.update(lowerTask.id!, { createdAt: currentTask.createdAt });
+             await db.tasks.update(currentTask.id!, { createdAt: lowerTask.createdAt });
+             supabase.from('tasks').upsert([{ id: lowerTask.id, createdAt: currentTask.createdAt }, { id: currentTask.id, createdAt: lowerTask.createdAt }]).then();
+        }
     }
   };
 
-  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown };
+  const moveTargetUp = async (currentTargetId: number) => {
+    const targets = await db.targets.orderBy('lastUsed').reverse().toArray();
+    const index = targets.findIndex(t => t.id === currentTargetId);
+    if (index > 0) {
+        const upperTarget = targets[index - 1];
+        const currentTarget = targets[index];
+        const tempTime = new Date(upperTarget.lastUsed);
+        await db.targets.update(upperTarget.id!, { lastUsed: currentTarget.lastUsed });
+        await db.targets.update(currentTarget.id!, { lastUsed: tempTime });
+        supabase.from('targets').update({ lastUsed: currentTarget.lastUsed }).eq('id', upperTarget.id).then();
+        supabase.from('targets').update({ lastUsed: tempTime }).eq('id', currentTarget.id).then();
+    }
+  };
+
+  const moveTargetDown = async (currentTargetId: number) => {
+    const targets = await db.targets.orderBy('lastUsed').reverse().toArray();
+    const index = targets.findIndex(t => t.id === currentTargetId);
+    if (index < targets.length - 1) {
+        const lowerTarget = targets[index + 1];
+        const currentTarget = targets[index];
+        const tempTime = new Date(lowerTarget.lastUsed);
+        await db.targets.update(lowerTarget.id!, { lastUsed: currentTarget.lastUsed });
+        await db.targets.update(currentTarget.id!, { lastUsed: tempTime });
+        supabase.from('targets').update({ lastUsed: currentTarget.lastUsed }).eq('id', lowerTarget.id).then();
+        supabase.from('targets').update({ lastUsed: tempTime }).eq('id', currentTarget.id).then();
+    }
+  };
+
+  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown };
 }

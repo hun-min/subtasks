@@ -13,9 +13,12 @@ npm run dev
 ## 배포
 
 ```bash
-npm run build
-vercel --prod
+git add .
+git commit -m "message"
+git push
 ```
+
+배포는 Git push로 자동 배포됩니다. vercel 직접 사용 금지.
 
 ## PWA 아이콘 생성 필요
 

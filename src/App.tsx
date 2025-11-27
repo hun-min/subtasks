@@ -14,7 +14,7 @@ const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="n
 const ActionIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500"><path d="M9 18l6-6-6-6"></path></svg>;
 
 export default function App() {
-  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown } = useSystem();
+  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, updateTaskTitle, updateTargetTitle, undoTask, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage } = useSystem();
   
   const [objValue, setObjValue] = useState(''); 
   const [actValue, setActValue] = useState(''); 
@@ -33,7 +33,7 @@ export default function App() {
     const saved = localStorage.getItem('currentSpaceId');
     return saved ? parseInt(saved) : null;
   });
-  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+
   const [editingSpaceId, setEditingSpaceId] = useState<number | null>(null);
   const [editSpaceTitle, setEditSpaceTitle] = useState('');
   const [showSpaceModal, setShowSpaceModal] = useState(false);
@@ -54,15 +54,13 @@ export default function App() {
 
   const sortedGroupTitles = React.useMemo(() => {
     return Object.keys(groupedTasks).sort((a, b) => {
-        const tasksA = groupedTasks[a];
-        const tasksB = groupedTasks[b];
-        const lastTaskA = tasksA[tasksA.length - 1]; 
-        const lastTaskB = tasksB[tasksB.length - 1];
-        if (!lastTaskA) return 1;
-        if (!lastTaskB) return -1;
-        return new Date(lastTaskB.createdAt).getTime() - new Date(lastTaskA.createdAt).getTime();
+        const targetA = allTargets?.find(t => t.title === a);
+        const targetB = allTargets?.find(t => t.title === b);
+        const timeA = targetA?.lastUsed ? new Date(targetA.lastUsed).getTime() : 0;
+        const timeB = targetB?.lastUsed ? new Date(targetB.lastUsed).getTime() : 0;
+        return timeB - timeA;
     });
-  }, [groupedTasks]);
+  }, [groupedTasks, allTargets]);
 
   useEffect(() => {
     const initSpace = async () => {
@@ -79,60 +77,6 @@ export default function App() {
       localStorage.setItem('currentSpaceId', currentSpaceId.toString());
     }
   }, [currentSpaceId]);
-
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey && e.key === '1') {
-        e.preventDefault();
-        if (allSpaces && allSpaces[0]) setCurrentSpaceId(allSpaces[0].id!);
-      } else if (e.altKey && e.key === '2') {
-        e.preventDefault();
-        if (allSpaces && allSpaces[1]) setCurrentSpaceId(allSpaces[1].id!);
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const tasks = Object.values(groupedTasks).flat();
-        if (!selectedTaskId && tasks.length > 0) {
-          setSelectedTaskId(tasks[0].id!);
-        } else {
-          const idx = tasks.findIndex(t => t.id === selectedTaskId);
-          if (idx < tasks.length - 1) setSelectedTaskId(tasks[idx + 1].id!);
-        }
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        const tasks = Object.values(groupedTasks).flat();
-        const idx = tasks.findIndex(t => t.id === selectedTaskId);
-        if (idx > 0) setSelectedTaskId(tasks[idx - 1].id!);
-      } else if (e.key === 'Enter' && selectedTaskId) {
-        e.preventDefault();
-        const task = activeTasks?.find(t => t.id === selectedTaskId);
-        if (task) startEditing('task', task.id!, task.title);
-      } else if (e.key === ' ' && selectedTaskId) {
-        e.preventDefault();
-        completeTask(selectedTaskId);
-        setSelectedTaskId(null);
-      } else if (e.key === 'Delete' && selectedTaskId) {
-        e.preventDefault();
-        handleDeleteTask(selectedTaskId);
-        setSelectedTaskId(null);
-      } else if (e.altKey && e.key === 'ArrowUp' && selectedTaskId) {
-        e.preventDefault();
-        const task = activeTasks?.find(t => t.id === selectedTaskId);
-        if (task) {
-          const group = groupedTasks[getTargetTitle(task.targetId)];
-          if (group) moveTaskUp(task, group);
-        }
-      } else if (e.altKey && e.key === 'ArrowDown' && selectedTaskId) {
-        e.preventDefault();
-        const task = activeTasks?.find(t => t.id === selectedTaskId);
-        if (task) {
-          const group = groupedTasks[getTargetTitle(task.targetId)];
-          if (group) moveTaskDown(task, group);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [allSpaces, currentSpaceId, selectedTaskId, groupedTasks, activeTasks]);
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -409,11 +353,10 @@ export default function App() {
                 >
                     <div className="relative">
                     <div 
-                        className={`bg-gray-800 border px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
+                        className={`bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
                             ${!isExpanded ? 'shadow-lg cursor-pointer' : 'mb-0'}
-                            ${selectedTaskId === topTask.id ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-600'}
                         `}
-                        onClick={(e) => { e.stopPropagation(); setSelectedTaskId(topTask.id!); if(!isExpanded) setExpandedGroup(title); }}
+                        onClick={(e) => { e.stopPropagation(); if(!isExpanded) setExpandedGroup(title); }}
                         onContextMenu={(e) => handleTaskContextMenu(e, topTask)}
                     >
                         <div className="flex items-center gap-3 overflow-hidden w-full">
@@ -455,10 +398,8 @@ export default function App() {
                     {isExpanded && queueTasks.map((task) => (
                         <div 
                             key={task.id}
-                            className={`bg-gray-800 border px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0
-                                ${selectedTaskId === task.id ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-600'}
-                            `}
-                            onClick={(e) => { e.stopPropagation(); setSelectedTaskId(task.id!); }}
+                            className="bg-gray-800 border border-gray-600 px-4 py-2 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0"
+                            onClick={(e) => e.stopPropagation()}
                             onContextMenu={(e) => handleTaskContextMenu(e, task)}
                         >
                             <div className="flex items-center gap-3 overflow-hidden w-full">

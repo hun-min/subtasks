@@ -94,8 +94,11 @@ export function useSystem() {
   };
 
   const completeTask = async (taskId: number) => {
-    await db.tasks.update(taskId, { isCompleted: true });
-    supabase.from('tasks').update({ isCompleted: true }).eq('id', taskId).then();
+    const completedAt = new Date();
+    await db.tasks.update(taskId, { isCompleted: true, completedAt });
+    supabase.from('tasks').update({ isCompleted: true, completedAt }).eq('id', taskId).then(({ error }) => {
+      if (error) console.log('Supabase sync skipped:', error.message);
+    });
   };
 
   const completeTarget = async (targetId: number) => {
@@ -131,26 +134,12 @@ export function useSystem() {
   };
 
   const deleteTask = async (taskId: number) => {
-    const task = await db.tasks.get(taskId);
-    if (!task) return;
-    const targetId = task.targetId;
     await db.tasks.delete(taskId);
     supabase.from('tasks').delete().eq('id', taskId).then();
-    if (targetId) {
-        const remainingCount = await db.tasks.where('targetId').equals(targetId).count();
-        if (remainingCount === 0) {
-            await db.targets.delete(targetId);
-            supabase.from('targets').delete().eq('id', targetId).then();
-        }
-    }
   };
 
   const deleteGroup = async (targetId: number) => {
-    const relatedTasks = await db.tasks.where('targetId').equals(targetId).toArray();
-    const taskIds = relatedTasks.map(t => t.id!);
-    if (taskIds.length > 0) await db.tasks.bulkDelete(taskIds);
     await db.targets.delete(targetId);
-    supabase.from('tasks').delete().eq('targetId', targetId).then();
     supabase.from('targets').delete().eq('id', targetId).then();
   };
 

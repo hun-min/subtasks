@@ -28,7 +28,10 @@ export default function App() {
   const [isInputMode, setIsInputMode] = useState(false); 
   const [focusedInput, setFocusedInput] = useState<'obj' | 'act'>('obj');
   const [selectedTargetId, setSelectedTargetId] = useState<number | null>(null); 
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(() => {
+    const saved = localStorage.getItem('showHistory');
+    return saved === 'true';
+  });
   const [editingId, setEditingId] = useState<{type: 'target'|'task', id: number} | null>(null);
   const [editValue, setEditValue] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -98,21 +101,53 @@ export default function App() {
   const completedDates = React.useMemo(() => {
     const dates = new Set<string>();
     completedTasks?.forEach(task => {
-      const d = task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt);
+      const d = task.completedAt ? (task.completedAt instanceof Date ? task.completedAt : new Date(task.completedAt)) : (task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt));
+      dates.add(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`);
+    });
+    allTargets?.filter(t => t.isCompleted).forEach(target => {
+      const d = target.lastUsed instanceof Date ? target.lastUsed : new Date(target.lastUsed);
       dates.add(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`);
     });
     return dates;
-  }, [completedTasks]);
+  }, [completedTasks, allTargets]);
 
   const filteredCompletedTasks = React.useMemo(() => {
     if (!completedTasks) return [];
     if (!selectedDate) return completedTasks;
     return completedTasks.filter(task => {
-      const taskDate = task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt);
+      const taskDate = task.completedAt ? (task.completedAt instanceof Date ? task.completedAt : new Date(task.completedAt)) : (task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt));
       const dateStr = `${taskDate.getFullYear()}-${taskDate.getMonth() + 1}-${taskDate.getDate()}`;
       return dateStr === selectedDate;
     });
   }, [completedTasks, selectedDate]);
+
+  const mergedCompletedItems = React.useMemo(() => {
+    const items: Array<{type: 'task' | 'target', data: Task | Target, date: Date}> = [];
+    
+    filteredCompletedTasks.filter(task => {
+      const target = allTargets?.find(t => t.id === task.targetId);
+      return target && (!currentSpaceId || target.spaceId === currentSpaceId);
+    }).forEach(task => {
+      const date = task.completedAt ? (task.completedAt instanceof Date ? task.completedAt : new Date(task.completedAt)) : (task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt));
+      items.push({type: 'task', data: task, date});
+    });
+    
+    if (allTargets) {
+      const completed = allTargets.filter(target => target.isCompleted && (!currentSpaceId || target.spaceId === currentSpaceId));
+      const filtered = !selectedDate ? completed : completed.filter(target => {
+        if (!target.lastUsed) return false;
+        const targetDate = target.lastUsed instanceof Date ? target.lastUsed : new Date(target.lastUsed);
+        const dateStr = `${targetDate.getFullYear()}-${targetDate.getMonth() + 1}-${targetDate.getDate()}`;
+        return dateStr === selectedDate;
+      });
+      filtered.forEach(target => {
+        const date = target.lastUsed instanceof Date ? target.lastUsed : new Date(target.lastUsed);
+        items.push({type: 'target', data: target as Target, date});
+      });
+    }
+    
+    return items.sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [filteredCompletedTasks, allTargets, currentSpaceId, selectedDate]);
 
   useEffect(() => {
     const initSpace = async () => {
@@ -366,7 +401,7 @@ export default function App() {
               ))}
               <button onClick={handleAddSpace} className="px-2 py-1 rounded-full text-sm text-gray-500 hover:text-white transition-all">+</button>
             </div>
-            <button onClick={() => setShowHistory(!showHistory)} className={`text-[10px] px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${showHistory ? 'bg-blue-900 text-blue-200' : 'bg-gray-800 text-gray-400'}`}><HistoryIcon /> Log</button>
+            <button onClick={() => { const newState = !showHistory; setShowHistory(newState); localStorage.setItem('showHistory', String(newState)); }} className={`text-[10px] px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${showHistory ? 'bg-blue-900 text-blue-200' : 'bg-gray-800 text-gray-400'}`}><HistoryIcon /> Log</button>
           </div>
         </header>
 
@@ -687,69 +722,70 @@ export default function App() {
             )}
 
             <div className="space-y-2">
-              {allTargets?.filter(target => target.isCompleted && (!currentSpaceId || target.spaceId === currentSpaceId)).map((target) => (
-                  <div 
-                    key={`target-${target.id}`} 
-                    className="flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all" 
-                  >
-                    <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
-                        <span className="text-blue-400/70"><TargetIcon /></span>
-                        <span className="text-sm text-gray-400 line-through decoration-gray-600 truncate">
-                            {target.title}
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                        <button 
-                            onClick={() => { if(window.confirm('Delete?')) deleteGroup(target.id!); }} 
-                            className="p-0.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
-                        >
-                            <TrashIcon />
-                        </button>
-                        <button 
-                            onClick={() => undoTarget(target.id!)} 
-                            className="p-0.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
-                        >
-                            <UndoIcon />
-                        </button>
-                    </div>
-                  </div>
-              ))}
-              {filteredCompletedTasks.filter(task => {
-                  const target = allTargets?.find(t => t.id === task.targetId);
-                  return target && (!currentSpaceId || target.spaceId === currentSpaceId);
-              }).map((task) => {
+              {mergedCompletedItems.map((item) => {
+                if (item.type === 'task') {
+                  const task = item.data as Task;
                   const targetTitle = getTargetTitle(task.targetId) || 'Unknown';
                   return (
-                      <div 
-                        key={task.id} 
-                        className="flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all cursor-context-menu" 
-                        onContextMenu={(e) => handleTaskContextMenu(e, task)}
-                      >
-                        <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
-                            <span className="text-[10px] text-blue-400/70 bg-blue-900/20 px-1 py-0.5 rounded border border-blue-900/30 whitespace-nowrap">
-                                {targetTitle}
-                            </span>
-                            <span className="text-sm text-gray-400 line-through decoration-gray-600 truncate">
-                                {task.title}
-                            </span>
-                        </div>
-                        
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                            <button 
-                                onClick={() => handleDeleteTask(task.id!)} 
-                                className="p-0.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
-                            >
-                                <TrashIcon />
-                            </button>
-                            <button 
-                                onClick={() => undoTask(task.id!)} 
-                                className="p-0.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
-                            >
-                                <UndoIcon />
-                            </button>
-                        </div>
+                    <div 
+                      key={`task-${task.id}`} 
+                      className="flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all cursor-context-menu" 
+                      onContextMenu={(e) => handleTaskContextMenu(e, task)}
+                    >
+                      <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] text-blue-400/70 bg-blue-900/20 px-1 py-0.5 rounded border border-blue-900/30 whitespace-nowrap">
+                          {targetTitle}
+                        </span>
+                        <span className="text-sm text-gray-400 line-through decoration-gray-600 truncate">
+                          {task.title}
+                        </span>
                       </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button 
+                          onClick={() => handleDeleteTask(task.id!)} 
+                          className="p-0.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                        >
+                          <TrashIcon />
+                        </button>
+                        <button 
+                          onClick={() => undoTask(task.id!)} 
+                          className="p-0.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                        >
+                          <UndoIcon />
+                        </button>
+                      </div>
+                    </div>
                   );
+                } else {
+                  const target = item.data as Target;
+                  return (
+                    <div 
+                      key={`target-${target.id}`} 
+                      className="flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all" 
+                    >
+                      <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
+                        <span className="text-blue-400/70"><TargetIcon /></span>
+                        <span className="text-sm text-gray-400 line-through decoration-gray-600 truncate">
+                          {target.title}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button 
+                          onClick={() => { if(window.confirm('Delete?')) deleteGroup(target.id!); }} 
+                          className="p-0.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                        >
+                          <TrashIcon />
+                        </button>
+                        <button 
+                          onClick={() => undoTarget(target.id!)} 
+                          className="p-0.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                        >
+                          <UndoIcon />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
               })}
             </div>
           </div>

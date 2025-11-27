@@ -23,6 +23,7 @@ export interface Task {
   title: string;
   isCompleted: boolean;
   createdAt: Date;
+  completedAt?: Date;
 }
 
 class SystemDB extends Dexie {
@@ -59,6 +60,11 @@ class SystemDB extends Dexie {
       await tx.table('targets').toCollection().modify(target => {
         if (target.isCompleted === undefined) target.isCompleted = false;
       });
+    });
+    this.version(4).stores({
+      spaces: '++id, title, createdAt',
+      targets: '++id, spaceId, title, usageCount, lastUsed, isCompleted',
+      tasks: '++id, targetId, isCompleted, createdAt, completedAt'
     });
   }
 }

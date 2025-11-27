@@ -10,9 +10,15 @@ npm install
 npm run dev
 ```
 
-## 배포
+## 빌드 및 배포
+
+**"빌드 배포" 명령 시 반드시 순서대로 실행:**
 
 ```bash
+# 1. 로컬 빌드 테스트 (필수)
+npm run build
+
+# 2. Git 배포 (Vercel 자동 배포)
 git add .
 git commit -m "message"
 git push

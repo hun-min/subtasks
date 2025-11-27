@@ -55,7 +55,9 @@ export function useSystem() {
 
   const addTask = async (task: Omit<Task, 'id'>) => {
     const id = await db.tasks.add(task) as number;
-    supabase.from('tasks').insert([task]).then();
+    supabase.from('tasks').upsert([{ ...task, id }]).then(({ error }) => {
+      if (error) console.error('Sync Error (Task):', error);
+    });
     return id;
   };
 
@@ -89,7 +91,9 @@ export function useSystem() {
   const addTarget = async (target: Omit<Target, 'id'>) => {
     const targetWithCompletion = { ...target, isCompleted: false };
     const id = await db.targets.add(targetWithCompletion) as number;
-    supabase.from('targets').insert([targetWithCompletion]).then();
+    supabase.from('targets').upsert([{ ...targetWithCompletion, id }]).then(({ error }) => {
+      if (error) console.error('Sync Error (Target):', error);
+    });
     return id;
   };
 

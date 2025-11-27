@@ -6,16 +6,26 @@ import { supabase } from '../supabase';
 export function useSystem() {
   
   useEffect(() => {
-    const syncFromCloud = async () => {
+    const syncData = async () => {
       if (!navigator.onLine) return;
+      
+      // 1. 클라우드에서 로컬로
       const { data: remoteSpaces } = await supabase.from('spaces').select('*');
       if (remoteSpaces) await db.spaces.bulkPut(remoteSpaces);
       const { data: remoteTargets } = await supabase.from('targets').select('*');
       if (remoteTargets) await db.targets.bulkPut(remoteTargets);
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
       if (remoteTasks) await db.tasks.bulkPut(remoteTasks);
+      
+      // 2. 로컬에서 클라우드로 (기존 데이터 업로드)
+      const localSpaces = await db.spaces.toArray();
+      if (localSpaces.length > 0) await supabase.from('spaces').upsert(localSpaces);
+      const localTargets = await db.targets.toArray();
+      if (localTargets.length > 0) await supabase.from('targets').upsert(localTargets);
+      const localTasks = await db.tasks.toArray();
+      if (localTasks.length > 0) await supabase.from('tasks').upsert(localTasks);
     };
-    syncFromCloud();
+    syncData();
   }, []);
 
   const allSpaces = useLiveQuery(() => db.spaces.toArray());

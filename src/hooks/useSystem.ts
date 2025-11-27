@@ -9,58 +9,23 @@ export function useSystem() {
     const syncData = async () => {
       if (!navigator.onLine) return;
       
-      const localSpaces = await db.spaces.toArray();
       const { data: remoteSpaces } = await supabase.from('spaces').select('*');
-      
+      await db.spaces.clear();
       if (remoteSpaces && remoteSpaces.length > 0) {
-        const remoteIds = new Set(remoteSpaces.map(s => s.id));
-        const localOnly = localSpaces.filter(s => !remoteIds.has(s.id));
-        
-        await db.spaces.clear();
         await db.spaces.bulkAdd(remoteSpaces);
-        if (localOnly.length > 0) {
-          await db.spaces.bulkAdd(localOnly);
-          for (const space of localOnly) {
-            supabase.from('spaces').upsert([space]).then();
-          }
-        }
-      } else if (localSpaces.length === 0) {
-        const defaultSpace = { id: 1, title: '기본', createdAt: new Date() };
-        await db.spaces.add(defaultSpace);
-        supabase.from('spaces').upsert([defaultSpace]).then();
+      } else {
+        const defaultSpace = { title: '기본', createdAt: new Date() };
+        const id = await db.spaces.add(defaultSpace) as number;
+        supabase.from('spaces').insert([defaultSpace]).then();
       }
       
-      const localTargets = await db.targets.toArray();
       const { data: remoteTargets } = await supabase.from('targets').select('*');
-      if (remoteTargets) {
-        const remoteIds = new Set(remoteTargets.map(t => t.id));
-        const localOnly = localTargets.filter(t => !remoteIds.has(t.id));
-        
-        await db.targets.clear();
-        await db.targets.bulkAdd(remoteTargets);
-        if (localOnly.length > 0) {
-          await db.targets.bulkAdd(localOnly);
-          for (const target of localOnly) {
-            supabase.from('targets').upsert([target]).then();
-          }
-        }
-      }
+      await db.targets.clear();
+      if (remoteTargets) await db.targets.bulkAdd(remoteTargets);
       
-      const localTasks = await db.tasks.toArray();
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
-      if (remoteTasks) {
-        const remoteIds = new Set(remoteTasks.map(t => t.id));
-        const localOnly = localTasks.filter(t => !remoteIds.has(t.id));
-        
-        await db.tasks.clear();
-        await db.tasks.bulkAdd(remoteTasks);
-        if (localOnly.length > 0) {
-          await db.tasks.bulkAdd(localOnly);
-          for (const task of localOnly) {
-            supabase.from('tasks').upsert([task]).then();
-          }
-        }
-      }
+      await db.tasks.clear();
+      if (remoteTasks) await db.tasks.bulkAdd(remoteTasks);
     };
     syncData();
   }, []);

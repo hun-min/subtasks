@@ -37,7 +37,6 @@ export default function App() {
   const [editingSpaceId, setEditingSpaceId] = useState<number | null>(null);
   const [editSpaceTitle, setEditSpaceTitle] = useState('');
   const [showSpaceModal, setShowSpaceModal] = useState(false);
-  const [hoveredTargetId, setHoveredTargetId] = useState<number | null>(null);
   const [addingTaskToTarget, setAddingTaskToTarget] = useState<number | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [history, setHistory] = useState<number[]>([]);
@@ -400,8 +399,6 @@ export default function App() {
                         e.stopPropagation();
                         if (!isExpanded) setExpandedGroup(title);
                     }}
-                    onMouseEnter={() => setHoveredTargetId(targetId)}
-                    onMouseLeave={() => setHoveredTargetId(null)}
                 >
                     {topTask && (
                     <div className="relative">

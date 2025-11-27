@@ -15,7 +15,7 @@ export function useSystem() {
         await db.spaces.bulkAdd(remoteSpaces);
       } else {
         const defaultSpace = { title: '기본', createdAt: new Date() };
-        const id = await db.spaces.add(defaultSpace) as number;
+        await db.spaces.add(defaultSpace);
         supabase.from('spaces').insert([defaultSpace]).then();
       }
       

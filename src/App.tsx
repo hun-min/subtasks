@@ -534,7 +534,7 @@ export default function App() {
             {isInputMode && (
                 <div className="px-3 pb-2 flex items-center">
                     <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
-                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('act')} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm" autoFocus />
+                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm" autoFocus />
                 </div>
             )}
           </div>

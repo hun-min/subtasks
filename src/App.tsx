@@ -7,10 +7,11 @@ import { Target, Task, db } from './db';
 
 // --- Icons ---
 const CheckIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
-const PlusIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+
 const TrashIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
 const XIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const HistoryIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
+const HeatmapIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="4" height="4"></rect><rect x="9" y="3" width="4" height="4"></rect><rect x="15" y="3" width="4" height="4"></rect><rect x="3" y="9" width="4" height="4"></rect><rect x="9" y="9" width="4" height="4"></rect><rect x="15" y="9" width="4" height="4"></rect><rect x="3" y="15" width="4" height="4"></rect><rect x="9" y="15" width="4" height="4"></rect><rect x="15" y="15" width="4" height="4"></rect></svg>;
 const UndoIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>;
 const FocusIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>;
 const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
@@ -22,8 +23,8 @@ const ChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill=
 
 function SortableTargetItem({ target, wrapperClass, children }: { target: Target, wrapperClass: string, children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: target.id! });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.8 : 1 };
-  return <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`relative flex flex-col transition-all duration-500 ease-in-out ${wrapperClass}`}>{children}</div>;
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  return <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`relative flex flex-col transition-all duration-500 ease-in-out ${wrapperClass} ${isDragging ? 'opacity-80' : ''}`}>{children}</div>;
 }
 
 function SortableTaskItem({ task, children }: { task: Task, children: React.ReactNode }) {
@@ -33,7 +34,7 @@ function SortableTaskItem({ task, children }: { task: Task, children: React.Reac
 }
 
 export default function App() {
-  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown } = useSystem();
+  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, getHeatmapData } = useSystem();
   
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -70,6 +71,7 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [gachaTask, setGachaTask] = useState<{task: Task, targetTitle: string} | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -267,6 +269,7 @@ export default function App() {
                 if (!objValue.trim()) return;
                 setIsInputMode(true); setActValue(''); setSuggestions([]);
             } else {
+                if (!actValue.trim()) { resetForm(); return; }
                 submitFinal();
             }
         }
@@ -463,7 +466,7 @@ export default function App() {
 
       <div className="w-full max-w-md mt-8 space-y-8 relative z-10">
         
-        <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-10 grayscale' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+        <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm}>⦿</h1>
           <div className="flex items-center gap-2">
             <button onClick={runGacha} className="hover:scale-110 transition-transform" title="Random Pick"><DiceIcon /></button>
@@ -494,7 +497,6 @@ export default function App() {
                 <div className="px-3 pb-2 flex items-center">
                     <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
                     <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('act')} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm" autoFocus />
-                    <div className="absolute right-2 bottom-2"><button onClick={submitFinal} className="p-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors"><PlusIcon /></button></div>
                 </div>
             )}
           </div>
@@ -523,7 +525,7 @@ export default function App() {
             const isSpotlighted = spotlightGroup === title; 
 
             const wrapperClass = spotlightGroup
-                ? (isSpotlighted ? 'scale-100 z-50 opacity-100' : 'opacity-10 pointer-events-none') 
+                ? (isSpotlighted ? 'scale-100 z-50 opacity-100' : 'opacity-30 pointer-events-none') 
                 : 'opacity-100 z-auto';
 
             return (
@@ -576,12 +578,12 @@ export default function App() {
 
                 {/* 2. Actions Container (Stack or List) */}
                 {tasks.length > 0 && (
-                <div className="bg-gray-900 border border-t-0 border-gray-700 rounded-b-xl mb-2 px-3 py-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                <div className={`bg-gray-900 border border-t-0 rounded-b-xl mb-2 px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
                     <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
                     {(isExpanded ? tasks : [tasks[0]]).map((task) => (
                         <SortableTaskItem key={task.id} task={task}>
-                        <div className="flex items-center gap-2 py-0.5 group/task" onContextMenu={(e) => handleTaskContextMenu(e, task)}>
+                        <div className="flex items-center gap-2 py-0.5 group/task" onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
                             <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
                             {editingId?.type === 'task' && editingId.id === task.id ? (
                                 <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
@@ -600,7 +602,7 @@ export default function App() {
                 )}
 
                 {isExpanded && addingTaskToTarget === targetId && (
-                    <div className="px-3 pb-2">
+                    <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2 py-0.5">
                             <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
                             <input 
@@ -633,7 +635,7 @@ export default function App() {
                 )}
 
                 {isExpanded && addingTaskToTarget !== targetId && (
-                    <div className="px-3 pb-2">
+                    <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -655,7 +657,7 @@ export default function App() {
 
         {/* --- Backlog Groups --- */}
         {activeTargets.length > 3 && (
-          <div className="mt-8 pt-6 border-t border-gray-900">
+          <div className={`mt-8 pt-6 border-t border-gray-900 transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`}>
             <div className="flex items-center gap-2 mb-4 px-2 opacity-40">
               <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Backlog ({activeTargets.length - 3})</span>
             </div>
@@ -716,16 +718,30 @@ export default function App() {
 
         {/* History Log */}
         {showHistory && (
-          <div className="mt-10 pt-6 border-t border-gray-800" onClick={(e) => e.stopPropagation()}>
+          <div className={`mt-10 pt-6 border-t border-gray-800 transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Completed Log</h2>
-              <button 
-                onClick={() => { setShowCalendar(!showCalendar); if (!showCalendar) setCurrentDate(new Date()); }} 
-                className={`p-1.5 rounded-lg transition-colors ${showCalendar ? 'text-blue-400 bg-blue-400/10' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
-              >
-                <CalendarIcon />
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => { setShowHeatmap(!showHeatmap); setShowCalendar(false); }} 
+                  className={`p-1.5 rounded-lg transition-colors ${showHeatmap ? 'text-blue-400 bg-blue-400/10' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
+                >
+                  <HeatmapIcon />
+                </button>
+                <button 
+                  onClick={() => { setShowCalendar(!showCalendar); setShowHeatmap(false); if (!showCalendar) setCurrentDate(new Date()); }} 
+                  className={`p-1.5 rounded-lg transition-colors ${showCalendar ? 'text-blue-400 bg-blue-400/10' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
+                >
+                  <CalendarIcon />
+                </button>
+              </div>
             </div>
+
+            {showHeatmap && (
+              <div className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <HeatmapView getHeatmapData={getHeatmapData} currentSpaceId={currentSpaceId} onDateClick={(date) => setSelectedDate(date)} />
+              </div>
+            )}
 
             {showCalendar && (
               <div className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -745,14 +761,18 @@ export default function App() {
                     const month = currentDate.getMonth();
                     const daysInMonth = getDaysInMonth(year, month);
                     const firstDay = getFirstDayOfMonth(year, month);
+                    const today = new Date();
+                    const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+                    const todayDate = today.getDate();
                     const days = [];
                     for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-8 w-8"></div>);
                     for (let d = 1; d <= daysInMonth; d++) {
                       const dateStr = `${year}-${month + 1}-${d}`;
                       const isSelected = selectedDate === dateStr;
+                      const isToday = isCurrentMonth && d === todayDate;
                       const hasTask = completedDates.has(dateStr);
                       days.push(
-                        <div key={d} onClick={(e) => { e.stopPropagation(); setSelectedDate(isSelected ? null : dateStr); }} className={`h-8 w-8 flex items-center justify-center rounded-full text-xs cursor-pointer transition-all relative ${isSelected ? 'bg-blue-600 text-white font-bold' : 'hover:bg-gray-800 text-gray-400'}`}>
+                        <div key={d} onClick={(e) => { e.stopPropagation(); setSelectedDate(isSelected ? null : dateStr); }} className={`h-8 w-8 flex items-center justify-center rounded-full text-xs cursor-pointer transition-all relative ${isSelected ? 'bg-blue-600 text-white font-bold' : isToday ? 'bg-gray-700 text-white font-bold' : 'hover:bg-gray-800 text-gray-400'}`}>
                           {d}
                           {hasTask && !isSelected && <div className="absolute bottom-1 w-1 h-1 bg-blue-500 rounded-full"></div>}
                         </div>
@@ -837,6 +857,67 @@ export default function App() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+function HeatmapView({ getHeatmapData, currentSpaceId, onDateClick }: { getHeatmapData: (spaceId?: number) => Promise<Record<string, number>>, currentSpaceId: number | null, onDateClick: (date: string) => void }) {
+  const [data, setData] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    getHeatmapData(currentSpaceId || undefined).then(setData);
+  }, [currentSpaceId, getHeatmapData]);
+
+  const weeks = 12;
+  const today = new Date();
+  const grid = [];
+
+  for (let w = weeks - 1; w >= 0; w--) {
+    const weekData = [];
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (w * 7) - (6 - d));
+      const dateStr = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+      const count = data[dateStr] || 0;
+      
+      let colorClass = "bg-gray-800/50";
+      if (count >= 1) colorClass = "bg-blue-900/40";
+      if (count >= 3) colorClass = "bg-blue-800/60";
+      if (count >= 5) colorClass = "bg-blue-600";
+      if (count >= 8) colorClass = "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]";
+
+      weekData.push({ date: dateStr, count, colorClass });
+    }
+    grid.push(weekData);
+  }
+
+  return (
+    <div className="w-full pb-2 pt-3 flex flex-col items-center">
+      <div className="flex gap-1">
+        {grid.map((week, wIdx) => (
+          <div key={wIdx} className="flex flex-col gap-1">
+            {week.map((day) => (
+              <div 
+                key={day.date}
+                onClick={() => day.count > 0 && onDateClick(day.date)}
+                className={`w-3 h-3 rounded-sm transition-all hover:scale-125 hover:border-white/50 border border-transparent ${day.colorClass} ${day.count > 0 ? 'cursor-pointer' : ''}`}
+                title={`${day.date}: ${day.count} tasks`}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 mt-2 text-[9px] text-gray-600 uppercase tracking-widest">
+        <span>Less</span>
+        <div className="flex gap-0.5">
+          <div className="w-2 h-2 rounded-sm bg-gray-800/50"></div>
+          <div className="w-2 h-2 rounded-sm bg-blue-900/40"></div>
+          <div className="w-2 h-2 rounded-sm bg-blue-600"></div>
+          <div className="w-2 h-2 rounded-sm bg-blue-400"></div>
+        </div>
+        <span>More</span>
       </div>
     </div>
   );

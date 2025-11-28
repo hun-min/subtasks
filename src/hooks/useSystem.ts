@@ -212,5 +212,27 @@ export function useSystem() {
     }
   };
 
-  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown };
+  const getHeatmapData = async (spaceId?: number) => {
+    const tasks = await db.tasks.filter(t => t.isCompleted === true).toArray();
+    const targets = await db.targets.toArray();
+    const stats: Record<string, number> = {};
+    
+    tasks.forEach(t => {
+      const target = targets.find(tg => tg.id === t.targetId);
+      if (spaceId && (!target || target.spaceId !== spaceId)) return;
+      const d = t.completedAt ? (t.completedAt instanceof Date ? t.completedAt : new Date(t.completedAt)) : (t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt));
+      const dateStr = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+      stats[dateStr] = (stats[dateStr] || 0) + 1;
+    });
+    
+    targets.filter(t => t.isCompleted && (!spaceId || t.spaceId === spaceId)).forEach(target => {
+      const d = target.lastUsed instanceof Date ? target.lastUsed : new Date(target.lastUsed);
+      const dateStr = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+      stats[dateStr] = (stats[dateStr] || 0) + 1;
+    });
+    
+    return stats;
+  };
+
+  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown, getHeatmapData };
 }

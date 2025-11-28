@@ -32,7 +32,7 @@ export function useSystem() {
 
   const allSpaces = useLiveQuery(() => db.spaces.toArray());
   const activeTasks = useLiveQuery(() => db.tasks.filter(task => task.isCompleted === false).sortBy('createdAt'));
-  const completedTasks = useLiveQuery(() => db.tasks.filter(task => task.isCompleted === true).reverse().limit(50).toArray());
+  const completedTasks = useLiveQuery(() => db.tasks.filter(task => task.isCompleted === true).sortBy('completedAt').then(tasks => tasks.reverse().slice(0, 50)));
   const allTargets = useLiveQuery(() => db.targets.toArray());
 
   const searchTargets = async (query: string, spaceId?: number) => {
@@ -106,8 +106,9 @@ export function useSystem() {
   };
 
   const completeTarget = async (targetId: number) => {
-    await db.targets.update(targetId, { isCompleted: true });
-    supabase.from('targets').update({ isCompleted: true }).eq('id', targetId).then(({ error }) => {
+    const completedAt = new Date();
+    await db.targets.update(targetId, { isCompleted: true, lastUsed: completedAt });
+    supabase.from('targets').update({ isCompleted: true, lastUsed: completedAt }).eq('id', targetId).then(({ error }) => {
       if (error) console.log('Supabase sync skipped:', error.message);
     });
   };

@@ -14,7 +14,6 @@ const HistoryIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="
 const UndoIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>;
 const FocusIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>;
 const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
-const ActionIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500"><path d="M9 18l6-6-6-6"></path></svg>;
 const DiceIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 8h.01"></path><path d="M8 8h.01"></path><path d="M8 16h.01"></path><path d="M16 16h.01"></path><path d="M12 12h.01"></path></svg>;
 const LockIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
 const CalendarIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>;
@@ -508,10 +507,8 @@ export default function App() {
             const targetId = target.id!;
             const title = target.title;
             const tasks = groupedTasks[title] || [];
-            const topTask = tasks[0];
             const isExpanded = expandedGroup === title;
-            const isSpotlighted = spotlightGroup === title;
-            const queueTasks = tasks.slice(1); 
+            const isSpotlighted = spotlightGroup === title; 
 
             const wrapperClass = spotlightGroup
                 ? (isSpotlighted ? 'scale-100 z-50 opacity-100' : 'opacity-10 blur-sm pointer-events-none') 
@@ -521,12 +518,12 @@ export default function App() {
               <SortableTargetItem key={targetId} target={target} wrapperClass={wrapperClass}>
                 {/* 1. Objective (Target) */}
                 <div 
-                    className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border rounded-xl transition-all duration-500 cursor-pointer select-none z-30 mb-1 group
+                    className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border transition-all duration-500 cursor-pointer select-none z-30 group
                         ${isSpotlighted ? 'border-blue-500 shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]' : 'border-gray-700 shadow-md hover:border-gray-500'}
+                        ${tasks.length > 0 ? 'rounded-t-xl' : 'rounded-xl mb-2'}
                     `}
                     onContextMenu={(e) => handleGroupContextMenu(e, title, targetId)}
                     onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : title); }}
-                    style={{ marginBottom: 0 }}
                 >
                     <div className="flex items-center gap-2 w-full overflow-hidden">
                         <span className={`flex-shrink-0 ${isSpotlighted ? 'text-blue-400' : 'text-gray-500'}`}><TargetIcon /></span>
@@ -571,107 +568,34 @@ export default function App() {
                 </div>
 
                 {/* 2. Actions Container (Stack or List) */}
-                <div 
-                    className={`relative transition-all duration-500 ease-in-out ml-6 border-l-2 border-gray-700/50 pl-4 pb-2
-                        ${isExpanded ? 'h-auto' : 'h-auto cursor-pointer'} 
-                    `}
-                    style={{ marginTop: '-1px' }}
-                    onClick={(e) => { 
-                        e.stopPropagation();
-                        if (!isExpanded) setExpandedGroup(title);
-                    }}
-                >
+                {tasks.length > 0 && (
+                <div className="bg-gray-900 border border-t-0 border-gray-700 rounded-b-xl mb-2 px-3 py-2 space-y-1" onClick={(e) => e.stopPropagation()}>
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
                     <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
-                    {topTask && (
-                    <div className="relative">
-                    <SortableTaskItem task={topTask}>
-                    <div 
-                        className={`bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
-                            ${!isExpanded ? 'shadow-lg cursor-pointer' : 'mb-0'}
-                        `}
-                        onClick={(e) => { e.stopPropagation(); if(!isExpanded) setExpandedGroup(title); }}
-                        onContextMenu={(e) => handleTaskContextMenu(e, topTask)}
-                    >
-                        <div className="flex items-center gap-2 overflow-hidden w-full">
-                            <span className="text-gray-500"><ActionIcon /></span>
-                            {editingId?.type === 'task' && editingId.id === topTask.id ? (
-                                <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
-                            ) : (
-                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', topTask.id!, topTask.title); }} className={`text-base cursor-pointer hover:text-white transition-colors select-none w-full break-words ${getTaskAgeStyle(topTask.createdAt)}`}>{topTask.title}</span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => handleDeleteTask(topTask.id!)} className={`text-gray-600 hover:text-red-400 transition-opacity ${isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><TrashIcon /></button>
-                            <button onClick={(e) => { handleCompleteTask(topTask.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
-                        </div>
-                    </div>
-                    </SortableTaskItem>
-
-                    {!isExpanded && queueTasks.slice(0, 2).map((task, idx) => (
-                        <div 
-                            key={task.id}
-                            className="absolute bg-gray-800 border border-gray-600 rounded-xl"
-                            style={{
-                                top: `${(idx + 1) * 6}px`,
-                                left: 0,
-                                right: 0,
-                                height: '2.25rem',
-                                opacity: 0.4,
-                                zIndex: -1 - idx,
-                                pointerEvents: 'auto',
-                                cursor: 'pointer'
-                            }}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setExpandedGroup(title);
-                            }}
-                        />
-                    ))}
-                    </div>
-                    )}
-
-                    {isExpanded && queueTasks.map((task) => (
+                    {(isExpanded ? tasks : [tasks[0]]).map((task) => (
                         <SortableTaskItem key={task.id} task={task}>
-                        <div 
-                            className="bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0"
-                            onClick={(e) => e.stopPropagation()}
-                            onContextMenu={(e) => handleTaskContextMenu(e, task)}
-                        >
-                            <div className="flex items-center gap-2 overflow-hidden w-full">
-                                <span className="text-gray-500"><ActionIcon /></span>
-                                {editingId?.type === 'task' && editingId.id === task.id ? (
-                                    <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
-                                ) : (
-                                    <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`text-base cursor-pointer hover:text-white transition-colors select-none w-full break-words ${getTaskAgeStyle(task.createdAt)}`}>{task.title}</span>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                <button onClick={() => handleDeleteTask(task.id!)} className="text-gray-600 hover:text-red-400 transition-opacity opacity-0 group-hover:opacity-100"><TrashIcon /></button>
-                                <button onClick={(e) => { handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
-                            </div>
+                        <div className="flex items-center gap-2 py-0.5">
+                            <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
+                            {editingId?.type === 'task' && editingId.id === task.id ? (
+                                <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
+                            ) : (
+                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-white transition-colors ${getTaskAgeStyle(task.createdAt)}`}>{task.title}</span>
+                            )}
+                            <button onClick={() => handleDeleteTask(task.id!)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><TrashIcon /></button>
+                            <button onClick={(e) => { handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0"><CheckIcon /></button>
                         </div>
                         </SortableTaskItem>
                     ))}
                     </SortableContext>
                     </DndContext>
 
-                    {isExpanded && addingTaskToTarget !== targetId && (
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setAddingTaskToTarget(targetId);
-                                setNewTaskTitle('');
-                            }}
-                            className="mt-1 w-full py-0.5 text-[10px] text-gray-600 hover:text-gray-400 transition-all text-center"
-                        >
-                            +
-                        </button>
-                    )}
+                </div>
+                )}
 
-                    {addingTaskToTarget === targetId && (
-                        <div className="flex items-center gap-2 bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl" onClick={(e) => e.stopPropagation()}>
-                            <span className="text-gray-500"><ActionIcon /></span>
+                {isExpanded && addingTaskToTarget === targetId && (
+                    <div className="px-3 pb-2">
+                        <div className="flex items-center gap-2 py-0.5">
+                            <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
                             <input 
                                 type="text" 
                                 value={newTaskTitle} 
@@ -694,13 +618,27 @@ export default function App() {
                                     }
                                 }}
                                 placeholder="Action..."
-                                className="w-full bg-transparent text-white text-base outline-none"
+                                className="flex-1 min-w-0 bg-transparent text-gray-200 text-sm outline-none"
                                 autoFocus
                             />
                         </div>
-                    )}
+                    </div>
+                )}
 
-                </div>
+                {isExpanded && addingTaskToTarget !== targetId && (
+                    <div className="px-3 pb-2">
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setAddingTaskToTarget(targetId);
+                                setNewTaskTitle('');
+                            }}
+                            className="w-full py-0.5 text-[10px] text-gray-600 hover:text-gray-400 transition-all text-center"
+                        >
+                            +
+                        </button>
+                    </div>
+                )}
               </SortableTargetItem>
             );
           })}

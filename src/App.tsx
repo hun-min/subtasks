@@ -550,12 +550,7 @@ export default function App() {
                         <span 
                             onClick={(e) => { 
                                 e.stopPropagation(); 
-                                if (tasks.length === 0) {
-                                    setAddingTaskToTarget(targetId);
-                                    setNewTaskTitle('');
-                                } else {
-                                    setExpandedGroup(isExpanded ? null : title);
-                                }
+                                setExpandedGroup(isExpanded ? null : title);
                             }}
                             className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all"
                         >

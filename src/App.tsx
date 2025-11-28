@@ -577,15 +577,15 @@ export default function App() {
                     <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
                     {(isExpanded ? tasks : [tasks[0]]).map((task) => (
                         <SortableTaskItem key={task.id} task={task}>
-                        <div className="flex items-center gap-2 py-0.5">
+                        <div className="flex items-center gap-2 py-0.5 group/task" onContextMenu={(e) => handleTaskContextMenu(e, task)}>
                             <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
                             {editingId?.type === 'task' && editingId.id === task.id ? (
                                 <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                             ) : (
                                 <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-white transition-colors ${getTaskAgeStyle(task.createdAt)}`}>{task.title}</span>
                             )}
-                            <button onClick={() => handleDeleteTask(task.id!)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><TrashIcon /></button>
-                            <button onClick={(e) => { handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0"><CheckIcon /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className="text-gray-600 hover:text-red-400 opacity-0 group-hover/task:opacity-100 transition-opacity flex-shrink-0"><TrashIcon /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0"><CheckIcon /></button>
                         </div>
                         </SortableTaskItem>
                     ))}

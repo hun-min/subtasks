@@ -119,16 +119,19 @@ export default function App() {
 
   const completedDates = React.useMemo(() => {
     const dates = new Set<string>();
-    completedTasks?.forEach(task => {
+    completedTasks?.filter(task => {
+      const target = allTargets?.find(t => t.id === task.targetId);
+      return target && (!currentSpaceId || target.spaceId === currentSpaceId);
+    }).forEach(task => {
       const d = task.completedAt ? (task.completedAt instanceof Date ? task.completedAt : new Date(task.completedAt)) : (task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt));
       dates.add(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`);
     });
-    allTargets?.filter(t => t.isCompleted).forEach(target => {
+    allTargets?.filter(t => t.isCompleted && (!currentSpaceId || t.spaceId === currentSpaceId)).forEach(target => {
       const d = target.lastUsed instanceof Date ? target.lastUsed : new Date(target.lastUsed);
       dates.add(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`);
     });
     return dates;
-  }, [completedTasks, allTargets]);
+  }, [completedTasks, allTargets, currentSpaceId]);
 
   const filteredCompletedTasks = React.useMemo(() => {
     if (!completedTasks) return [];

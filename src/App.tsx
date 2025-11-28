@@ -75,6 +75,7 @@ export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [focusIndex, setFocusIndex] = useState(-1);
+  const [keyboardFocusedItem, setKeyboardFocusedItem] = useState<{type: string, id?: number} | null>(null);
 
   const getTaskAgeStyle = (createdAt: Date) => {
       const diffMs = new Date().getTime() - new Date(createdAt).getTime();
@@ -228,32 +229,86 @@ export default function App() {
 
   useEffect(() => {
       const handleKeyDown = async (e: KeyboardEvent) => {
-          if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+          if ((e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
           
-          const allItems = [...activeTargets.slice(0, 3).flatMap(t => {
-              const tasks = groupedTasks[t.title] || [];
-              return [{type: 'target' as const, id: t.id!, title: t.title}, ...tasks.map(task => ({type: 'task' as const, id: task.id!, title: task.title, targetId: task.targetId}))];
-          })];
+          const allItems: Array<{type: string, id?: number, title?: string, action?: () => void}> = [
+              {type: 'dice', action: runGacha},
+              ...(allSpaces?.map(s => ({type: 'space', id: s.id!, title: s.title, action: () => setCurrentSpaceId(s.id!)})) || []),
+              {type: 'addSpace', action: handleAddSpace},
+              {type: 'logToggle', action: () => { const newState = !showHistory; setShowHistory(newState); localStorage.setItem('showHistory', String(newState)); }},
+              {type: 'objInput'},
+              ...(isInputMode ? [{type: 'actInput'}] : []),
+              ...activeTargets.slice(0, 3).flatMap(t => {
+                  const tasks = groupedTasks[t.title] || [];
+                  const isExpanded = expandedGroup === t.title;
+                  return [{type: 'target' as const, id: t.id!, title: t.title}, ...(isExpanded ? tasks.map(task => ({type: 'task' as const, id: task.id!, title: task.title})) : tasks.length > 0 ? [{type: 'task' as const, id: tasks[0].id!, title: tasks[0].title}] : [])];
+              }),
+              ...activeTargets.slice(3).map(t => ({type: 'backlog', id: t.id!, title: t.title})),
+              ...(showHistory ? [{type: 'heatmap', action: () => { setShowHeatmap(!showHeatmap); setShowCalendar(false); }}, {type: 'calendar', action: () => { setShowCalendar(!showCalendar); setShowHeatmap(false); }}] : []),
+              ...(showHistory && mergedCompletedItems ? mergedCompletedItems.map((item) => ({type: item.type === 'task' ? 'completedTask' : 'completedTarget', id: (item.data as any).id, title: item.type === 'task' ? (item.data as Task).title : (item.data as Target).title})) : [])
+          ];
           
           if (e.key === 'ArrowDown') {
               e.preventDefault();
-              setFocusIndex(prev => prev < allItems.length - 1 ? prev + 1 : prev);
+              if (e.target instanceof HTMLInputElement) {
+                  (e.target as HTMLInputElement).blur();
+                  document.body.focus();
+              }
+              const newIndex = focusIndex < allItems.length - 1 ? focusIndex + 1 : focusIndex;
+              setFocusIndex(newIndex);
+              const item = allItems[newIndex];
+              if (item?.type === 'objInput') {
+                  const input = document.querySelector('input[placeholder="Objective..."]') as HTMLInputElement;
+                  if (input) input.focus();
+                  setKeyboardFocusedItem(null);
+              } else if (item?.type === 'actInput') {
+                  const input = document.querySelector('input[placeholder="Next Action..."]') as HTMLInputElement;
+                  if (input) input.focus();
+                  setKeyboardFocusedItem(null);
+              } else if (item) {
+                  setKeyboardFocusedItem({type: item.type, id: item.id});
+              } else {
+                  setKeyboardFocusedItem(null);
+              }
           } else if (e.key === 'ArrowUp') {
               e.preventDefault();
-              setFocusIndex(prev => prev > 0 ? prev - 1 : 0);
+              if (e.target instanceof HTMLInputElement) {
+                  (e.target as HTMLInputElement).blur();
+                  document.body.focus();
+              }
+              const newIndex = focusIndex > 0 ? focusIndex - 1 : 0;
+              setFocusIndex(newIndex);
+              const item = allItems[newIndex];
+              if (item?.type === 'objInput') {
+                  const input = document.querySelector('input[placeholder="Objective..."]') as HTMLInputElement;
+                  if (input) input.focus();
+                  setKeyboardFocusedItem(null);
+              } else if (item?.type === 'actInput') {
+                  const input = document.querySelector('input[placeholder="Next Action..."]') as HTMLInputElement;
+                  if (input) input.focus();
+                  setKeyboardFocusedItem(null);
+              } else if (item) {
+                  setKeyboardFocusedItem({type: item.type, id: item.id});
+              } else {
+                  setKeyboardFocusedItem(null);
+              }
+          } else if (e.key === 'Enter' && focusIndex >= 0 && allItems[focusIndex]) {
+              e.preventDefault();
+              const item = allItems[focusIndex];
+              if (item.action) item.action();
+              else if (item.type === 'target' || item.type === 'task') startEditing(item.type as 'target'|'task', item.id!, item.title!);
           } else if (focusIndex >= 0 && allItems[focusIndex]) {
               const item = allItems[focusIndex];
-              if (e.key === 'Enter') {
+              if (e.key === 'Delete') {
                   e.preventDefault();
-                  startEditing(item.type, item.id, item.title);
-              } else if (e.key === 'Delete') {
-                  e.preventDefault();
-                  if (item.type === 'task') handleDeleteTask(item.id);
-                  else if (window.confirm('목표 삭제?')) deleteGroup(item.id);
+                  if (item.type === 'task' && item.id) handleDeleteTask(item.id);
+                  else if (item.id && window.confirm('목표 삭제?')) deleteGroup(item.id);
               } else if (e.key === ' ') {
                   e.preventDefault();
-                  if (item.type === 'task') handleCompleteTask(item.id);
-                  else completeTarget(item.id);
+                  if (item.type === 'task' && item.id) handleCompleteTask(item.id);
+                  else if (item.type === 'completedTask' && item.id) undoTask(item.id);
+                  else if (item.type === 'completedTarget' && item.id) undoTarget(item.id);
+                  else if (item.type === 'target' && item.id) completeTarget(item.id);
               }
           } else if (e.ctrlKey && e.key === 'z' && historyIndex >= 0) {
               e.preventDefault();
@@ -507,14 +562,14 @@ export default function App() {
         <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm}>⦿</h1>
           <div className="flex items-center gap-2">
-            <button onClick={runGacha} className="hover:scale-110 transition-transform" title="Random Pick"><DiceIcon /></button>
+            <button onClick={runGacha} className={`transition-all ${keyboardFocusedItem?.type === 'dice' ? 'scale-125 ring-2 ring-white' : 'hover:scale-110'}`} title="Random Pick"><DiceIcon /></button>
             <div className="flex gap-1 bg-gray-900 rounded-full p-1">
               {allSpaces?.map(space => (
-                <button key={space.id} onClick={() => setCurrentSpaceId(space.id!)} onContextMenu={(e) => handleSpaceContextMenu(e, space.id!, space.title)} className={`px-3 py-1 rounded-full text-sm transition-all ${currentSpaceId === space.id ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>{space.title}</button>
+                <button key={space.id} onClick={() => setCurrentSpaceId(space.id!)} onContextMenu={(e) => handleSpaceContextMenu(e, space.id!, space.title)} className={`px-3 py-1 rounded-full text-sm transition-all ${keyboardFocusedItem?.type === 'space' && keyboardFocusedItem.id === space.id ? 'bg-blue-600 text-white ring-2 ring-white' : currentSpaceId === space.id ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>{space.title}</button>
               ))}
-              <button onClick={handleAddSpace} className="px-2 py-1 rounded-full text-sm text-gray-500 hover:text-white transition-all">+</button>
+              <button onClick={handleAddSpace} className={`px-2 py-1 rounded-full text-sm transition-all ${keyboardFocusedItem?.type === 'addSpace' ? 'text-white bg-gray-700 ring-2 ring-white' : 'text-gray-500 hover:text-white'}`}>+</button>
             </div>
-            <button onClick={() => { const newState = !showHistory; setShowHistory(newState); localStorage.setItem('showHistory', String(newState)); }} className={`text-[10px] px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${showHistory ? 'bg-blue-900 text-blue-200' : 'bg-gray-800 text-gray-400'}`}><HistoryIcon /> Log</button>
+            <button onClick={() => { const newState = !showHistory; setShowHistory(newState); localStorage.setItem('showHistory', String(newState)); }} className={`text-[10px] px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${keyboardFocusedItem?.type === 'logToggle' ? 'bg-gray-700 text-white ring-2 ring-white' : showHistory ? 'bg-blue-900 text-blue-200' : 'bg-gray-800 text-gray-400'}`}><HistoryIcon /> Log</button>
           </div>
         </header>
 
@@ -571,7 +626,7 @@ export default function App() {
                 {/* 1. Objective (Target) */}
                 <div 
                     className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border transition-all duration-500 cursor-pointer select-none z-30 group
-                        ${isSpotlighted ? 'border-blue-500 shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]' : 'border-gray-700 shadow-md hover:border-gray-500'}
+                        ${isSpotlighted ? 'border-blue-500 shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]' : keyboardFocusedItem?.type === 'target' && keyboardFocusedItem.id === targetId ? 'border-white shadow-lg ring-2 ring-white' : 'border-gray-700 shadow-md hover:border-gray-500'}
                         ${tasks.length > 0 ? 'rounded-t-xl' : 'rounded-xl mb-2'}
                     `}
                     onContextMenu={(e) => handleGroupContextMenu(e, title, targetId)}
@@ -582,7 +637,7 @@ export default function App() {
                         {editingId?.type === 'target' && editingId.id === targetId ? (
                             <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full max-w-[calc(100%-31px)] text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                         ) : (
-                            <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className={`text-base font-medium cursor-pointer hover:text-white transition-colors truncate w-full ${focusIndex >= 0 && activeTargets.slice(0, 3).flatMap(t => [{type: 'target', id: t.id!}, ...(groupedTasks[t.title] || []).map(task => ({type: 'task', id: task.id!}))]).findIndex(item => item.type === 'target' && item.id === targetId) === focusIndex ? 'text-blue-400 ring-2 ring-blue-500/50 rounded px-1' : 'text-gray-200'}`}>{title}</span>
+                            <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className={`text-base font-medium cursor-pointer transition-colors truncate w-full ${keyboardFocusedItem?.type === 'target' && keyboardFocusedItem.id === targetId ? 'text-white font-bold' : 'text-gray-200 hover:text-white'}`}>{title}</span>
                         )}
                     </div>
                     
@@ -626,7 +681,7 @@ export default function App() {
                             {editingId?.type === 'task' && editingId.id === task.id ? (
                                 <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                             ) : (
-                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-white transition-colors ${focusIndex >= 0 && activeTargets.slice(0, 3).flatMap(t => [{type: 'target', id: t.id!}, ...(groupedTasks[t.title] || []).map(task => ({type: 'task', id: task.id!}))]).findIndex(item => item.type === 'task' && item.id === task.id) === focusIndex ? 'text-blue-400 ring-2 ring-blue-500/50 rounded px-1' : getTaskAgeStyle(task.createdAt)}`}>{task.title}</span>
+                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>
                             )}
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>
                             <button onClick={(e) => { e.stopPropagation(); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0"><CheckIcon /></button>
@@ -704,7 +759,7 @@ export default function App() {
                 const title = target.title;
                 const tasks = groupedTasks[title] || [];
                 return (
-                  <div key={target.id} className="flex items-center justify-between px-3 py-1.5 border border-gray-800 rounded-xl">
+                  <div key={target.id} className={`flex items-center justify-between px-3 py-1.5 border-2 rounded-xl transition-all ${keyboardFocusedItem?.type === 'backlog' && keyboardFocusedItem.id === target.id ? 'border-gray-400' : 'border-gray-800'}`}>
                     <span className="text-gray-500 text-sm">{title}</span>
                     <span className="text-xs text-gray-700 font-mono">{tasks.length}</span>
                   </div>
@@ -762,13 +817,13 @@ export default function App() {
               <div className="flex gap-2">
                 <button 
                   onClick={() => { setShowHeatmap(!showHeatmap); setShowCalendar(false); }} 
-                  className={`p-1.5 rounded-lg transition-colors ${showHeatmap ? 'text-blue-400 bg-blue-400/10' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
+                  className={`p-1.5 rounded-lg transition-colors ${keyboardFocusedItem?.type === 'heatmap' ? 'text-white bg-gray-700' : showHeatmap ? 'text-blue-400 bg-blue-400/10' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
                 >
                   <HeatmapIcon />
                 </button>
                 <button 
                   onClick={() => { setShowCalendar(!showCalendar); setShowHeatmap(false); if (!showCalendar) setCurrentDate(new Date()); }} 
-                  className={`p-1.5 rounded-lg transition-colors ${showCalendar ? 'text-blue-400 bg-blue-400/10' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
+                  className={`p-1.5 rounded-lg transition-colors ${keyboardFocusedItem?.type === 'calendar' ? 'text-white bg-gray-700' : showCalendar ? 'text-blue-400 bg-blue-400/10' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
                 >
                   <CalendarIcon />
                 </button>
@@ -834,7 +889,7 @@ export default function App() {
                   return (
                     <div 
                       key={`task-${task.id}`} 
-                      className="flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all cursor-context-menu" 
+                      className={`flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border-2 group transition-all cursor-context-menu ${keyboardFocusedItem?.type === 'completedTask' && keyboardFocusedItem.id === task.id ? 'border-gray-400' : 'border-gray-800/50 hover:border-gray-700'}`}
                       onContextMenu={(e) => handleTaskContextMenu(e, task)}
                     >
                       <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
@@ -866,7 +921,7 @@ export default function App() {
                   return (
                     <div 
                       key={`target-${target.id}`} 
-                      className="flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border border-gray-800/50 group hover:border-gray-700 transition-all" 
+                      className={`flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border-2 group transition-all ${keyboardFocusedItem?.type === 'completedTarget' && keyboardFocusedItem.id === target.id ? 'border-gray-400' : 'border-gray-800/50 hover:border-gray-700'}`}
                     >
                       <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
                         <span className="text-blue-400/70"><TargetIcon /></span>

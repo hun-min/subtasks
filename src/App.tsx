@@ -33,7 +33,7 @@ function SortableTaskItem({ task, children }: { task: Task, children: React.Reac
 }
 
 export default function App() {
-  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown } = useSystem();
+  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown } = useSystem();
   
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -393,13 +393,16 @@ export default function App() {
   const handleTargetDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = activeTargets.findIndex(t => t.id === active.id);
-    const newIndex = activeTargets.findIndex(t => t.id === over.id);
-    if (oldIndex < newIndex) {
-      for (let i = 0; i < newIndex - oldIndex; i++) await moveTargetDown(active.id as number);
-    } else {
-      for (let i = 0; i < oldIndex - newIndex; i++) await moveTargetUp(active.id as number);
-    }
+    const visibleTargets = activeTargets.slice(0, 3);
+    const oldIndex = visibleTargets.findIndex(t => t.id === active.id);
+    const newIndex = visibleTargets.findIndex(t => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    
+    const currentTarget = visibleTargets[oldIndex];
+    const targetAtNewPosition = visibleTargets[newIndex];
+    
+    await db.targets.update(currentTarget.id!, { lastUsed: targetAtNewPosition.lastUsed });
+    await db.targets.update(targetAtNewPosition.id!, { lastUsed: currentTarget.lastUsed });
   };
 
   const handleTaskDragEnd = async (event: DragEndEvent, tasks: Task[]) => {

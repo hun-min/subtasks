@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useSystem } from './hooks/useSystem';
 import { Target, Task, db } from './db';
 
@@ -18,8 +21,25 @@ const CalendarIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill=
 const ChevronLeft = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
 const ChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
 
+function SortableTargetItem({ target, wrapperClass, children }: { target: Target, wrapperClass: string, children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: target.id! });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.8 : 1 };
+  return <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`relative flex flex-col transition-all duration-500 ease-in-out ${wrapperClass}`}>{children}</div>;
+}
+
+function SortableTaskItem({ task, children }: { task: Task, children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id! });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.8 : 1 };
+  return <div ref={setNodeRef} style={style} {...attributes} {...listeners}>{children}</div>;
+}
+
 export default function App() {
-  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage } = useSystem();
+  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown } = useSystem();
+  
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  );
   
   const [objValue, setObjValue] = useState(''); 
   const [actValue, setActValue] = useState(''); 
@@ -276,11 +296,13 @@ export default function App() {
 
   const startEditing = (type: 'target' | 'task', id: number, text: string) => { setEditingId({ type, id }); setEditValue(text); };
   const saveEdit = async () => {
-      if (editingId && editValue.trim()) { 
-          if (editingId.type === 'target') {
-              await updateTargetTitle(editingId.id, editValue);
-          } else {
-              await updateTaskTitle(editingId.id, editValue); 
+      if (editingId) {
+          if (editValue.trim()) {
+              if (editingId.type === 'target') {
+                  await updateTargetTitle(editingId.id, editValue);
+              } else {
+                  await updateTaskTitle(editingId.id, editValue); 
+              }
           }
       }
       setEditingId(null); 
@@ -345,14 +367,38 @@ export default function App() {
     }
   };
 
+  const handleTargetDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = activeTargets.findIndex(t => t.id === active.id);
+    const newIndex = activeTargets.findIndex(t => t.id === over.id);
+    if (oldIndex < newIndex) {
+      for (let i = 0; i < newIndex - oldIndex; i++) await moveTargetDown(active.id as number);
+    } else {
+      for (let i = 0; i < oldIndex - newIndex; i++) await moveTargetUp(active.id as number);
+    }
+  };
+
+  const handleTaskDragEnd = async (event: DragEndEvent, tasks: Task[]) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = tasks.findIndex(t => t.id === active.id);
+    const newIndex = tasks.findIndex(t => t.id === over.id);
+    const task = tasks[oldIndex];
+    if (oldIndex < newIndex) {
+      for (let i = 0; i < newIndex - oldIndex; i++) await moveTaskDown(task, tasks);
+    } else {
+      for (let i = 0; i < oldIndex - newIndex; i++) await moveTaskUp(task, tasks);
+    }
+  };
+
   return (
     <div 
         className={`min-h-screen font-sans flex flex-col items-center p-4 pb-40 overflow-x-hidden bg-gray-950 text-gray-100 transition-colors duration-500`}
         // [✨ 핵심 수정] 배경 클릭 시: 그룹 접기 + 입력창 초기화 + "편집 모드 강제 종료"
         onClick={() => { 
-            setExpandedGroup(null); 
-            resetForm();
-            setEditingId(null); // <-- 이거 추가
+            setExpandedGroup(null);
+            if (editingId) saveEdit();
         }}
         onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
     >
@@ -414,13 +460,13 @@ export default function App() {
           ) : (
           <div className={`relative flex flex-col shadow-2xl rounded-2xl bg-gray-900 border border-gray-800`}>
             <div className="flex items-center px-3 py-2">
-                <span className="text-blue-400 mr-2"><TargetIcon /></span>
-                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`w-full bg-transparent text-white rounded-t-2xl focus:outline-none font-medium text-base placeholder-gray-600 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
+                <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
+                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
             </div>
             {isInputMode && (
                 <div className="px-3 pb-2 flex items-center">
-                    <span className="text-gray-600 mr-2 ml-0.5">↳</span>
-                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('act')} placeholder="Next Action..." className="w-full bg-transparent text-gray-200 focus:outline-none text-sm" autoFocus />
+                    <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
+                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('act')} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm" autoFocus />
                     <div className="absolute right-2 bottom-2"><button onClick={submitFinal} className="p-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors"><PlusIcon /></button></div>
                 </div>
             )}
@@ -439,6 +485,8 @@ export default function App() {
         </div>
         
         {/* --- Focus Groups (Top 3) --- */}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTargetDragEnd}>
+        <SortableContext items={activeTargets.slice(0, 3).map(t => t.id!)} strategy={verticalListSortingStrategy}>
         <div className="space-y-2 pb-2">
           {activeTargets.slice(0, 3).map((target) => {
             const targetId = target.id!;
@@ -454,10 +502,7 @@ export default function App() {
                 : 'opacity-100 z-auto';
 
             return (
-              <div 
-                key={title} 
-                className={`relative flex flex-col transition-all duration-500 ease-in-out ${wrapperClass}`}
-              >
+              <SortableTargetItem key={targetId} target={target} wrapperClass={wrapperClass}>
                 {/* 1. Objective (Target) */}
                 <div 
                     className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border rounded-xl transition-all duration-500 cursor-pointer select-none z-30 mb-1 group
@@ -520,8 +565,11 @@ export default function App() {
                         if (!isExpanded) setExpandedGroup(title);
                     }}
                 >
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
+                    <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
                     {topTask && (
                     <div className="relative">
+                    <SortableTaskItem task={topTask}>
                     <div 
                         className={`bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative
                             ${!isExpanded ? 'shadow-lg cursor-pointer' : 'mb-0'}
@@ -542,6 +590,7 @@ export default function App() {
                             <button onClick={(e) => { handleCompleteTask(topTask.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
                         </div>
                     </div>
+                    </SortableTaskItem>
 
                     {!isExpanded && queueTasks.slice(0, 2).map((task, idx) => (
                         <div 
@@ -567,8 +616,8 @@ export default function App() {
                     )}
 
                     {isExpanded && queueTasks.map((task) => (
+                        <SortableTaskItem key={task.id} task={task}>
                         <div 
-                            key={task.id}
                             className="bg-gray-800 border border-gray-600 px-3 py-1.5 rounded-xl flex items-center justify-between group transition-all duration-300 z-20 relative mb-0"
                             onClick={(e) => e.stopPropagation()}
                             onContextMenu={(e) => handleTaskContextMenu(e, task)}
@@ -586,7 +635,10 @@ export default function App() {
                                 <button onClick={(e) => { handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
                             </div>
                         </div>
+                        </SortableTaskItem>
                     ))}
+                    </SortableContext>
+                    </DndContext>
 
                     {isExpanded && addingTaskToTarget !== targetId && (
                         <button 
@@ -633,10 +685,12 @@ export default function App() {
                     )}
 
                 </div>
-              </div>
+              </SortableTargetItem>
             );
           })}
         </div>
+        </SortableContext>
+        </DndContext>
 
         {/* --- Backlog Groups --- */}
         {activeTargets.length > 3 && (

@@ -552,7 +552,7 @@ export default function App() {
                                 e.stopPropagation(); 
                                 if(window.confirm(`"${title}" 목표를 삭제하시겠습니까?`)) deleteGroup(targetId); 
                             }} 
-                            className="text-gray-600 hover:text-red-400 transition-opacity opacity-0 group-hover:opacity-100"
+                            className={`text-gray-600 hover:text-red-400 transition-opacity ${editingId?.type === 'target' && editingId.id === targetId ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                         >
                             <TrashIcon />
                         </button>

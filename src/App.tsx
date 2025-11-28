@@ -67,7 +67,7 @@ export default function App() {
   const [showSpaceModal, setShowSpaceModal] = useState(false);
   const [addingTaskToTarget, setAddingTaskToTarget] = useState<number | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [history, setHistory] = useState<number[]>([]);
+  const [history, setHistory] = useState<Array<{type: 'complete'|'delete'|'add'|'edit', data: any}>>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [gachaTask, setGachaTask] = useState<{task: Task, targetTitle: string} | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -217,16 +217,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
+      const handleKeyDown = async (e: KeyboardEvent) => {
           if (e.ctrlKey && e.key === 'z' && historyIndex >= 0) {
               e.preventDefault();
-              const taskId = history[historyIndex];
-              undoTask(taskId);
+              const action = history[historyIndex];
+              if (action.type === 'complete') await undoTask(action.data.id);
+              else if (action.type === 'delete') await addTask(action.data);
+              else if (action.type === 'add') await deleteTask(action.data.id);
+              else if (action.type === 'edit') await (action.data.isTask ? updateTaskTitle(action.data.id, action.data.oldValue) : updateTargetTitle(action.data.id, action.data.oldValue));
               setHistoryIndex(historyIndex - 1);
           } else if (e.ctrlKey && e.key === 'y' && historyIndex < history.length - 1) {
               e.preventDefault();
-              const taskId = history[historyIndex + 1];
-              completeTask(taskId);
+              const action = history[historyIndex + 1];
+              if (action.type === 'complete') await completeTask(action.data.id);
+              else if (action.type === 'delete') await deleteTask(action.data.id);
+              else if (action.type === 'add') await addTask(action.data);
+              else if (action.type === 'edit') await (action.data.isTask ? updateTaskTitle(action.data.id, action.data.newValue) : updateTargetTitle(action.data.id, action.data.newValue));
               setHistoryIndex(historyIndex + 1);
           } else if (e.altKey && allSpaces) {
               const num = parseInt(e.key);
@@ -238,7 +244,7 @@ export default function App() {
       };
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [history, historyIndex, allSpaces]);
+  }, [history, historyIndex, allSpaces, undoTask, completeTask, addTask, deleteTask, updateTaskTitle, updateTargetTitle]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return;
@@ -286,7 +292,12 @@ export default function App() {
         const existing = await db.targets.get(targetId);
         if (existing && existing.id) { await updateTargetUsage(existing.id, existing.usageCount + 1); }
     }
-    await addTask({ targetId: targetId!, title: trimmedActValue, isCompleted: false, createdAt: new Date() });
+    const newTask = { targetId: targetId!, title: trimmedActValue, isCompleted: false, createdAt: new Date() };
+    const newTaskId = await addTask(newTask);
+    if (newTaskId) {
+        setHistory([...history.slice(0, historyIndex + 1), {type: 'add', data: {...newTask, id: newTaskId}}]);
+        setHistoryIndex(historyIndex + 1);
+    }
     resetForm(); 
   };
 
@@ -294,24 +305,22 @@ export default function App() {
     setObjValue(''); setActValue(''); setIsInputMode(false); setSelectedTargetId(null); setSuggestions([]); setFocusedInput('obj');
   };
 
-  const startEditing = (type: 'target' | 'task', id: number, text: string) => { setEditingId({ type, id }); setEditValue(text); };
+  const [editOriginalValue, setEditOriginalValue] = useState('');
+  const startEditing = (type: 'target' | 'task', id: number, text: string) => { setEditingId({ type, id }); setEditValue(text); setEditOriginalValue(text); };
   const saveEdit = async () => {
-      if (editingId) {
-          if (editValue.trim()) {
-              if (editingId.type === 'target') {
-                  await updateTargetTitle(editingId.id, editValue);
-              } else {
-                  await updateTaskTitle(editingId.id, editValue); 
-              }
-          }
+      if (editingId && editValue.trim() && editValue !== editOriginalValue) {
+          setHistory([...history.slice(0, historyIndex + 1), {type: 'edit', data: {id: editingId.id, isTask: editingId.type === 'task', oldValue: editOriginalValue, newValue: editValue}}]);
+          setHistoryIndex(historyIndex + 1);
+          if (editingId.type === 'target') await updateTargetTitle(editingId.id, editValue);
+          else await updateTaskTitle(editingId.id, editValue);
       }
       setEditingId(null); 
   };
 
   const handleCompleteTask = async (taskId: number) => {
-      await completeTask(taskId);
-      setHistory([...history.slice(0, historyIndex + 1), taskId]);
+      setHistory([...history.slice(0, historyIndex + 1), {type: 'complete', data: {id: taskId}}]);
       setHistoryIndex(historyIndex + 1);
+      await completeTask(taskId);
   };
 
   const deleteTargetAsset = async (e: React.MouseEvent, id: number) => {
@@ -319,7 +328,14 @@ export default function App() {
     if (window.confirm('목표 삭제?')) { await db.targets.delete(id); setSuggestions([]); }
   };
   const handleDeleteTask = async (taskId: number) => {
-      if(window.confirm('삭제?')) { await deleteTask(taskId); }
+      if(window.confirm('삭제?')) {
+          const task = activeTasks?.find(t => t.id === taskId);
+          if (task) {
+              setHistory([...history.slice(0, historyIndex + 1), {type: 'delete', data: task}]);
+              setHistoryIndex(historyIndex + 1);
+          }
+          await deleteTask(taskId);
+      }
   };
   const getTargetTitle = (id?: number) => { const t = allTargets?.find(t => t.id === id); return t ? t.title : 'Uncategorized'; };
   const handleGroupContextMenu = (e: React.MouseEvent, title: string, targetId: number) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'group', id: targetId, title: title }); };

@@ -418,10 +418,11 @@ export default function App() {
   return (
     <div 
         className={`min-h-screen font-sans flex flex-col items-center p-4 pb-40 overflow-x-hidden bg-gray-950 text-gray-100 transition-colors duration-500`}
-        // [✨ 핵심 수정] 배경 클릭 시: 그룹 접기 + 입력창 초기화 + "편집 모드 강제 종료"
+        // [✨ 핵심 수정] 배경 클릭 시: 그룹 접기 + 입력창 초기화 + "편집 모드 강제 종료" + spotlight 해제
         onClick={() => { 
             setExpandedGroup(null);
             if (editingId) saveEdit();
+            setSpotlightGroup(null);
         }}
         onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
     >
@@ -674,8 +675,20 @@ export default function App() {
         {contextMenu && contextMenu.visible && (
             <div className="fixed z-[100] bg-gray-900/95 backdrop-blur-xl border border-gray-700 rounded-xl shadow-2xl overflow-hidden min-w-[160px] animate-in fade-in zoom-in-95 duration-100" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
                 <div className="px-4 py-2 border-b border-gray-700/50 bg-gray-800/50"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{contextMenu.title}</span></div>
-                {contextMenu.type === 'group' && (
-                    <button onClick={() => { toggleSpotlight(); setContextMenu(null); }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><FocusIcon />{spotlightGroup === contextMenu.title ? 'Exit Focus' : 'Focus'}</button>
+                {(contextMenu.type === 'group' || contextMenu.type === 'task') && (
+                    <button onClick={() => { 
+                        if (contextMenu.type === 'task') {
+                            const task = activeTasks?.find(t => t.id === contextMenu.id);
+                            if (task) {
+                                const targetTitle = getTargetTitle(task.targetId);
+                                if (spotlightGroup === targetTitle) setSpotlightGroup(null);
+                                else setSpotlightGroup(targetTitle);
+                            }
+                        } else {
+                            toggleSpotlight();
+                        }
+                        setContextMenu(null);
+                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><FocusIcon />{spotlightGroup === contextMenu.title || (contextMenu.type === 'task' && activeTasks?.find(t => t.id === contextMenu.id) && spotlightGroup === getTargetTitle(activeTasks.find(t => t.id === contextMenu.id)!.targetId)) ? 'Exit Focus' : 'Focus'}</button>
                 )}
                 {contextMenu.type === 'space' && (
                     <button onClick={handleEditSpace} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3">✏️ Edit</button>

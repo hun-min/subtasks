@@ -82,8 +82,13 @@ export default function App() {
   };
 
   const runGacha = () => {
-      if (!activeTasks || activeTasks.length === 0) return;
-      const randomTask = activeTasks[Math.floor(Math.random() * activeTasks.length)];
+      if (!activeTasks || !allTargets || !currentSpaceId) return;
+      const spaceTasks = activeTasks.filter(task => {
+          const target = allTargets.find(t => t.id === task.targetId);
+          return target && !target.isCompleted && target.spaceId === currentSpaceId;
+      });
+      if (spaceTasks.length === 0) return;
+      const randomTask = spaceTasks[Math.floor(Math.random() * spaceTasks.length)];
       const targetTitle = getTargetTitle(randomTask.targetId) || 'Unknown';
       setGachaTask({ task: randomTask, targetTitle });
   };
@@ -436,10 +441,10 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                       <button 
-                        onClick={() => { if(window.confirm('진짜 못하겠어?')) { deleteTask(gachaTask.task.id!); setGachaTask(null); }}}
+                        onClick={() => { if(window.confirm('포기하시겠습니까?')) { deleteTask(gachaTask.task.id!); setGachaTask(null); }}}
                         className="py-4 rounded-xl border border-red-900/50 text-red-500 hover:bg-red-900/20 font-bold transition-all"
                       >
-                        포기 (삭제)
+                        삭제
                       </button>
                       <button 
                         onClick={() => { handleCompleteTask(gachaTask.task.id!); setGachaTask(null); }}

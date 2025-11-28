@@ -74,6 +74,7 @@ export default function App() {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [focusIndex, setFocusIndex] = useState(-1);
 
   const getTaskAgeStyle = (createdAt: Date) => {
       const diffMs = new Date().getTime() - new Date(createdAt).getTime();
@@ -227,7 +228,34 @@ export default function App() {
 
   useEffect(() => {
       const handleKeyDown = async (e: KeyboardEvent) => {
-          if (e.ctrlKey && e.key === 'z' && historyIndex >= 0) {
+          if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+          
+          const allItems = [...activeTargets.slice(0, 3).flatMap(t => {
+              const tasks = groupedTasks[t.title] || [];
+              return [{type: 'target' as const, id: t.id!, title: t.title}, ...tasks.map(task => ({type: 'task' as const, id: task.id!, title: task.title, targetId: task.targetId}))];
+          })];
+          
+          if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setFocusIndex(prev => prev < allItems.length - 1 ? prev + 1 : prev);
+          } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setFocusIndex(prev => prev > 0 ? prev - 1 : 0);
+          } else if (focusIndex >= 0 && allItems[focusIndex]) {
+              const item = allItems[focusIndex];
+              if (e.key === 'Enter') {
+                  e.preventDefault();
+                  startEditing(item.type, item.id, item.title);
+              } else if (e.key === 'Delete') {
+                  e.preventDefault();
+                  if (item.type === 'task') handleDeleteTask(item.id);
+                  else if (window.confirm('목표 삭제?')) deleteGroup(item.id);
+              } else if (e.key === ' ') {
+                  e.preventDefault();
+                  if (item.type === 'task') handleCompleteTask(item.id);
+                  else completeTarget(item.id);
+              }
+          } else if (e.ctrlKey && e.key === 'z' && historyIndex >= 0) {
               e.preventDefault();
               const action = history[historyIndex];
               if (action.type === 'complete') await undoTask(action.data.id);
@@ -269,7 +297,7 @@ export default function App() {
                 if (!objValue.trim()) return;
                 setIsInputMode(true); setActValue(''); setSuggestions([]);
             } else {
-                if (!actValue.trim()) { resetForm(); return; }
+                if (!actValue.trim()) { submitTarget(); return; }
                 submitFinal();
             }
         }
@@ -282,6 +310,16 @@ export default function App() {
     } else {
         setActValue(item.title); setSuggestions([]);
     }
+  };
+
+  const submitTarget = async () => {
+    if (!objValue.trim() || !currentSpaceId) return;
+    const trimmedObjValue = objValue.trim();
+    const existingTarget = await db.targets.where('title').equals(trimmedObjValue).and(t => t.spaceId === currentSpaceId).first();
+    if (!existingTarget) {
+      await addTarget({ spaceId: currentSpaceId, title: trimmedObjValue, defaultAction: '', notes: '', usageCount: 0, lastUsed: new Date() });
+    }
+    resetForm();
   };
 
   const submitFinal = async () => {
@@ -408,7 +446,7 @@ export default function App() {
     await db.targets.update(targetAtNewPosition.id!, { lastUsed: currentTarget.lastUsed });
   };
 
-  const handleTaskDragEnd = async (event: DragEndEvent, tasks: Task[]) => {
+  const handleTaskDragEnd = async (event: any, tasks: Task[]) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = tasks.findIndex(t => t.id === active.id);
@@ -544,7 +582,7 @@ export default function App() {
                         {editingId?.type === 'target' && editingId.id === targetId ? (
                             <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full max-w-[calc(100%-31px)] text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                         ) : (
-                            <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className="text-base font-medium text-gray-200 cursor-pointer hover:text-white transition-colors truncate w-full">{title}</span>
+                            <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className={`text-base font-medium cursor-pointer hover:text-white transition-colors truncate w-full ${focusIndex >= 0 && activeTargets.slice(0, 3).flatMap(t => [{type: 'target', id: t.id!}, ...(groupedTasks[t.title] || []).map(task => ({type: 'task', id: task.id!}))]).findIndex(item => item.type === 'target' && item.id === targetId) === focusIndex ? 'text-blue-400 ring-2 ring-blue-500/50 rounded px-1' : 'text-gray-200'}`}>{title}</span>
                         )}
                     </div>
                     
@@ -588,7 +626,7 @@ export default function App() {
                             {editingId?.type === 'task' && editingId.id === task.id ? (
                                 <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                             ) : (
-                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-white transition-colors ${getTaskAgeStyle(task.createdAt)}`}>{task.title}</span>
+                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-white transition-colors ${focusIndex >= 0 && activeTargets.slice(0, 3).flatMap(t => [{type: 'target', id: t.id!}, ...(groupedTasks[t.title] || []).map(task => ({type: 'task', id: task.id!}))]).findIndex(item => item.type === 'task' && item.id === task.id) === focusIndex ? 'text-blue-400 ring-2 ring-blue-500/50 rounded px-1' : getTaskAgeStyle(task.createdAt)}`}>{task.title}</span>
                             )}
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>
                             <button onClick={(e) => { e.stopPropagation(); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0"><CheckIcon /></button>

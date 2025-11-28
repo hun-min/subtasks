@@ -10,9 +10,8 @@ export function useSystem() {
       if (!navigator.onLine) return;
       
       const { data: remoteSpaces } = await supabase.from('spaces').select('*');
-      await db.spaces.clear();
       if (remoteSpaces && remoteSpaces.length > 0) {
-        await db.spaces.bulkAdd(remoteSpaces);
+        await db.spaces.bulkPut(remoteSpaces);
       } else {
         const defaultSpace = { title: '기본', createdAt: new Date() };
         await db.spaces.add(defaultSpace);
@@ -20,12 +19,10 @@ export function useSystem() {
       }
       
       const { data: remoteTargets } = await supabase.from('targets').select('*');
-      await db.targets.clear();
-      if (remoteTargets) await db.targets.bulkAdd(remoteTargets);
+      if (remoteTargets) await db.targets.bulkPut(remoteTargets);
       
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
-      await db.tasks.clear();
-      if (remoteTasks) await db.tasks.bulkAdd(remoteTasks);
+      if (remoteTasks) await db.tasks.bulkPut(remoteTasks);
     };
     syncData();
   }, []);

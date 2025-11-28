@@ -523,7 +523,7 @@ export default function App() {
             const isSpotlighted = spotlightGroup === title; 
 
             const wrapperClass = spotlightGroup
-                ? (isSpotlighted ? 'scale-100 z-50 opacity-100' : 'opacity-10 blur-sm pointer-events-none') 
+                ? (isSpotlighted ? 'scale-100 z-50 opacity-100' : 'opacity-10 pointer-events-none') 
                 : 'opacity-100 z-auto';
 
             return (

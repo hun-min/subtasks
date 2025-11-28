@@ -588,7 +588,7 @@ export default function App() {
                             ) : (
                                 <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-white transition-colors ${getTaskAgeStyle(task.createdAt)}`}>{task.title}</span>
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className="text-gray-600 hover:text-red-400 opacity-0 group-hover/task:opacity-100 transition-opacity flex-shrink-0"><TrashIcon /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>
                             <button onClick={(e) => { e.stopPropagation(); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0"><CheckIcon /></button>
                         </div>
                         </SortableTaskItem>

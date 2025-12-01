@@ -77,8 +77,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [focusIndex, setFocusIndex] = useState(-1);
   const [keyboardFocusedItem, setKeyboardFocusedItem] = useState<{type: string, id?: number} | null>(null);
-  const [timerActive, setTimerActive] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(300);
+  const [activeTimer, setActiveTimer] = useState<{taskId: number, timeLeft: number} | null>(null);
 
   const getTaskAgeStyle = (createdAt: Date) => {
       const diffMs = new Date().getTime() - new Date(createdAt).getTime();
@@ -232,13 +231,13 @@ export default function App() {
 
   useEffect(() => {
     let interval: any;
-    if (timerActive && timeLeft > 0) {
-      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-    } else if (timeLeft === 0) {
-      setTimerActive(false);
+    if (activeTimer && activeTimer.timeLeft > 0) {
+      interval = setInterval(() => setActiveTimer(prev => prev ? {...prev, timeLeft: prev.timeLeft - 1} : null), 1000);
+    } else if (activeTimer && activeTimer.timeLeft === 0) {
+      setActiveTimer(null);
     }
     return () => clearInterval(interval);
-  }, [timerActive, timeLeft]);
+  }, [activeTimer]);
 
   useEffect(() => {
       const handleKeyDown = async (e: KeyboardEvent) => {
@@ -594,6 +593,7 @@ export default function App() {
         
         <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm}>⦿</h1>
+          <WeekStreak getHeatmapData={getHeatmapData} currentSpaceId={currentSpaceId} />
           <div className="flex items-center gap-2">
             <button onClick={runGacha} className={`transition-all ${keyboardFocusedItem?.type === 'dice' ? 'scale-125 ring-2 ring-white' : 'hover:scale-110'}`} title="Random Pick"><DiceIcon /></button>
             <div className="flex gap-1 bg-gray-900 rounded-full p-1">
@@ -715,15 +715,17 @@ export default function App() {
                     <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
                     {(isExpanded ? tasks : [tasks[0]]).map((task, idx) => {
                       const isTopTask = idx === 0;
+                      const isTimerActive = activeTimer?.taskId === task.id;
+                      const timeLeft = isTimerActive && activeTimer ? activeTimer.timeLeft : 300;
                       return (
                         <SortableTaskItem key={task.id} task={task}>
-                        <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTopTask && timerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
-                            {isTopTask && timerActive && (
+                        <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTimerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
+                            {isTimerActive && (
                               <div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />
                             )}
                             {isTopTask && !editingId ? (
-                              <button onClick={(e) => { e.stopPropagation(); if(timerActive) setTimerActive(false); else { setTimeLeft(300); setTimerActive(true); }}} className={`flex-shrink-0 text-xs font-mono z-10 ${timerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
-                                {timerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : '▶'}
+                              <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else setActiveTimer({taskId: task.id!, timeLeft: 300}); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
+                                {isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : '▶'}
                               </button>
                             ) : (
                               <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
@@ -733,10 +735,10 @@ export default function App() {
                             ) : (
                                 <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>
                             )}
-                            {!(isTopTask && timerActive) && (
+                            {!isTimerActive && (
                               <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); setTimerActive(false); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setActiveTimer(null); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
                         </div>
                         </SortableTaskItem>
                       );
@@ -1008,6 +1010,36 @@ export default function App() {
   );
 }
 
+
+function WeekStreak({ getHeatmapData, currentSpaceId }: { getHeatmapData: (spaceId?: number) => Promise<Record<string, number>>, currentSpaceId: number | null }) {
+  const [data, setData] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    getHeatmapData(currentSpaceId || undefined).then(setData);
+  }, [currentSpaceId, getHeatmapData]);
+
+  const today = new Date();
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    const count = data[dateStr] || 0;
+    let colorClass = "bg-gray-800/50";
+    if (count >= 1) colorClass = "bg-blue-900/40";
+    if (count >= 3) colorClass = "bg-blue-600";
+    if (count >= 5) colorClass = "bg-blue-400";
+    days.push({ dateStr, count, colorClass, isToday: i === 0 });
+  }
+
+  return (
+    <div className="flex gap-0.5">
+      {days.map((day) => (
+        <div key={day.dateStr} className={`w-2 h-2 rounded-sm transition-all ${day.colorClass} ${day.isToday ? 'ring-1 ring-white/50' : ''}`} title={`${day.dateStr}: ${day.count}`} />
+      ))}
+    </div>
+  );
+}
 
 function HeatmapView({ getHeatmapData, currentSpaceId, onDateClick }: { getHeatmapData: (spaceId?: number) => Promise<Record<string, number>>, currentSpaceId: number | null, onDateClick: (date: string) => void }) {
   const [data, setData] = useState<Record<string, number>>({});

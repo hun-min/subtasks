@@ -621,7 +621,7 @@ export default function App() {
                 <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
                 <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
                 {objValue.trim() && !isInputMode && (
-                  <button onClick={handleQuickAdd} className="absolute right-3 p-1.5 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" title="Quick add to Inbox"><ZapIcon /></button>
+                  <button onClick={handleQuickAdd} className="absolute right-3 p-1 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" style={{fontSize: '16px'}} title="Quick add to Inbox">⚡</button>
                 )}
             </div>
             {isInputMode && (
@@ -629,7 +629,7 @@ export default function App() {
                     <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
                     <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-10" autoFocus />
                     {actValue.trim() && (
-                      <button onClick={handleQuickAdd} className="absolute right-3 p-1.5 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" title="Quick add to Inbox"><ZapIcon /></button>
+                      <button onClick={handleQuickAdd} className="absolute right-3 p-1 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" style={{fontSize: '16px'}} title="Quick add to Inbox">⚡</button>
                     )}
                 </div>
             )}
@@ -647,41 +647,35 @@ export default function App() {
         </div>
         
         {/* --- Inbox (Always on top) --- */}
-        {activeTargets.find(t => t.title === '⚡ Inbox') && (
-          <div className="space-y-2 pb-2">
-            {(() => {
-              const target = activeTargets.find(t => t.title === '⚡ Inbox')!;
-              const targetId = target.id!;
-              const title = target.title;
-              const tasks = groupedTasks[title] || [];
-              const isExpanded = expandedGroup === title;
-              const isSpotlighted = spotlightGroup === title;
-              return (
-                <div key={targetId}>
-                  <div 
-                      className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border transition-all duration-500 cursor-pointer select-none z-30 group
-                          ${isSpotlighted ? 'border-blue-500 shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]' : 'border-gray-700 shadow-md hover:border-gray-500'}
-                          ${tasks.length > 0 ? 'rounded-t-xl' : 'rounded-xl mb-2'}
-                      `}
-                      onContextMenu={(e) => handleGroupContextMenu(e, title, targetId)}
-                      onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : title); }}
-                  >
-                      <div className="flex items-center gap-2 w-full overflow-hidden">
-                          <span className="flex-shrink-0 text-yellow-500"><ZapIcon /></span>
-                          {editingId?.type === 'target' && editingId.id === targetId ? (
-                              <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full max-w-[calc(100%-31px)] text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
-                          ) : (
-                              <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className="text-base font-medium cursor-pointer transition-colors truncate w-full text-gray-200 hover:text-white">{title}</span>
-                          )}
-                      </div>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={(e) => { e.stopPropagation(); if(window.confirm(`"${title}" 목표를 삭제하시겠습니까?`)) deleteGroup(targetId); }} className={`text-gray-600 hover:text-red-400 transition-opacity ${editingId?.type === 'target' && editingId.id === targetId ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><TrashIcon /></button>
-                          <span onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : title); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all">{tasks.length}</span>
-                          <button onClick={(e) => { e.stopPropagation(); completeTarget(targetId); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
-                      </div>
-                  </div>
-                  {tasks.length > 0 && (
-                  <div className={`bg-gray-900 border border-t-0 rounded-b-xl mb-2 px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
+        {(() => {
+          const inboxTarget = activeTargets.find(t => t.title === '⚡ Inbox');
+          if (!inboxTarget) return null;
+          const tasks = groupedTasks[inboxTarget.title] || [];
+          if (tasks.length === 0) return null;
+          const targetId = inboxTarget.id!;
+          const isExpanded = expandedGroup === inboxTarget.title;
+          const isSpotlighted = spotlightGroup === inboxTarget.title;
+          return (
+            <div className="space-y-2 pb-2">
+              <div key={targetId}>
+                <div 
+                    className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border transition-all duration-500 cursor-pointer select-none z-30 group
+                        ${isSpotlighted ? 'border-blue-500 shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]' : 'border-gray-700 shadow-md hover:border-gray-500'}
+                        ${tasks.length > 0 ? 'rounded-t-xl' : 'rounded-xl mb-2'}
+                    `}
+                    onContextMenu={(e) => handleGroupContextMenu(e, inboxTarget.title, targetId)}
+                    onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : inboxTarget.title); }}
+                >
+                    <div className="flex items-center gap-2 w-full overflow-hidden">
+                        <span className="flex-shrink-0 text-yellow-500 inline-block -ml-1" style={{width: '14px'}}>⚡</span>
+                        <span className="text-base font-medium transition-colors truncate w-full text-gray-200">Inbox</span>
+                    </div>
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <span onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : inboxTarget.title); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all">{tasks.length}</span>
+                    </div>
+                </div>
+                {tasks.length > 0 && (
+                <div className={`bg-gray-900 border border-t-0 rounded-b-xl mb-2 px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
                       <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
                       {(isExpanded ? tasks : [tasks[0]]).map((task, idx) => {
@@ -700,15 +694,14 @@ export default function App() {
                           </SortableTaskItem>
                         );
                       })}
-                      </SortableContext>
-                      </DndContext>
-                  </div>
-                  )}
+                    </SortableContext>
+                    </DndContext>
                 </div>
-              );
-            })()}
-          </div>
-        )}
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* --- Focus Groups (Top 3) --- */}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTargetDragEnd}>

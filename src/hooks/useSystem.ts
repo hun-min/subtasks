@@ -209,6 +209,11 @@ export function useSystem() {
     }
   };
 
+  const updateTimerCount = async (taskId: number, count: number) => {
+    await db.tasks.update(taskId, { timerCount: count });
+    supabase.from('tasks').update({ timerCount: count }).eq('id', taskId).then();
+  };
+
   const getHeatmapData = async (spaceId?: number) => {
     const tasks = await db.tasks.filter(t => t.isCompleted === true).toArray();
     const targets = await db.targets.toArray();
@@ -231,5 +236,5 @@ export function useSystem() {
     return stats;
   };
 
-  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown, getHeatmapData };
+  return { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, moveTargetUp, moveTargetDown, getHeatmapData, updateTimerCount };
 }

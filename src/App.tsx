@@ -35,7 +35,7 @@ function SortableTaskItem({ task, children }: { task: Task, children: React.Reac
 }
 
 export default function App() {
-  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, getHeatmapData } = useSystem();
+  const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, getHeatmapData, updateTimerCount } = useSystem();
   
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -78,7 +78,6 @@ export default function App() {
   const [focusIndex, setFocusIndex] = useState(-1);
   const [keyboardFocusedItem, setKeyboardFocusedItem] = useState<{type: string, id?: number} | null>(null);
   const [activeTimer, setActiveTimer] = useState<{taskId: number, timeLeft: number} | null>(null);
-  const [timerCompletions, setTimerCompletions] = useState<Record<number, number>>({});
 
   const getTaskAgeStyle = (createdAt: Date) => {
       const diffMs = new Date().getTime() - new Date(createdAt).getTime();
@@ -245,11 +244,12 @@ export default function App() {
     if (activeTimer && activeTimer.timeLeft > 0) {
       interval = setInterval(() => setActiveTimer(prev => prev ? {...prev, timeLeft: prev.timeLeft - 1} : null), 1000);
     } else if (activeTimer && activeTimer.timeLeft === 0) {
-      setTimerCompletions(prev => ({...prev, [activeTimer.taskId]: (prev[activeTimer.taskId] || 0) + 1}));
+      const task = activeTasks?.find(t => t.id === activeTimer.taskId);
+      if (task) updateTimerCount(activeTimer.taskId, (task.timerCount || 0) + 1);
       setActiveTimer(null);
     }
     return () => clearInterval(interval);
-  }, [activeTimer]);
+  }, [activeTimer, activeTasks]);
 
   useEffect(() => {
       const handleKeyDown = async (e: KeyboardEvent) => {
@@ -690,7 +690,7 @@ export default function App() {
                           <SortableTaskItem key={task.id} task={task}>
                           <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTimerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
                               {isTimerActive && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />)}
-                              {isTopTask && !editingId ? (<button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); setTimerCompletions(prev => ({...prev, [task.id!]: (prev[task.id!] || 0) + 1})); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(timerCompletions[task.id!] || 0)); if(count !== null) setTimerCompletions(prev => ({...prev, [task.id!]: parseInt(count) || 0})); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(timerCompletions[task.id!] || 0)); if(count !== null) setTimerCompletions(prev => ({...prev, [task.id!]: parseInt(count) || 0})); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : timerCompletions[task.id!] ? `▶${timerCompletions[task.id!]}` : '▶'}</button>) : (<span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>)}
+                              {isTopTask && !editingId ? (<button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : task.timerCount ? `▶${task.timerCount}` : '▶'}</button>) : (<span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>)}
                               {editingId?.type === 'task' && editingId.id === task.id ? (<input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />) : (<span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>)}
                               {!isTimerActive && (<button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>)}
                               <button onClick={(e) => { e.stopPropagation(); setActiveTimer(null); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
@@ -786,8 +786,8 @@ export default function App() {
                               <div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />
                             )}
                             {isTopTask && !editingId ? (
-                              <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); setTimerCompletions(prev => ({...prev, [task.id!]: (prev[task.id!] || 0) + 1})); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(timerCompletions[task.id!] || 0)); if(count !== null) setTimerCompletions(prev => ({...prev, [task.id!]: parseInt(count) || 0})); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(timerCompletions[task.id!] || 0)); if(count !== null) setTimerCompletions(prev => ({...prev, [task.id!]: parseInt(count) || 0})); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
-                                {isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : timerCompletions[task.id!] ? `▶${timerCompletions[task.id!]}` : '▶'}
+                              <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
+                                {isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : task.timerCount ? `▶${task.timerCount}` : '▶'}
                               </button>
                             ) : (
                               <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>

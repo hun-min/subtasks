@@ -24,6 +24,7 @@ export interface Task {
   isCompleted: boolean;
   createdAt: Date;
   completedAt?: Date;
+  timerCount?: number;
 }
 
 class SystemDB extends Dexie {
@@ -65,6 +66,11 @@ class SystemDB extends Dexie {
       spaces: '++id, title, createdAt',
       targets: '++id, spaceId, title, usageCount, lastUsed, isCompleted',
       tasks: '++id, targetId, isCompleted, createdAt, completedAt'
+    });
+    this.version(5).stores({
+      spaces: '++id, title, createdAt',
+      targets: '++id, spaceId, title, usageCount, lastUsed, isCompleted',
+      tasks: '++id, targetId, isCompleted, createdAt, completedAt, timerCount'
     });
   }
 }

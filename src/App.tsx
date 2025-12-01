@@ -156,6 +156,7 @@ export default function App() {
 
   const groupedCompletedItems = React.useMemo(() => {
     const items: Array<{type: 'task' | 'target', data: Task | Target, date: Date}> = [];
+    const completedTargetIds = new Set<number>();
     
     filteredCompletedTasks.filter(task => {
       const target = allTargets?.find(t => t.id === task.targetId);
@@ -163,10 +164,11 @@ export default function App() {
     }).forEach(task => {
       const date = task.completedAt ? (task.completedAt instanceof Date ? task.completedAt : new Date(task.completedAt)) : (task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt));
       items.push({type: 'task', data: task, date});
+      if (task.targetId) completedTargetIds.add(task.targetId);
     });
     
     if (allTargets) {
-      const completed = allTargets.filter(target => target.isCompleted && (!currentSpaceId || target.spaceId === currentSpaceId));
+      const completed = allTargets.filter(target => target.isCompleted && (!currentSpaceId || target.spaceId === currentSpaceId) && !completedTargetIds.has(target.id!));
       const filtered = !selectedDate ? completed : completed.filter(target => {
         if (!target.lastUsed) return false;
         const targetDate = target.lastUsed instanceof Date ? target.lastUsed : new Date(target.lastUsed);

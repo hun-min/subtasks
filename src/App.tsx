@@ -646,6 +646,70 @@ export default function App() {
           )}
         </div>
         
+        {/* --- Inbox (Always on top) --- */}
+        {activeTargets.find(t => t.title === '⚡ Inbox') && (
+          <div className="space-y-2 pb-2">
+            {(() => {
+              const target = activeTargets.find(t => t.title === '⚡ Inbox')!;
+              const targetId = target.id!;
+              const title = target.title;
+              const tasks = groupedTasks[title] || [];
+              const isExpanded = expandedGroup === title;
+              const isSpotlighted = spotlightGroup === title;
+              return (
+                <div key={targetId}>
+                  <div 
+                      className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border transition-all duration-500 cursor-pointer select-none z-30 group
+                          ${isSpotlighted ? 'border-blue-500 shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]' : 'border-gray-700 shadow-md hover:border-gray-500'}
+                          ${tasks.length > 0 ? 'rounded-t-xl' : 'rounded-xl mb-2'}
+                      `}
+                      onContextMenu={(e) => handleGroupContextMenu(e, title, targetId)}
+                      onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : title); }}
+                  >
+                      <div className="flex items-center gap-2 w-full overflow-hidden">
+                          <span className="flex-shrink-0 text-yellow-500"><ZapIcon /></span>
+                          {editingId?.type === 'target' && editingId.id === targetId ? (
+                              <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full max-w-[calc(100%-31px)] text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
+                          ) : (
+                              <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className="text-base font-medium cursor-pointer transition-colors truncate w-full text-gray-200 hover:text-white">{title}</span>
+                          )}
+                      </div>
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={(e) => { e.stopPropagation(); if(window.confirm(`"${title}" 목표를 삭제하시겠습니까?`)) deleteGroup(targetId); }} className={`text-gray-600 hover:text-red-400 transition-opacity ${editingId?.type === 'target' && editingId.id === targetId ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><TrashIcon /></button>
+                          <span onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : title); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all">{tasks.length}</span>
+                          <button onClick={(e) => { e.stopPropagation(); completeTarget(targetId); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"><CheckIcon /></button>
+                      </div>
+                  </div>
+                  {tasks.length > 0 && (
+                  <div className={`bg-gray-900 border border-t-0 rounded-b-xl mb-2 px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
+                      <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
+                      {(isExpanded ? tasks : [tasks[0]]).map((task, idx) => {
+                        const isTopTask = idx === 0;
+                        const isTimerActive = activeTimer?.taskId === task.id;
+                        const timeLeft = isTimerActive && activeTimer ? activeTimer.timeLeft : 300;
+                        return (
+                          <SortableTaskItem key={task.id} task={task}>
+                          <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTimerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
+                              {isTimerActive && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />)}
+                              {isTopTask && !editingId ? (<button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else setActiveTimer({taskId: task.id!, timeLeft: 300}); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : '▶'}</button>) : (<span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>)}
+                              {editingId?.type === 'task' && editingId.id === task.id ? (<input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />) : (<span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>)}
+                              {!isTimerActive && (<button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>)}
+                              <button onClick={(e) => { e.stopPropagation(); setActiveTimer(null); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
+                          </div>
+                          </SortableTaskItem>
+                        );
+                      })}
+                      </SortableContext>
+                      </DndContext>
+                  </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {/* --- Focus Groups (Top 3) --- */}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTargetDragEnd}>
         <SortableContext items={activeTargets.filter(t => t.title !== '⚡ Inbox').slice(0, 3).map(t => t.id!)} strategy={verticalListSortingStrategy}>

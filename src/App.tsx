@@ -36,6 +36,10 @@ function SortableTaskItem({ task, children }: { task: Task, children: React.Reac
 
 export default function App() {
   const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, getHeatmapData, updateTimerCount } = useSystem();
+  const [currentSpaceId, setCurrentSpaceId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('currentSpaceId');
+    return saved ? parseInt(saved) : null;
+  });
   
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -58,10 +62,6 @@ export default function App() {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task' | 'space', id: number, title: string } | null>(null);
   const [spotlightGroup, setSpotlightGroup] = useState<string | null>(null);
-  const [currentSpaceId, setCurrentSpaceId] = useState<number | null>(() => {
-    const saved = localStorage.getItem('currentSpaceId');
-    return saved ? parseInt(saved) : null;
-  });
 
   const [editingSpaceId, setEditingSpaceId] = useState<number | null>(null);
   const [editSpaceTitle, setEditSpaceTitle] = useState('');
@@ -949,6 +949,7 @@ export default function App() {
             <div className="fixed z-[100] bg-gray-900/95 backdrop-blur-xl border border-gray-700 rounded-xl shadow-2xl overflow-hidden min-w-[160px] animate-in fade-in zoom-in-95 duration-100" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
                 <div className="px-4 py-2 border-b border-gray-700/50 bg-gray-800/50"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{contextMenu.title}</span></div>
                 {(contextMenu.type === 'group' || contextMenu.type === 'task') && (
+                    <>
                     <button onClick={() => { 
                         if (contextMenu.type === 'task') {
                             const task = activeTasks?.find(t => t.id === contextMenu.id);
@@ -962,6 +963,21 @@ export default function App() {
                         }
                         setContextMenu(null);
                     }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><FocusIcon />{spotlightGroup === contextMenu.title || (contextMenu.type === 'task' && activeTasks?.find(t => t.id === contextMenu.id) && spotlightGroup === getTargetTitle(activeTasks.find(t => t.id === contextMenu.id)!.targetId)) ? 'Exit Focus' : 'Focus'}</button>
+                    {contextMenu.type === 'task' && (() => {
+                        const task = activeTasks?.find(t => t.id === contextMenu.id);
+                        const targetTitle = task ? getTargetTitle(task.targetId) : '';
+                        return targetTitle === '⚡ Inbox' ? (
+                            <button onClick={async () => {
+                                if (!task || !currentSpaceId) return;
+                                const newTargetId = await addTarget({ spaceId: currentSpaceId, title: task.title, defaultAction: '', notes: '', usageCount: 1, lastUsed: new Date() });
+                                await deleteTask(task.id!);
+                                setExpandedGroup(task.title);
+                                setAddingTaskToTarget(newTargetId);
+                                setContextMenu(null);
+                            }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-green-600/20 hover:text-green-400 transition-colors flex items-center gap-3"><TargetIcon />목표로 전환</button>
+                        ) : null;
+                    })()}
+                    </>
                 )}
                 {contextMenu.type === 'space' && (
                     <button onClick={handleEditSpace} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3">✏️ Edit</button>

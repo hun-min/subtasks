@@ -685,9 +685,9 @@ export default function App() {
                 </div>
                 {tasks.length > 0 && (
                 <div className="relative mb-2">
-                  {/* Stacked card layers */}
-                  {tasks.length >= 3 && <div className={`absolute left-1 right-1 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
-                  {tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-0.5 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
+                  {/* Stacked card layers - only show when collapsed */}
+                  {!isExpanded && tasks.length >= 3 && <div className={`absolute left-1 right-1 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
+                  {!isExpanded && tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-0.5 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
                   
                   <div className={`relative bg-gray-900 border border-t-0 rounded-b-xl px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
@@ -832,9 +832,9 @@ export default function App() {
                 {/* 2. Actions Container (Stack or List) */}
                 {tasks.length > 0 && (
                 <div className="relative mb-2">
-                  {/* Stacked card layers */}
-                  {tasks.length >= 3 && <div className={`absolute left-1 right-1 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
-                  {tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-0.5 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
+                  {/* Stacked card layers - only show when collapsed */}
+                  {!isExpanded && tasks.length >= 3 && <div className={`absolute left-1 right-1 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
+                  {!isExpanded && tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-0.5 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
                   
                   <div className={`relative bg-gray-900 border border-t-0 rounded-b-xl px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
@@ -969,7 +969,7 @@ export default function App() {
                             toggleSpotlight();
                         }
                         setContextMenu(null);
-                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0"><FocusIcon /></span>{spotlightGroup === contextMenu.title || (contextMenu.type === 'task' && activeTasks?.find(t => t.id === contextMenu.id) && spotlightGroup === getTargetTitle(activeTasks.find(t => t.id === contextMenu.id)!.targetId)) ? 'Exit Focus' : 'Focus'}</button>
+                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><span className="w-[14px] flex-shrink-0"><FocusIcon /></span>{spotlightGroup === contextMenu.title || (contextMenu.type === 'task' && activeTasks?.find(t => t.id === contextMenu.id) && spotlightGroup === getTargetTitle(activeTasks.find(t => t.id === contextMenu.id)!.targetId)) ? 'Exit Focus' : 'Focus'}</button>
                     {contextMenu.type === 'task' && (() => {
                         const task = activeTasks?.find(t => t.id === contextMenu.id);
                         const targetTitle = task ? getTargetTitle(task.targetId) : '';
@@ -981,7 +981,7 @@ export default function App() {
                                 setExpandedGroup(task.title);
                                 setAddingTaskToTarget(newTargetId);
                                 setContextMenu(null);
-                            }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-green-600/20 hover:text-green-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0"><TargetIcon /></span>To Target</button>
+                            }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-green-600/20 hover:text-green-400 transition-colors flex items-center gap-3"><span className="w-[14px] flex-shrink-0"><TargetIcon /></span>To Target</button>
                         ) : null;
                     })()}
                     </>
@@ -1004,12 +1004,12 @@ export default function App() {
                         await addTask({ targetId: inboxId, title: contextMenu.title, isCompleted: false, createdAt: new Date() });
                         await deleteGroup(contextMenu.id);
                         setContextMenu(null);
-                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-yellow-600/20 hover:text-yellow-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0 text-yellow-500">⚡</span>To Inbox</button>
+                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-yellow-600/20 hover:text-yellow-400 transition-colors flex items-center gap-3"><span className="w-[14px] flex-shrink-0 text-yellow-500">⚡</span>To Inbox</button>
                 )}
                 {contextMenu.type === 'space' && (
-                    <button onClick={handleEditSpace} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0">✏️</span>Edit</button>
+                    <button onClick={handleEditSpace} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><span className="w-[14px] flex-shrink-0">✏️</span>Edit</button>
                 )}
-                <button onClick={handleGeneralDelete} className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0"><TrashIcon /></span>Delete</button>
+                <button onClick={handleGeneralDelete} className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-colors flex items-center gap-3"><span className="w-[14px] flex-shrink-0"><TrashIcon /></span>Delete</button>
             </div>
         )}
 

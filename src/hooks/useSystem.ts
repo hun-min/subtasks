@@ -35,7 +35,6 @@ export function useSystem() {
   const searchTargets = async (query: string, spaceId?: number) => {
     if (!query) return [];
     let results = await db.targets.where('title').startsWithIgnoreCase(query).sortBy('lastUsed');
-    results = results.filter(t => !t.isCompleted);
     if (spaceId) results = results.filter(t => t.spaceId === spaceId);
     return results.reverse().slice(0, 10);
   };

@@ -430,6 +430,10 @@ export default function App() {
         const existingTarget = await db.targets.where('title').equals(trimmedObjValue).and(t => t.spaceId === currentSpaceId).first();
         if (existingTarget && existingTarget.id) {
             targetId = existingTarget.id;
+            if (existingTarget.isCompleted) {
+                await db.targets.update(targetId, { isCompleted: false, lastUsed: new Date() });
+                supabase.from('targets').update({ isCompleted: false, lastUsed: new Date() }).eq('id', targetId).then();
+            }
             await updateTargetUsage(existingTarget.id, existingTarget.usageCount + 1);
         } else {
             const newId = await addTarget({ spaceId: currentSpaceId, title: trimmedObjValue, defaultAction: trimmedActValue, notes: '', usageCount: 1, lastUsed: new Date() });
@@ -437,7 +441,13 @@ export default function App() {
         }
     } else {
         const existing = await db.targets.get(targetId);
-        if (existing && existing.id) { await updateTargetUsage(existing.id, existing.usageCount + 1); }
+        if (existing && existing.id) {
+            if (existing.isCompleted) {
+                await db.targets.update(existing.id, { isCompleted: false, lastUsed: new Date() });
+                supabase.from('targets').update({ isCompleted: false, lastUsed: new Date() }).eq('id', existing.id).then();
+            }
+            await updateTargetUsage(existing.id, existing.usageCount + 1);
+        }
     }
     const newTask = { targetId: targetId!, title: trimmedActValue, isCompleted: false, createdAt: new Date() };
     const newTaskId = await addTask(newTask);

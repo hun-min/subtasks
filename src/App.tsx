@@ -679,7 +679,12 @@ export default function App() {
                     </div>
                 </div>
                 {tasks.length > 0 && (
-                <div className={`bg-gray-900 border border-t-0 rounded-b-xl mb-2 px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
+                <div className="relative mb-2">
+                  {/* Stacked card layers */}
+                  {tasks.length >= 3 && <div className={`absolute left-1 right-1 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
+                  {tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-0.5 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
+                  
+                  <div className={`relative bg-gray-900 border border-t-0 rounded-b-xl px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
                       <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
                       {(isExpanded ? tasks : [tasks[0]]).map((task, idx) => {
@@ -700,7 +705,56 @@ export default function App() {
                       })}
                     </SortableContext>
                     </DndContext>
+                  </div>
                 </div>
+                )}
+
+                {isExpanded && addingTaskToTarget === targetId && (
+                    <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 py-0.5">
+                            <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
+                            <input 
+                                type="text" 
+                                value={newTaskTitle} 
+                                onChange={(e) => setNewTaskTitle(e.target.value)} 
+                                onBlur={async () => {
+                                    if (newTaskTitle.trim()) {
+                                        await addTask({ targetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
+                                    }
+                                    setAddingTaskToTarget(null);
+                                    setNewTaskTitle('');
+                                }}
+                                onKeyDown={async (e) => {
+                                    if (e.key === 'Enter' && newTaskTitle.trim()) {
+                                        await addTask({ targetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
+                                        setAddingTaskToTarget(null);
+                                        setNewTaskTitle('');
+                                    } else if (e.key === 'Escape') {
+                                        setAddingTaskToTarget(null);
+                                        setNewTaskTitle('');
+                                    }
+                                }}
+                                placeholder="Action..."
+                                className="flex-1 min-w-0 bg-transparent text-gray-200 text-sm outline-none"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {isExpanded && addingTaskToTarget !== targetId && (
+                    <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setAddingTaskToTarget(targetId);
+                                setNewTaskTitle('');
+                            }}
+                            className="w-full py-0.5 text-[10px] text-gray-600 hover:text-gray-400 transition-all text-center"
+                        >
+                            +
+                        </button>
+                    </div>
                 )}
               </div>
             </div>
@@ -772,7 +826,12 @@ export default function App() {
 
                 {/* 2. Actions Container (Stack or List) */}
                 {tasks.length > 0 && (
-                <div className={`bg-gray-900 border border-t-0 rounded-b-xl mb-2 px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
+                <div className="relative mb-2">
+                  {/* Stacked card layers */}
+                  {tasks.length >= 3 && <div className={`absolute left-1 right-1 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
+                  {tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-0.5 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
+                  
+                  <div className={`relative bg-gray-900 border border-t-0 rounded-b-xl px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
                     <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
                     {(isExpanded ? tasks : [tasks[0]]).map((task, idx) => {
@@ -808,6 +867,7 @@ export default function App() {
                     </SortableContext>
                     </DndContext>
 
+                  </div>
                 </div>
                 )}
 

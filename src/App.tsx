@@ -123,7 +123,7 @@ export default function App() {
     });
   }, [allTargets, currentSpaceId]);
 
-  const isWipLimitReached = false;
+  const isWipLimitReached = activeTargets.filter(t => t.title !== '⚡ Inbox').length >= 3;
 
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();

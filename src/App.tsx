@@ -690,7 +690,7 @@ export default function App() {
                           <SortableTaskItem key={task.id} task={task}>
                           <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTimerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
                               {isTimerActive && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />)}
-                              {isTopTask && !editingId ? (<button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else setActiveTimer({taskId: task.id!, timeLeft: 300}); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : timerCompletions[task.id!] ? `▶${timerCompletions[task.id!]}` : '▶'}</button>) : (<span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>)}
+                              {isTopTask && !editingId ? (<button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); setTimerCompletions(prev => ({...prev, [task.id!]: (prev[task.id!] || 0) + 1})); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(timerCompletions[task.id!] || 0)); if(count !== null) setTimerCompletions(prev => ({...prev, [task.id!]: parseInt(count) || 0})); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(timerCompletions[task.id!] || 0)); if(count !== null) setTimerCompletions(prev => ({...prev, [task.id!]: parseInt(count) || 0})); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : timerCompletions[task.id!] ? `▶${timerCompletions[task.id!]}` : '▶'}</button>) : (<span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>)}
                               {editingId?.type === 'task' && editingId.id === task.id ? (<input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />) : (<span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>)}
                               {!isTimerActive && (<button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>)}
                               <button onClick={(e) => { e.stopPropagation(); setActiveTimer(null); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
@@ -786,7 +786,7 @@ export default function App() {
                               <div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />
                             )}
                             {isTopTask && !editingId ? (
-                              <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else setActiveTimer({taskId: task.id!, timeLeft: 300}); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
+                              <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); setTimerCompletions(prev => ({...prev, [task.id!]: (prev[task.id!] || 0) + 1})); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(timerCompletions[task.id!] || 0)); if(count !== null) setTimerCompletions(prev => ({...prev, [task.id!]: parseInt(count) || 0})); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(timerCompletions[task.id!] || 0)); if(count !== null) setTimerCompletions(prev => ({...prev, [task.id!]: parseInt(count) || 0})); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
                                 {isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : timerCompletions[task.id!] ? `▶${timerCompletions[task.id!]}` : '▶'}
                               </button>
                             ) : (
@@ -1142,11 +1142,28 @@ function HeatmapView({ getHeatmapData, currentSpaceId, onDateClick }: { getHeatm
     grid.push(weekData);
   }
 
+  const firstHalf = grid.slice(0, 6);
+  const secondHalf = grid.slice(6, 12);
+
   return (
-    <div className="w-full pb-2 pt-3 flex flex-col items-center">
+    <div className="w-full pb-2 pt-3 flex flex-col items-center gap-2">
       <div className="flex gap-1">
-        {grid.map((week, wIdx) => (
+        {firstHalf.map((week, wIdx) => (
           <div key={wIdx} className="flex flex-col gap-1">
+            {week.map((day) => (
+              <div 
+                key={day.date}
+                onClick={() => day.count > 0 && onDateClick(day.date)}
+                className={`w-3 h-3 rounded-sm transition-all hover:scale-125 hover:border-white/50 border border-transparent ${day.colorClass} ${day.count > 0 ? 'cursor-pointer' : ''}`}
+                title={`${day.date}: ${day.count} tasks`}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-1">
+        {secondHalf.map((week, wIdx) => (
+          <div key={wIdx + 6} className="flex flex-col gap-1">
             {week.map((day) => (
               <div 
                 key={day.date}

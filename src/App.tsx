@@ -604,7 +604,9 @@ export default function App() {
         
         <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm}>⦿</h1>
-          <WeekStreak getHeatmapData={getHeatmapData} currentSpaceId={currentSpaceId} />
+          <div className="hidden md:block">
+            <WeekStreak getHeatmapData={getHeatmapData} currentSpaceId={currentSpaceId} />
+          </div>
           <div className="flex items-center gap-2">
             <button onClick={runGacha} className={`transition-all ${keyboardFocusedItem?.type === 'dice' ? 'scale-125 ring-2 ring-white' : 'hover:scale-110'}`} title="Random Pick"><DiceIcon /></button>
             <div className="flex gap-1 bg-gray-900 rounded-full p-1">
@@ -616,6 +618,10 @@ export default function App() {
             <button onClick={() => { const newState = !showHistory; setShowHistory(newState); localStorage.setItem('showHistory', String(newState)); }} className={`text-[10px] px-3 py-1.5 rounded-full transition-all flex items-center gap-1 ${keyboardFocusedItem?.type === 'logToggle' ? 'bg-gray-700 text-white ring-2 ring-white' : showHistory ? 'bg-blue-900 text-blue-200' : 'bg-gray-800 text-gray-400'}`}><HistoryIcon /> Log</button>
           </div>
         </header>
+
+        <div className={`md:hidden flex justify-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`}>
+          <WeekStreak getHeatmapData={getHeatmapData} currentSpaceId={currentSpaceId} />
+        </div>
 
         <div className={`relative w-full group z-50 transition-all duration-500 ${spotlightGroup ? 'opacity-0 pointer-events-none -translate-y-4' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <div className={`relative flex flex-col shadow-2xl rounded-2xl bg-gray-900 border border-gray-800`}>

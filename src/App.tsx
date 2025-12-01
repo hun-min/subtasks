@@ -214,14 +214,15 @@ export default function App() {
     const fetchSuggestions = async () => {
       if (focusedInput === 'obj') {
         if (objValue.trim().length > 0) {
-            const results = await searchTargets(objValue, currentSpaceId || undefined);
-            setSuggestions(results || []);
+            const targetResults = await searchTargets(objValue, currentSpaceId || undefined);
+            const taskResults = await searchActions(objValue);
+            setSuggestions([...(targetResults || []), ...(taskResults || [])]);
         } else {
             setSuggestions([]);
         }
       } else if (focusedInput === 'act') {
-        if (actValue.trim().length > 0 && selectedTargetId) {
-            const results = await searchActions(actValue, selectedTargetId);
+        if (actValue.trim().length > 0) {
+            const results = await searchActions(actValue, selectedTargetId || undefined);
             setSuggestions(results || []);
         } else {
             setSuggestions([]);
@@ -250,6 +251,7 @@ export default function App() {
 
   useEffect(() => {
       const handleKeyDown = async (e: KeyboardEvent) => {
+          if (suggestions.length > 0) return;
           if ((e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
           
           const allItems: Array<{type: string, id?: number, title?: string, action?: () => void}> = [

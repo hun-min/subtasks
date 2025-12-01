@@ -40,8 +40,8 @@ export function useSystem() {
   };
 
   const searchActions = async (query: string, targetId?: number) => {
-    if (!query || !targetId) return [];
-    const tasks = await db.tasks.where('targetId').equals(targetId).reverse().toArray();
+    if (!query) return [];
+    const tasks = targetId ? await db.tasks.where('targetId').equals(targetId).reverse().toArray() : await db.tasks.reverse().toArray();
     const matches = tasks.filter(t => t.title.toLowerCase().startsWith(query.toLowerCase()));
     const uniqueActions = Object.values(matches.reduce((acc, current) => {
         if (!acc[current.title]) acc[current.title] = current;

@@ -656,7 +656,7 @@ export default function App() {
           const isExpanded = expandedGroup === inboxTarget.title;
           const isSpotlighted = spotlightGroup === inboxTarget.title;
           return (
-            <div className="space-y-2 pb-2">
+            <div className="space-y-2 pb-0 -mt-16">
               <div key={targetId}>
                 <div 
                     className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border transition-all duration-500 cursor-pointer select-none z-30 group
@@ -863,7 +863,7 @@ export default function App() {
 
         {/* --- Backlog Groups --- */}
         {activeTargets.filter(t => t.title !== '⚡ Inbox').length > 3 && (
-          <div className={`mt-8 pt-6 border-t border-gray-900 transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`}>
+          <div className={`mt-4 pt-4 border-t border-gray-900 transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`}>
             <div className="flex items-center gap-2 mb-4 px-2 opacity-40">
               <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Backlog ({activeTargets.filter(t => t.title !== '⚡ Inbox').length - 3})</span>
             </div>

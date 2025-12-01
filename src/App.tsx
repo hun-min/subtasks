@@ -673,7 +673,7 @@ export default function App() {
                     onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : title); }}
                 >
                     <div className="flex items-center gap-2 w-full overflow-hidden">
-                        <span className={`flex-shrink-0 ${isSpotlighted ? 'text-blue-400' : 'text-gray-500'}`}><TargetIcon /></span>
+                        <span className={`flex-shrink-0 ${isSpotlighted ? 'text-blue-400' : title === '⚡ Inbox' ? 'text-yellow-500' : 'text-gray-500'}`}>{title === '⚡ Inbox' ? <ZapIcon /> : <TargetIcon />}</span>
                         {editingId?.type === 'target' && editingId.id === targetId ? (
                             <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full max-w-[calc(100%-31px)] text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
                         ) : (

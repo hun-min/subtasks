@@ -14,6 +14,7 @@ const HistoryIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="
 const HeatmapIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="4" height="4"></rect><rect x="9" y="3" width="4" height="4"></rect><rect x="15" y="3" width="4" height="4"></rect><rect x="3" y="9" width="4" height="4"></rect><rect x="9" y="9" width="4" height="4"></rect><rect x="15" y="9" width="4" height="4"></rect><rect x="3" y="15" width="4" height="4"></rect><rect x="9" y="15" width="4" height="4"></rect><rect x="15" y="15" width="4" height="4"></rect></svg>;
 const UndoIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>;
 const FocusIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>;
+const ZapIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>;
 const TargetIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
 const DiceIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 8h.01"></path><path d="M8 8h.01"></path><path d="M8 16h.01"></path><path d="M16 16h.01"></path><path d="M12 12h.01"></path></svg>;
 const LockIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
@@ -76,6 +77,8 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [focusIndex, setFocusIndex] = useState(-1);
   const [keyboardFocusedItem, setKeyboardFocusedItem] = useState<{type: string, id?: number} | null>(null);
+  const [timerActive, setTimerActive] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(300);
 
   const getTaskAgeStyle = (createdAt: Date) => {
       const diffMs = new Date().getTime() - new Date(createdAt).getTime();
@@ -228,6 +231,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let interval: any;
+    if (timerActive && timeLeft > 0) {
+      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+    } else if (timeLeft === 0) {
+      setTimerActive(false);
+    }
+    return () => clearInterval(interval);
+  }, [timerActive, timeLeft]);
+
+  useEffect(() => {
       const handleKeyDown = async (e: KeyboardEvent) => {
           if ((e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
           
@@ -338,11 +351,31 @@ export default function App() {
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, [history, historyIndex, allSpaces, undoTask, completeTask, addTask, deleteTask, updateTaskTitle, updateTargetTitle]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleQuickAdd = async () => {
+    const text = focusedInput === 'obj' ? objValue : actValue;
+    if (!text.trim() || !currentSpaceId) return;
+    let inboxTarget = await db.targets.where('title').equals('⚡ Inbox').and(t => t.spaceId === currentSpaceId).first();
+    let targetId;
+    if (!inboxTarget) {
+      targetId = await addTarget({ spaceId: currentSpaceId, title: '⚡ Inbox', defaultAction: '', notes: 'Quick tasks', usageCount: 9999, lastUsed: new Date() });
+    } else {
+      targetId = inboxTarget.id;
+      await updateTargetUsage(targetId!, inboxTarget.usageCount + 1);
+    }
+    await addTask({ targetId: targetId!, title: text.trim(), isCompleted: false, createdAt: new Date() });
+    resetForm();
+  };
+
+  const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return;
     if (suggestions.length > 0) {
         if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(prev => (prev < suggestions.length - 1 ? prev + 1 : prev)); return; }
         else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(prev => (prev > 0 ? prev - 1 : -1)); return; }
+    }
+    if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        handleQuickAdd();
+        return;
     }
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -582,14 +615,20 @@ export default function App() {
               </div>
           ) : (
           <div className={`relative flex flex-col shadow-2xl rounded-2xl bg-gray-900 border border-gray-800`}>
-            <div className="flex items-center px-3 py-2">
+            <div className="flex items-center px-3 py-2 relative">
                 <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
-                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
+                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
+                {objValue.trim() && !isInputMode && (
+                  <button onClick={handleQuickAdd} className="absolute right-3 p-1.5 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" title="Quick add to Inbox"><ZapIcon /></button>
+                )}
             </div>
             {isInputMode && (
-                <div className="px-3 pb-2 flex items-center">
+                <div className="px-3 pb-2 flex items-center relative">
                     <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
-                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm" autoFocus />
+                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-10" autoFocus />
+                    {actValue.trim() && (
+                      <button onClick={handleQuickAdd} className="absolute right-3 p-1.5 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" title="Quick add to Inbox"><ZapIcon /></button>
+                    )}
                 </div>
             )}
           </div>
@@ -674,20 +713,34 @@ export default function App() {
                 <div className={`bg-gray-900 border border-t-0 rounded-b-xl mb-2 px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
                     <SortableContext items={tasks.map(t => t.id!)} strategy={verticalListSortingStrategy}>
-                    {(isExpanded ? tasks : [tasks[0]]).map((task) => (
+                    {(isExpanded ? tasks : [tasks[0]]).map((task, idx) => {
+                      const isTopTask = idx === 0;
+                      return (
                         <SortableTaskItem key={task.id} task={task}>
-                        <div className="flex items-center gap-2 py-0.5 group/task" onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
-                            <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
-                            {editingId?.type === 'task' && editingId.id === task.id ? (
-                                <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
-                            ) : (
-                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>
+                        <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTopTask && timerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
+                            {isTopTask && timerActive && (
+                              <div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0"><CheckIcon /></button>
+                            {isTopTask && !editingId ? (
+                              <button onClick={(e) => { e.stopPropagation(); if(timerActive) setTimerActive(false); else { setTimeLeft(300); setTimerActive(true); }}} className={`flex-shrink-0 text-xs font-mono z-10 ${timerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
+                                {timerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : '▶'}
+                              </button>
+                            ) : (
+                              <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
+                            )}
+                            {editingId?.type === 'task' && editingId.id === task.id ? (
+                                <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
+                            ) : (
+                                <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>
+                            )}
+                            {!(isTopTask && timerActive) && (
+                              <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>
+                            )}
+                            <button onClick={(e) => { e.stopPropagation(); setTimerActive(false); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
                         </div>
                         </SortableTaskItem>
-                    ))}
+                      );
+                    })}
                     </SortableContext>
                     </DndContext>
 

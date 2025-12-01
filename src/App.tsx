@@ -244,8 +244,6 @@ export default function App() {
     if (activeTimer && activeTimer.timeLeft > 0) {
       interval = setInterval(() => setActiveTimer(prev => prev ? {...prev, timeLeft: prev.timeLeft - 1} : null), 1000);
     } else if (activeTimer && activeTimer.timeLeft === 0) {
-      const task = activeTasks?.find(t => t.id === activeTimer.taskId);
-      if (task) updateTimerCount(activeTimer.taskId, (task.timerCount || 0) + 1);
       setActiveTimer(null);
     }
     return () => clearInterval(interval);

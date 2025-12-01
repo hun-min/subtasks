@@ -4,6 +4,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { useSystem } from './hooks/useSystem';
 import { Target, Task, db } from './db';
+import { supabase } from './supabase';
 
 // --- Icons ---
 const CheckIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
@@ -968,7 +969,7 @@ export default function App() {
                             toggleSpotlight();
                         }
                         setContextMenu(null);
-                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><FocusIcon />{spotlightGroup === contextMenu.title || (contextMenu.type === 'task' && activeTasks?.find(t => t.id === contextMenu.id) && spotlightGroup === getTargetTitle(activeTasks.find(t => t.id === contextMenu.id)!.targetId)) ? 'Exit Focus' : 'Focus'}</button>
+                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0"><FocusIcon /></span>{spotlightGroup === contextMenu.title || (contextMenu.type === 'task' && activeTasks?.find(t => t.id === contextMenu.id) && spotlightGroup === getTargetTitle(activeTasks.find(t => t.id === contextMenu.id)!.targetId)) ? 'Exit Focus' : 'Focus'}</button>
                     {contextMenu.type === 'task' && (() => {
                         const task = activeTasks?.find(t => t.id === contextMenu.id);
                         const targetTitle = task ? getTargetTitle(task.targetId) : '';
@@ -980,15 +981,35 @@ export default function App() {
                                 setExpandedGroup(task.title);
                                 setAddingTaskToTarget(newTargetId);
                                 setContextMenu(null);
-                            }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-green-600/20 hover:text-green-400 transition-colors flex items-center gap-3"><TargetIcon />목표로 전환</button>
+                            }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-green-600/20 hover:text-green-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0"><TargetIcon /></span>To Target</button>
                         ) : null;
                     })()}
                     </>
                 )}
-                {contextMenu.type === 'space' && (
-                    <button onClick={handleEditSpace} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3">✏️ Edit</button>
+                {contextMenu.type === 'group' && contextMenu.title !== '⚡ Inbox' && (
+                    <button onClick={async () => {
+                        if (!currentSpaceId) return;
+                        let inboxTarget = await db.targets.where('title').equals('⚡ Inbox').and(t => t.spaceId === currentSpaceId).first();
+                        let inboxId;
+                        if (!inboxTarget) {
+                            inboxId = await addTarget({ spaceId: currentSpaceId, title: '⚡ Inbox', defaultAction: '', notes: 'Quick tasks', usageCount: 9999, lastUsed: new Date() });
+                        } else {
+                            inboxId = inboxTarget.id!;
+                        }
+                        const tasks = await db.tasks.where('targetId').equals(contextMenu.id).toArray();
+                        for (const task of tasks) {
+                            await db.tasks.update(task.id!, { targetId: inboxId });
+                            supabase.from('tasks').update({ targetId: inboxId }).eq('id', task.id).then();
+                        }
+                        await addTask({ targetId: inboxId, title: contextMenu.title, isCompleted: false, createdAt: new Date() });
+                        await deleteGroup(contextMenu.id);
+                        setContextMenu(null);
+                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-yellow-600/20 hover:text-yellow-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0 text-yellow-500">⚡</span>To Inbox</button>
                 )}
-                <button onClick={handleGeneralDelete} className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-colors flex items-center gap-3"><TrashIcon />Delete</button>
+                {contextMenu.type === 'space' && (
+                    <button onClick={handleEditSpace} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0">✏️</span>Edit</button>
+                )}
+                <button onClick={handleGeneralDelete} className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-colors flex items-center gap-3"><span className="flex-shrink-0"><TrashIcon /></span>Delete</button>
             </div>
         )}
 

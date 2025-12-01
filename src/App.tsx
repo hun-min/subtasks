@@ -648,9 +648,9 @@ export default function App() {
         
         {/* --- Focus Groups (Top 3) --- */}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTargetDragEnd}>
-        <SortableContext items={activeTargets.slice(0, 3).map(t => t.id!)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={activeTargets.filter(t => t.title !== '⚡ Inbox').slice(0, 3).map(t => t.id!)} strategy={verticalListSortingStrategy}>
         <div className="space-y-2 pb-2">
-          {activeTargets.slice(0, 3).map((target) => {
+          {activeTargets.filter(t => t.title !== '⚡ Inbox').slice(0, 3).map((target) => {
             const targetId = target.id!;
             const title = target.title;
             const tasks = groupedTasks[title] || [];
@@ -805,13 +805,13 @@ export default function App() {
         </DndContext>
 
         {/* --- Backlog Groups --- */}
-        {activeTargets.length > 3 && (
+        {activeTargets.filter(t => t.title !== '⚡ Inbox').length > 3 && (
           <div className={`mt-8 pt-6 border-t border-gray-900 transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`}>
             <div className="flex items-center gap-2 mb-4 px-2 opacity-40">
-              <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Backlog ({activeTargets.length - 3})</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Backlog ({activeTargets.filter(t => t.title !== '⚡ Inbox').length - 3})</span>
             </div>
             <div className="space-y-2 opacity-30 grayscale pointer-events-none select-none">
-              {activeTargets.slice(3).map((target) => {
+              {activeTargets.filter(t => t.title !== '⚡ Inbox').slice(3).map((target) => {
                 const title = target.title;
                 const tasks = groupedTasks[title] || [];
                 return (

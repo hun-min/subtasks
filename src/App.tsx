@@ -154,7 +154,7 @@ export default function App() {
     });
   }, [completedTasks, selectedDate]);
 
-  const mergedCompletedItems = React.useMemo(() => {
+  const groupedCompletedItems = React.useMemo(() => {
     const items: Array<{type: 'task' | 'target', data: Task | Target, date: Date}> = [];
     
     filteredCompletedTasks.filter(task => {
@@ -179,7 +179,14 @@ export default function App() {
       });
     }
     
-    return items.sort((a, b) => b.date.getTime() - a.date.getTime());
+    const sorted = items.sort((a, b) => b.date.getTime() - a.date.getTime());
+    const grouped: Record<string, Array<{type: 'task' | 'target', data: Task | Target, date: Date}>> = {};
+    sorted.forEach(item => {
+      const dateStr = `${item.date.getFullYear()}-${item.date.getMonth() + 1}-${item.date.getDate()}`;
+      if (!grouped[dateStr]) grouped[dateStr] = [];
+      grouped[dateStr].push(item);
+    });
+    return grouped;
   }, [filteredCompletedTasks, allTargets, currentSpaceId, selectedDate]);
 
   useEffect(() => {
@@ -257,7 +264,7 @@ export default function App() {
               }),
               ...activeTargets.slice(3).map(t => ({type: 'backlog', id: t.id!, title: t.title})),
               ...(showHistory ? [{type: 'heatmap', action: () => { setShowHeatmap(!showHeatmap); setShowCalendar(false); }}, {type: 'calendar', action: () => { setShowCalendar(!showCalendar); setShowHeatmap(false); }}] : []),
-              ...(showHistory && mergedCompletedItems ? mergedCompletedItems.map((item) => ({type: item.type === 'task' ? 'completedTask' : 'completedTarget', id: (item.data as any).id, title: item.type === 'task' ? (item.data as Task).title : (item.data as Target).title})) : [])
+              ...(showHistory && groupedCompletedItems ? Object.values(groupedCompletedItems).flat().map((item) => ({type: item.type === 'task' ? 'completedTask' : 'completedTarget', id: (item.data as any).id, title: item.type === 'task' ? (item.data as Task).title : (item.data as Target).title})) : [])
           ];
           
           if (e.key === 'ArrowDown') {
@@ -936,8 +943,15 @@ export default function App() {
               </div>
             )}
 
-            <div className="space-y-2">
-              {mergedCompletedItems.map((item) => {
+            <div className="space-y-4">
+              {Object.entries(groupedCompletedItems).map(([dateStr, items]) => (
+                <div key={dateStr} className="space-y-2">
+                  <div className="flex items-center gap-2 px-2">
+                    <span className="text-xs font-bold text-gray-500">{dateStr}</span>
+                    <span className="text-xs text-gray-600">({items.length})</span>
+                    <div className="flex-1 h-px bg-gray-800"></div>
+                  </div>
+                  {items.map((item) => {
                 if (item.type === 'task') {
                   const task = item.data as Task;
                   const targetTitle = getTargetTitle(task.targetId) || 'Unknown';
@@ -1002,6 +1016,8 @@ export default function App() {
                   );
                 }
               })}
+                </div>
+              ))}
             </div>
           </div>
         )}

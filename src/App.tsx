@@ -217,14 +217,14 @@ export default function App() {
       if (focusedInput === 'obj') {
         if (objValue.trim().length > 0) {
             const targetResults = await searchTargets(objValue, currentSpaceId || undefined);
-            const taskResults = await searchActions(objValue);
+            const taskResults = await searchActions(objValue, undefined, currentSpaceId || undefined);
             setSuggestions([...(targetResults || []), ...(taskResults || [])]);
         } else {
             setSuggestions([]);
         }
       } else if (focusedInput === 'act') {
         if (actValue.trim().length > 0) {
-            const results = await searchActions(actValue, selectedTargetId || undefined);
+            const results = await searchActions(actValue, selectedTargetId || undefined, currentSpaceId || undefined);
             setSuggestions(results || []);
         } else {
             setSuggestions([]);
@@ -483,13 +483,25 @@ export default function App() {
 
   const deleteTargetAsset = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
-    if (window.confirm('목표 삭제?')) {
-      await db.targets.delete(id);
-      supabase.from('targets').delete().eq('id', id).then();
-      const tasks = await db.tasks.where('targetId').equals(id).toArray();
-      await db.tasks.bulkDelete(tasks.map(t => t.id!));
-      supabase.from('tasks').delete().eq('targetId', id).then();
+    if (window.confirm('삭제?')) {
+      const target = await db.targets.get(id);
+      if (target) {
+        await db.targets.delete(id);
+        await supabase.from('targets').delete().eq('id', id);
+        const tasks = await db.tasks.where('targetId').equals(id).toArray();
+        await db.tasks.bulkDelete(tasks.map(t => t.id!));
+        await supabase.from('tasks').delete().eq('targetId', id);
+      } else {
+        const task = await db.tasks.get(id);
+        if (task) {
+          await db.tasks.delete(id);
+          await supabase.from('tasks').delete().eq('id', id);
+        }
+      }
+      
       setSuggestions([]);
+      setObjValue('');
+      setActValue('');
     }
   };
   const handleDeleteTask = async (taskId: number) => {
@@ -666,7 +678,7 @@ export default function App() {
               {suggestions.map((item, index) => (
                 <li key={item.id} onClick={() => selectTarget(item)} className={`px-5 py-3 cursor-pointer flex justify-between items-center border-b border-gray-800 last:border-0 group ${index === selectedIndex ? 'bg-blue-900/20' : 'hover:bg-gray-800/50'}`}>
                   <span className={`font-bold text-base block ${index === selectedIndex ? 'text-blue-400' : 'text-gray-200'}`}>{item.title}</span>
-                  {focusedInput === 'obj' && <button onClick={(e) => deleteTargetAsset(e, item.id!)} className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"><XIcon /></button>}
+                  <button onClick={(e) => deleteTargetAsset(e, item.id!)} className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"><XIcon /></button>
                 </li>
               ))}
             </ul>

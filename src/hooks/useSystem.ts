@@ -19,10 +19,32 @@ export function useSystem() {
       }
       
       const { data: remoteTargets } = await supabase.from('targets').select('*');
-      if (remoteTargets) await db.targets.bulkPut(remoteTargets);
+      if (remoteTargets) {
+        await db.targets.bulkPut(remoteTargets);
+        
+        const validSpaceIds = new Set((remoteSpaces || []).map(s => s.id));
+        const orphanedTargets = await db.targets.filter(t => !validSpaceIds.has(t.spaceId)).toArray();
+        for (const target of orphanedTargets) {
+          const tasks = await db.tasks.where('targetId').equals(target.id!).toArray();
+          await db.tasks.bulkDelete(tasks.map(t => t.id!));
+          await supabase.from('tasks').delete().eq('targetId', target.id!);
+          await db.targets.delete(target.id!);
+          await supabase.from('targets').delete().eq('id', target.id!);
+        }
+      }
       
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
-      if (remoteTasks) await db.tasks.bulkPut(remoteTasks);
+      if (remoteTasks) {
+        await db.tasks.bulkPut(remoteTasks);
+        
+        const allTargets = await db.targets.toArray();
+        const validTargetIds = new Set(allTargets.map(t => t.id));
+        const orphanedTasks = await db.tasks.filter(t => !!(t.targetId && !validTargetIds.has(t.targetId))).toArray();
+        for (const task of orphanedTasks) {
+          await db.tasks.delete(task.id!);
+          await supabase.from('tasks').delete().eq('id', task.id!);
+        }
+      }
     };
     syncData();
   }, []);
@@ -33,16 +55,28 @@ export function useSystem() {
   const allTargets = useLiveQuery(() => db.targets.toArray());
 
   const searchTargets = async (query: string, spaceId?: number) => {
-    if (!query) return [];
+    if (!query || !spaceId) return [];
     let results = await db.targets.where('title').startsWithIgnoreCase(query).sortBy('lastUsed');
-    if (spaceId) results = results.filter(t => t.spaceId === spaceId);
+    results = results.filter(t => t.spaceId === spaceId);
     return results.reverse().slice(0, 10);
   };
 
-  const searchActions = async (query: string, targetId?: number) => {
+  const searchActions = async (query: string, targetId?: number, spaceId?: number) => {
     if (!query) return [];
     const tasks = targetId ? await db.tasks.where('targetId').equals(targetId).reverse().toArray() : await db.tasks.reverse().toArray();
     const matches = tasks.filter(t => t.title.toLowerCase().startsWith(query.toLowerCase()));
+    
+    if (spaceId) {
+      const allTargets = await db.targets.toArray();
+      const validTargetIds = new Set(allTargets.filter(t => t.spaceId === spaceId).map(t => t.id));
+      const filteredMatches = matches.filter(t => t.targetId && validTargetIds.has(t.targetId));
+      const uniqueActions = Object.values(filteredMatches.reduce((acc, current) => {
+          if (!acc[current.title]) acc[current.title] = current;
+          return acc;
+      }, {} as Record<string, Task>));
+      return uniqueActions.slice(0, 5).map(t => ({ id: t.id, title: t.title, defaultAction: '', notes: '', usageCount: 0, lastUsed: t.createdAt } as Target));
+    }
+    
     const uniqueActions = Object.values(matches.reduce((acc, current) => {
         if (!acc[current.title]) acc[current.title] = current;
         return acc;

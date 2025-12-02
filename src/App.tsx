@@ -61,7 +61,7 @@ export default function App() {
   const [editingId, setEditingId] = useState<{type: 'target'|'task', id: number} | null>(null);
   const [editValue, setEditValue] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task' | 'space' | 'completedTask', id: number, title: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task' | 'space' | 'completedTask' | 'completedTarget', id: number, title: string } | null>(null);
   const [spotlightGroup, setSpotlightGroup] = useState<string | null>(null);
 
   const [editingSpaceId, setEditingSpaceId] = useState<number | null>(null);
@@ -1016,7 +1016,7 @@ export default function App() {
                     })()}
                     </>
                 )}
-                {contextMenu.type === 'completedTask' && (
+                {(contextMenu.type === 'completedTask' || contextMenu.type === 'completedTarget') && (
                     <button onClick={() => {
                         const task = completedTasks?.find(t => t.id === contextMenu.id);
                         if (!task) return;
@@ -1208,7 +1208,8 @@ export default function App() {
                   return (
                     <div 
                       key={`target-${target.id}`} 
-                      className={`flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border-2 group transition-all ${keyboardFocusedItem?.type === 'completedTarget' && keyboardFocusedItem.id === target.id ? 'border-gray-400' : 'border-gray-800/50 hover:border-gray-700'}`}
+                      className={`flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border-2 group transition-all cursor-context-menu ${keyboardFocusedItem?.type === 'completedTarget' && keyboardFocusedItem.id === target.id ? 'border-gray-400' : 'border-gray-800/50 hover:border-gray-700'}`}
+                      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'completedTarget', id: target.id!, title: target.title }); }}
                     >
                       <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
                         <span className="text-blue-400/70"><TargetIcon /></span>

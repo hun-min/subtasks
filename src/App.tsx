@@ -61,7 +61,7 @@ export default function App() {
   const [editingId, setEditingId] = useState<{type: 'target'|'task', id: number} | null>(null);
   const [editValue, setEditValue] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task' | 'space', id: number, title: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, type: 'group' | 'task' | 'space' | 'completedTask', id: number, title: string } | null>(null);
   const [spotlightGroup, setSpotlightGroup] = useState<string | null>(null);
 
   const [editingSpaceId, setEditingSpaceId] = useState<number | null>(null);
@@ -79,6 +79,7 @@ export default function App() {
   const [focusIndex, setFocusIndex] = useState(-1);
   const [keyboardFocusedItem, setKeyboardFocusedItem] = useState<{type: string, id?: number} | null>(null);
   const [activeTimer, setActiveTimer] = useState<{taskId: number, timeLeft: number} | null>(null);
+  const [changeDateModal, setChangeDateModal] = useState<{taskId: number, currentDate: string} | null>(null);
 
   const getTaskAgeStyle = (createdAt: Date) => {
       const diffMs = new Date().getTime() - new Date(createdAt).getTime();
@@ -496,7 +497,7 @@ export default function App() {
   };
   const getTargetTitle = (id?: number) => { const t = allTargets?.find(t => t.id === id); return t ? t.title : 'Uncategorized'; };
   const handleGroupContextMenu = (e: React.MouseEvent, title: string, targetId: number) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'group', id: targetId, title: title }); };
-  const handleTaskContextMenu = (e: React.MouseEvent, task: Task) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'task', id: task.id!, title: task.title }); };
+  const handleTaskContextMenu = (e: React.MouseEvent, task: Task, isCompleted?: boolean) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: isCompleted ? 'completedTask' : 'task', id: task.id!, title: task.title }); };
   const handleSpaceContextMenu = (e: React.MouseEvent, spaceId: number, title: string) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'space', id: spaceId, title: title }); };
   const toggleSpotlight = () => { if (contextMenu) { if (spotlightGroup === contextMenu.title) { setSpotlightGroup(null); } else { setSpotlightGroup(contextMenu.title); } } };
   const handleGeneralDelete = async () => {
@@ -996,6 +997,15 @@ export default function App() {
                     })()}
                     </>
                 )}
+                {contextMenu.type === 'completedTask' && (
+                    <button onClick={() => {
+                        const task = completedTasks?.find(t => t.id === contextMenu.id);
+                        if (!task) return;
+                        const date = task.completedAt ? (task.completedAt instanceof Date ? task.completedAt : new Date(task.completedAt)) : new Date();
+                        setChangeDateModal({ taskId: contextMenu.id, currentDate: date.toISOString().split('T')[0] });
+                        setContextMenu(null);
+                    }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><span className="w-[14px] flex-shrink-0">📅</span>Change Date</button>
+                )}
                 {contextMenu.type === 'group' && contextMenu.title !== '⚡ Inbox' && (
                     <button onClick={async () => {
                         if (!currentSpaceId) return;
@@ -1020,6 +1030,29 @@ export default function App() {
                     <button onClick={handleEditSpace} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-blue-600/20 hover:text-blue-400 transition-colors flex items-center gap-3"><span className="w-[14px] flex-shrink-0">✏️</span>Edit</button>
                 )}
                 <button onClick={handleGeneralDelete} className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-colors flex items-center gap-3"><span className="w-[14px] flex-shrink-0"><TrashIcon /></span>Delete</button>
+            </div>
+        )}
+
+        {/* Change Date Modal */}
+        {changeDateModal && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={() => setChangeDateModal(null)}>
+                <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-80" onClick={(e) => e.stopPropagation()}>
+                    <h3 className="text-lg font-bold text-white mb-4">Change Completion Date</h3>
+                    <input 
+                        type="date" 
+                        defaultValue={changeDateModal.currentDate}
+                        onChange={async (e) => {
+                            if (!e.target.value) return;
+                            const selectedDate = new Date(e.target.value);
+                            const newDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 23, 59, 59, 999);
+                            await db.tasks.update(changeDateModal.taskId, { completedAt: newDate });
+                            supabase.from('tasks').update({ completedAt: newDate }).eq('id', changeDateModal.taskId).then();
+                            setChangeDateModal(null);
+                        }}
+                        className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg mb-4 outline-none"
+                    />
+                    <button onClick={() => setChangeDateModal(null)} className="w-full bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
+                </div>
             </div>
         )}
 
@@ -1125,7 +1158,7 @@ export default function App() {
                     <div 
                       key={`task-${task.id}`} 
                       className={`flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border-2 group transition-all cursor-context-menu ${keyboardFocusedItem?.type === 'completedTask' && keyboardFocusedItem.id === task.id ? 'border-gray-400' : 'border-gray-800/50 hover:border-gray-700'}`}
-                      onContextMenu={(e) => handleTaskContextMenu(e, task)}
+                      onContextMenu={(e) => handleTaskContextMenu(e, task, true)}
                     >
                       <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
                         <span className="text-[10px] text-blue-400/70 bg-blue-900/20 px-1 py-0.5 rounded border border-blue-900/30 whitespace-nowrap">
@@ -1217,7 +1250,7 @@ function WeekStreak({ getHeatmapData, currentSpaceId }: { getHeatmapData: (space
   return (
     <div className="flex gap-0.5">
       {days.map((day) => (
-        <div key={day.dateStr} className={`w-2 h-2 rounded-sm transition-all ${day.colorClass} ${day.isToday ? 'ring-1 ring-white/50' : ''}`} title={`${day.dateStr}: ${day.count}`} />
+        <div key={day.dateStr} className={`w-2 h-2 rounded-sm transition-all border ${day.colorClass} ${day.isToday ? 'ring-1 ring-white/50' : 'border-gray-700/50'}`} title={`${day.dateStr}: ${day.count}`} />
       ))}
     </div>
   );
@@ -1230,56 +1263,40 @@ function HeatmapView({ getHeatmapData, currentSpaceId, onDateClick }: { getHeatm
     getHeatmapData(currentSpaceId || undefined).then(setData);
   }, [currentSpaceId, getHeatmapData]);
 
-  const weeks = 12;
+  const days = 84;
   const today = new Date();
-  const grid = [];
+  const allDays = [];
 
-  for (let w = weeks - 1; w >= 0; w--) {
-    const weekData = [];
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - (w * 7) - (6 - d));
-      const dateStr = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-      const count = data[dateStr] || 0;
-      
-      let colorClass = "bg-gray-800/50";
-      if (count >= 1) colorClass = "bg-blue-900/40";
-      if (count >= 3) colorClass = "bg-blue-800/60";
-      if (count >= 5) colorClass = "bg-blue-600";
-      if (count >= 8) colorClass = "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]";
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    const count = data[dateStr] || 0;
+    
+    let colorClass = "bg-gray-800/50";
+    if (count >= 1) colorClass = "bg-blue-900/40";
+    if (count >= 3) colorClass = "bg-blue-800/60";
+    if (count >= 5) colorClass = "bg-blue-600";
+    if (count >= 8) colorClass = "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]";
 
-      weekData.push({ date: dateStr, count, colorClass });
-    }
-    grid.push(weekData);
+    allDays.push({ date: dateStr, count, colorClass });
   }
 
-  const firstHalf = grid.slice(0, 6);
-  const secondHalf = grid.slice(6, 12);
+  const rows = [];
+  for (let i = 0; i < 7; i++) {
+    rows.push(allDays.filter((_, idx) => idx % 7 === i));
+  }
 
   return (
-    <div className="w-full pb-2 pt-3 flex flex-col items-center gap-2">
-      <div className="flex gap-1">
-        {firstHalf.map((week, wIdx) => (
-          <div key={wIdx} className="flex flex-col gap-1">
-            {week.map((day) => (
+    <div className="w-full pb-2 pt-3">
+      <div className="flex flex-col gap-1">
+        {rows.map((row, rowIdx) => (
+          <div key={rowIdx} className="flex gap-1 justify-center">
+            {row.map((day) => (
               <div 
                 key={day.date}
                 onClick={() => day.count > 0 && onDateClick(day.date)}
-                className={`w-3 h-3 rounded-sm transition-all hover:scale-125 hover:border-white/50 border border-transparent ${day.colorClass} ${day.count > 0 ? 'cursor-pointer' : ''}`}
-                title={`${day.date}: ${day.count} tasks`}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-1">
-        {secondHalf.map((week, wIdx) => (
-          <div key={wIdx + 6} className="flex flex-col gap-1">
-            {week.map((day) => (
-              <div 
-                key={day.date}
-                onClick={() => day.count > 0 && onDateClick(day.date)}
-                className={`w-3 h-3 rounded-sm transition-all hover:scale-125 hover:border-white/50 border border-transparent ${day.colorClass} ${day.count > 0 ? 'cursor-pointer' : ''}`}
+                className={`w-2.5 h-2.5 rounded-sm transition-all hover:scale-125 hover:border-white/50 border border-transparent ${day.colorClass} ${day.count > 0 ? 'cursor-pointer' : ''}`}
                 title={`${day.date}: ${day.count} tasks`}
               />
             ))}

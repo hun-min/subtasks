@@ -35,14 +35,14 @@ export function useSystem() {
       
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
       if (remoteTasks) {
-        await db.tasks.bulkPut(remoteTasks);
-        
         const allTargets = await db.targets.toArray();
         const validTargetIds = new Set(allTargets.map(t => t.id));
-        const orphanedTasks = await db.tasks.filter(t => !!(t.targetId && !validTargetIds.has(t.targetId))).toArray();
-        for (const task of orphanedTasks) {
-          await db.tasks.delete(task.id!);
-          await supabase.from('tasks').delete().eq('id', task.id!);
+        const validTasks = remoteTasks.filter(t => !t.targetId || validTargetIds.has(t.targetId));
+        await db.tasks.bulkPut(validTasks);
+        
+        const orphanedTaskIds = remoteTasks.filter(t => t.targetId && !validTargetIds.has(t.targetId)).map(t => t.id);
+        if (orphanedTaskIds.length > 0) {
+          await supabase.from('tasks').delete().in('id', orphanedTaskIds);
         }
       }
     };
@@ -86,9 +86,14 @@ export function useSystem() {
 
   const addTask = async (task: Omit<Task, 'id'>) => {
     const id = await db.tasks.add(task) as number;
-    supabase.from('tasks').upsert([{ ...task, id }]).then(({ error }) => {
-      if (error) console.error('Sync Error (Task):', error);
-    });
+    if (task.targetId) {
+      const targetExists = await db.targets.get(task.targetId);
+      if (targetExists) {
+        supabase.from('tasks').upsert([{ ...task, id }]).then(({ error }) => {
+          if (error) console.error('Sync Error (Task):', error);
+        });
+      }
+    }
     return id;
   };
 

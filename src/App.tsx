@@ -483,7 +483,14 @@ export default function App() {
 
   const deleteTargetAsset = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
-    if (window.confirm('목표 삭제?')) { await db.targets.delete(id); setSuggestions([]); }
+    if (window.confirm('목표 삭제?')) {
+      await db.targets.delete(id);
+      supabase.from('targets').delete().eq('id', id).then();
+      const tasks = await db.tasks.where('targetId').equals(id).toArray();
+      await db.tasks.bulkDelete(tasks.map(t => t.id!));
+      supabase.from('tasks').delete().eq('targetId', id).then();
+      setSuggestions([]);
+    }
   };
   const handleDeleteTask = async (taskId: number) => {
       if(window.confirm('삭제?')) {

@@ -8,6 +8,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.vercel\.app\/.*/i,
@@ -30,7 +32,7 @@ export default defineConfig({
         theme_color: '#030712',
         background_color: '#030712',
         display: 'standalone',
-        version: '2.0.0',
+        version: '2.1.0',
         icons: [
           {
             src: 'pwa-192x192.png',

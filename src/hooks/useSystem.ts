@@ -20,30 +20,14 @@ export function useSystem() {
       
       const { data: remoteTargets } = await supabase.from('targets').select('*');
       if (remoteTargets) {
-        await db.targets.bulkPut(remoteTargets);
-        
-        const validSpaceIds = new Set((remoteSpaces || []).map(s => s.id));
-        const orphanedTargets = await db.targets.filter(t => !validSpaceIds.has(t.spaceId)).toArray();
-        for (const target of orphanedTargets) {
-          const tasks = await db.tasks.where('targetId').equals(target.id!).toArray();
-          await db.tasks.bulkDelete(tasks.map(t => t.id!));
-          await supabase.from('tasks').delete().eq('targetId', target.id!);
-          await db.targets.delete(target.id!);
-          await supabase.from('targets').delete().eq('id', target.id!);
-        }
+        await db.targets.clear();
+        await db.targets.bulkAdd(remoteTargets);
       }
       
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
       if (remoteTasks) {
-        const allTargets = await db.targets.toArray();
-        const validTargetIds = new Set(allTargets.map(t => t.id));
-        const validTasks = remoteTasks.filter(t => !t.targetId || validTargetIds.has(t.targetId));
-        await db.tasks.bulkPut(validTasks);
-        
-        const orphanedTaskIds = remoteTasks.filter(t => t.targetId && !validTargetIds.has(t.targetId)).map(t => t.id);
-        if (orphanedTaskIds.length > 0) {
-          await supabase.from('tasks').delete().in('id', orphanedTaskIds);
-        }
+        await db.tasks.clear();
+        await db.tasks.bulkAdd(remoteTasks);
       }
     };
     syncData();

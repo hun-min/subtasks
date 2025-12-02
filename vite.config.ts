@@ -7,6 +7,21 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*\.vercel\.app\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'vercel-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 5
+              }
+            }
+          }
+        ]
+      },
       includeAssets: ['favicon.ico'],
       manifest: {
         name: 'Protocol System',

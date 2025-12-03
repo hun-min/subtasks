@@ -378,11 +378,31 @@ export default function App() {
     resetForm();
   };
 
+  const handleImmediateDone = async () => {
+    const text = focusedInput === 'obj' ? objValue : actValue;
+    if (!text.trim() || !currentSpaceId) return;
+    let inboxTarget = await db.targets.where('title').equals('⚡ Inbox').and(t => t.spaceId === currentSpaceId).first();
+    let targetId;
+    if (!inboxTarget) {
+      targetId = await addTarget({ spaceId: currentSpaceId, title: '⚡ Inbox', defaultAction: '', notes: 'Quick tasks', usageCount: 9999, lastUsed: new Date() });
+    } else {
+      targetId = inboxTarget.id;
+      await updateTargetUsage(targetId!, inboxTarget.usageCount + 1);
+    }
+    await addTask({ targetId: targetId!, title: text.trim(), isCompleted: true, createdAt: new Date(), completedAt: new Date() });
+    resetForm();
+  };
+
   const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return;
     if (suggestions.length > 0) {
         if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(prev => (prev < suggestions.length - 1 ? prev + 1 : prev)); return; }
         else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(prev => (prev > 0 ? prev - 1 : -1)); return; }
+    }
+    if (e.key === 'Enter' && e.ctrlKey) {
+        e.preventDefault();
+        handleImmediateDone();
+        return;
     }
     if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
@@ -660,7 +680,10 @@ export default function App() {
                 <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
                 <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
                 {objValue.trim() && !isInputMode && (
-                  <button onClick={handleQuickAdd} className="absolute right-3 p-1 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" style={{fontSize: '16px'}} title="Quick add to Inbox">⚡</button>
+                  <div className="absolute right-3 flex gap-1">
+                    <button onClick={handleImmediateDone} className="p-1 text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
+                    <button onClick={handleQuickAdd} className="p-1 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" style={{fontSize: '16px'}} title="Quick add to Inbox (Shift+Enter)">⚡</button>
+                  </div>
                 )}
             </div>
             {isInputMode && (
@@ -668,7 +691,10 @@ export default function App() {
                     <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
                     <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-10" autoFocus />
                     {actValue.trim() && (
-                      <button onClick={handleQuickAdd} className="absolute right-3 p-1 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" style={{fontSize: '16px'}} title="Quick add to Inbox">⚡</button>
+                      <div className="absolute right-3 flex gap-1">
+                        <button onClick={handleImmediateDone} className="p-1 text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
+                        <button onClick={handleQuickAdd} className="p-1 text-yellow-500 hover:text-yellow-300 hover:bg-yellow-500/20 rounded-lg transition-colors" style={{fontSize: '16px'}} title="Quick add to Inbox (Shift+Enter)">⚡</button>
+                      </div>
                     )}
                 </div>
             )}

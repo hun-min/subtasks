@@ -24,14 +24,14 @@ const ChevronLeft = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="
 const ChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
 
 function SortableTargetItem({ target, wrapperClass, children, disabled }: { target: Target, wrapperClass: string, children: React.ReactNode, disabled?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: target.id!, disabled });
-  const style = { transform: CSS.Transform.toString(transform), transition };
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: target.id!, disabled });
+  const style = { transform: CSS.Transform.toString(transform) };
   return <div ref={setNodeRef} style={style} {...attributes} {...(disabled ? {} : listeners)} className={`relative flex flex-col ${wrapperClass} ${isDragging ? 'opacity-80' : ''}`}>{children}</div>;
 }
 
 function SortableTaskItem({ task, children }: { task: Task, children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id! });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.8 : 1 };
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: task.id! });
+  const style = { transform: CSS.Transform.toString(transform), opacity: isDragging ? 0.8 : 1 };
   return <div ref={setNodeRef} style={style} {...attributes} {...listeners}>{children}</div>;
 }
 
@@ -866,7 +866,7 @@ export default function App() {
                 >
 
 
-                    <div className={`flex items-center gap-2 w-full overflow-hidden relative ${activeTimer?.targetId === targetId ? 'border-l-2 border-yellow-500 pl-1' : ''}`}>
+                    <div className="flex items-center gap-2 w-full overflow-hidden relative z-10">
                         {activeTimer?.targetId === targetId && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000 z-0" style={{width: `${((activeTimer?.timeLeft || 0)/300)*100}%`}} />)}
                         <button onClick={(e) => { e.stopPropagation(); const isTimerActive = activeTimer?.targetId === targetId; if(isTimerActive) setActiveTimer(null); else { setActiveTimer({targetId: targetId, timeLeft: 300}); } }} className={`flex-shrink-0 text-xs font-mono cursor-pointer hover:text-blue-300 transition-colors z-10 ${activeTimer?.targetId === targetId ? 'text-yellow-500 font-bold' : isSpotlighted ? 'text-blue-400' : title === '⚡ Inbox' ? 'text-yellow-500' : 'text-gray-500'}`}>{activeTimer?.targetId === targetId ? `${Math.floor((activeTimer?.timeLeft || 0)/60)}:${((activeTimer?.timeLeft || 0)%60).toString().padStart(2,'0')}` : title === '⚡ Inbox' ? <ZapIcon /> : <TargetIcon />}</button>
                         {editingId?.type === 'target' && editingId.id === targetId ? (

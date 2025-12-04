@@ -19,15 +19,17 @@ export function useSystem() {
       }
       
       const { data: remoteTargets } = await supabase.from('targets').select('*');
-      if (remoteTargets) {
+      if (remoteTargets && remoteTargets.length > 0) {
         await db.targets.clear();
         await db.targets.bulkAdd(remoteTargets);
       }
       
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
-      if (remoteTasks) {
+      if (remoteTasks && remoteTasks.length > 0) {
+        const validTargetIds = new Set((await db.targets.toArray()).map(t => t.id));
+        const validTasks = remoteTasks.filter(task => !task.targetId || validTargetIds.has(task.targetId));
         await db.tasks.clear();
-        await db.tasks.bulkAdd(remoteTasks);
+        await db.tasks.bulkAdd(validTasks);
       }
     };
     syncData();
@@ -77,7 +79,7 @@ export function useSystem() {
     if (task.targetId) {
       const targetExists = await db.targets.get(task.targetId);
       if (targetExists) {
-        supabase.from('tasks').upsert([{ ...task, id }]).then(({ error }) => {
+        supabase.from('tasks').insert([{ ...task, id }]).then(({ error }) => {
           if (error) console.error('Sync Error (Task):', error);
         });
       }
@@ -87,7 +89,7 @@ export function useSystem() {
 
   const addSpace = async (space: Omit<Space, 'id'>) => {
     const id = await db.spaces.add(space) as number;
-    supabase.from('spaces').upsert([{ ...space, id }]).then(({ error }) => {
+    supabase.from('spaces').insert([{ ...space, id }]).then(({ error }) => {
       if (error) console.error('Space insert error:', error);
     });
     return id;
@@ -115,7 +117,7 @@ export function useSystem() {
   const addTarget = async (target: Omit<Target, 'id'>) => {
     const targetWithCompletion = { ...target, isCompleted: false };
     const id = await db.targets.add(targetWithCompletion) as number;
-    supabase.from('targets').upsert([{ ...targetWithCompletion, id }]).then(({ error }) => {
+    supabase.from('targets').insert([{ ...targetWithCompletion, id }]).then(({ error }) => {
       if (error) console.error('Sync Error (Target):', error);
     });
     return id;

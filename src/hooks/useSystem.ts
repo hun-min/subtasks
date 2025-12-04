@@ -41,14 +41,18 @@ export function useSystem() {
   const searchTargets = async (query: string, spaceId?: number) => {
     if (!query || !spaceId) return [];
     let results = await db.targets.where('title').startsWithIgnoreCase(query).sortBy('lastUsed');
-    results = results.filter(t => t.spaceId === spaceId);
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    results = results.filter(t => t.spaceId === spaceId && new Date(t.lastUsed) >= ninetyDaysAgo);
     return results.reverse().slice(0, 10);
   };
 
   const searchActions = async (query: string, targetId?: number, spaceId?: number) => {
     if (!query) return [];
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const tasks = targetId ? await db.tasks.where('targetId').equals(targetId).reverse().toArray() : await db.tasks.reverse().toArray();
-    const matches = tasks.filter(t => t.title.toLowerCase().startsWith(query.toLowerCase()));
+    const matches = tasks.filter(t => t.title.toLowerCase().startsWith(query.toLowerCase()) && new Date(t.createdAt) >= ninetyDaysAgo);
     
     if (spaceId) {
       const allTargets = await db.targets.toArray();

@@ -23,16 +23,16 @@ const CalendarIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill=
 const ChevronLeft = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
 const ChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
 
-function SortableTargetItem({ target, wrapperClass, children }: { target: Target, wrapperClass: string, children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: target.id! });
+function SortableTargetItem({ target, wrapperClass, children, disabled }: { target: Target, wrapperClass: string, children: React.ReactNode, disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: target.id!, disabled });
   const style = { transform: CSS.Transform.toString(transform), transition };
-  return <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`relative flex flex-col transition-all duration-500 ease-in-out ${wrapperClass} ${isDragging ? 'opacity-80' : ''}`}>{children}</div>;
+  return <div ref={setNodeRef} style={style} {...attributes} {...(disabled ? {} : listeners)} className={`relative flex flex-col ${wrapperClass} ${isDragging ? 'opacity-80' : ''}`}>{children}</div>;
 }
 
-function SortableTaskItem({ task, children }: { task: Task, children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id! });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.8 : 1 };
-  return <div ref={setNodeRef} style={style} {...attributes} {...listeners}>{children}</div>;
+function SortableTaskItem({ task, children, disabled }: { task: Task, children: React.ReactNode, disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id!, disabled });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.8 : 1, userSelect: (disabled ? 'text' : 'none') as React.CSSProperties['userSelect'] };
+  return <div ref={setNodeRef} style={style} {...attributes} {...(disabled ? {} : listeners)}>{children}</div>;
 }
 
 export default function App() {
@@ -43,7 +43,7 @@ export default function App() {
   });
   
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
   );
   
@@ -80,6 +80,7 @@ export default function App() {
   const [keyboardFocusedItem, setKeyboardFocusedItem] = useState<{type: string, id?: number} | null>(null);
   const [activeTimer, setActiveTimer] = useState<{taskId: number, timeLeft: number} | null>(null);
   const [changeDateModal, setChangeDateModal] = useState<{taskId: number, currentDate: string} | null>(null);
+  const [isMouseDownInInput, setIsMouseDownInInput] = useState(false);
 
   const getTaskAgeStyle = (createdAt: Date) => {
       const diffMs = new Date().getTime() - new Date(createdAt).getTime();
@@ -611,8 +612,11 @@ export default function App() {
   return (
     <div 
         className={`min-h-screen font-sans flex flex-col items-center p-4 pb-40 overflow-x-hidden bg-gray-950 text-gray-100 transition-colors duration-500`}
-        // [✨ 핵심 수정] 배경 클릭 시: 그룹 접기 + 입력창 초기화 + "편집 모드 강제 종료" + spotlight 해제
-        onClick={() => { 
+        onClick={() => {
+            if (isMouseDownInInput) {
+                setIsMouseDownInInput(false);
+                return;
+            }
             setExpandedGroup(null);
             if (editingId) saveEdit();
             setSpotlightGroup(null);
@@ -678,7 +682,7 @@ export default function App() {
           <div className={`relative flex flex-col shadow-2xl rounded-2xl bg-gray-900 border border-gray-800`}>
             <div className="flex items-center px-3 py-2 relative">
                 <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
-                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
+                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
                 {objValue.trim() && !isInputMode && (
                   <div className="absolute right-3 flex gap-1">
                     <button onClick={handleImmediateDone} className="p-1 text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
@@ -689,7 +693,7 @@ export default function App() {
             {isInputMode && (
                 <div className="px-3 pb-2 flex items-center relative">
                     <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
-                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-10" autoFocus />
+                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-10" autoFocus />
                     {actValue.trim() && (
                       <div className="absolute right-3 flex gap-1">
                         <button onClick={handleImmediateDone} className="p-1 text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
@@ -753,11 +757,11 @@ export default function App() {
                         const isTimerActive = activeTimer?.taskId === task.id;
                         const timeLeft = isTimerActive && activeTimer ? activeTimer.timeLeft : 300;
                         return (
-                          <SortableTaskItem key={task.id} task={task}>
+                          <SortableTaskItem key={task.id} task={task} disabled={editingId?.type === 'task' && editingId.id === task.id}>
                           <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTimerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
                               {isTimerActive && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />)}
                               {isTopTask && !editingId ? (<button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : task.timerCount ? `▶${task.timerCount}` : '▶'}</button>) : (<span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>)}
-                              {editingId?.type === 'task' && editingId.id === task.id ? (<input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />) : (<span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>)}
+                              {editingId?.type === 'task' && editingId.id === task.id ? (<input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" style={{pointerEvents: 'auto', userSelect: 'text'}} value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} onMouseDown={(e) => { e.stopPropagation(); setIsMouseDownInInput(true); }} autoFocus onClick={(e) => e.stopPropagation()} />) : (<span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>)}
                               {!isTimerActive && (<button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>)}
                               <button onClick={(e) => { e.stopPropagation(); setActiveTimer(null); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
                           </div>
@@ -838,7 +842,7 @@ export default function App() {
                 : 'opacity-100 z-auto';
 
             return (
-              <SortableTargetItem key={targetId} target={target} wrapperClass={wrapperClass}>
+              <SortableTargetItem key={targetId} target={target} wrapperClass={wrapperClass} disabled={editingId?.type === 'target' && editingId.id === targetId}>
                 {/* 1. Objective (Target) */}
                 <div 
                     className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border transition-all duration-500 cursor-pointer select-none z-30 group
@@ -851,7 +855,7 @@ export default function App() {
                     <div className="flex items-center gap-2 w-full overflow-hidden">
                         <span className={`flex-shrink-0 ${isSpotlighted ? 'text-blue-400' : title === '⚡ Inbox' ? 'text-yellow-500' : 'text-gray-500'}`}>{title === '⚡ Inbox' ? <ZapIcon /> : <TargetIcon />}</span>
                         {editingId?.type === 'target' && editingId.id === targetId ? (
-                            <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full max-w-[calc(100%-31px)] text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
+                            <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full max-w-[calc(100%-31px)] text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} onMouseDown={() => setIsMouseDownInInput(true)} autoFocus onClick={(e) => e.stopPropagation()} />
                         ) : (
                             <span onClick={(e) => { e.stopPropagation(); startEditing('target', targetId, title); }} className={`text-base font-medium cursor-pointer transition-colors truncate w-full ${keyboardFocusedItem?.type === 'target' && keyboardFocusedItem.id === targetId ? 'text-white font-bold' : 'text-gray-200 hover:text-white'}`}>{title}</span>
                         )}
@@ -900,7 +904,7 @@ export default function App() {
                       const isTimerActive = activeTimer?.taskId === task.id;
                       const timeLeft = isTimerActive && activeTimer ? activeTimer.timeLeft : 300;
                       return (
-                        <SortableTaskItem key={task.id} task={task}>
+                        <SortableTaskItem key={task.id} task={task} disabled={editingId?.type === 'task' && editingId.id === task.id}>
                         <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTimerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
                             {isTimerActive && (
                               <div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />
@@ -913,7 +917,7 @@ export default function App() {
                               <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
                             )}
                             {editingId?.type === 'task' && editingId.id === task.id ? (
-                                <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} autoFocus onClick={(e) => e.stopPropagation()} />
+                                <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" style={{pointerEvents: 'auto', userSelect: 'text'}} value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} onMouseDown={(e) => { e.stopPropagation(); setIsMouseDownInInput(true); }} autoFocus onClick={(e) => e.stopPropagation()} />
                             ) : (
                                 <span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>
                             )}

@@ -4,6 +4,7 @@
 
 * {
   background-repeat: no-repeat !important;
+  touch-action: manipulation;
 }
 
 body {

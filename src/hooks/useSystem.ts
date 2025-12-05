@@ -20,16 +20,20 @@ export function useSystem() {
       
       const { data: remoteTargets } = await supabase.from('targets').select('*');
       if (remoteTargets && remoteTargets.length > 0) {
-        await db.targets.clear();
-        await db.targets.bulkAdd(remoteTargets);
+        const localTargets = await db.targets.toArray();
+        const hiddenIds = new Set(localTargets.filter(t => t.hideFromAutocomplete).map(t => t.id));
+        const merged = remoteTargets.map(t => ({ ...t, hideFromAutocomplete: hiddenIds.has(t.id) || t.hideFromAutocomplete }));
+        await db.targets.bulkPut(merged);
       }
       
       const { data: remoteTasks } = await supabase.from('tasks').select('*');
       if (remoteTasks && remoteTasks.length > 0) {
         const validTargetIds = new Set((await db.targets.toArray()).map(t => t.id));
         const validTasks = remoteTasks.filter(task => !task.targetId || validTargetIds.has(task.targetId));
-        await db.tasks.clear();
-        await db.tasks.bulkAdd(validTasks);
+        const localTasks = await db.tasks.toArray();
+        const hiddenIds = new Set(localTasks.filter(t => t.hideFromAutocomplete).map(t => t.id));
+        const merged = validTasks.map(t => ({ ...t, hideFromAutocomplete: hiddenIds.has(t.id) || t.hideFromAutocomplete }));
+        await db.tasks.bulkPut(merged);
       }
     };
     syncData();
@@ -42,11 +46,16 @@ export function useSystem() {
 
   const searchTargets = async (query: string, spaceId?: number) => {
     if (!query || !spaceId) return [];
-    let results = await db.targets.where('title').startsWithIgnoreCase(query).sortBy('lastUsed');
+    const allTargets = await db.targets.toArray();
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    results = results.filter(t => t.spaceId === spaceId && new Date(t.lastUsed) >= ninetyDaysAgo);
-    return results.reverse().slice(0, 10);
+    const results = allTargets.filter(t => 
+      t.spaceId === spaceId && 
+      t.title.toLowerCase().includes(query.toLowerCase()) &&
+      new Date(t.lastUsed) >= ninetyDaysAgo &&
+      !t.hideFromAutocomplete
+    ).sort((a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime());
+    return results.slice(0, 10);
   };
 
   const searchActions = async (query: string, targetId?: number, spaceId?: number) => {
@@ -54,7 +63,7 @@ export function useSystem() {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const tasks = targetId ? await db.tasks.where('targetId').equals(targetId).reverse().toArray() : await db.tasks.reverse().toArray();
-    const matches = tasks.filter(t => t.title.toLowerCase().startsWith(query.toLowerCase()) && new Date(t.createdAt) >= ninetyDaysAgo);
+    const matches = tasks.filter(t => t.title.toLowerCase().includes(query.toLowerCase()) && new Date(t.createdAt) >= ninetyDaysAgo && !t.hideFromAutocomplete);
     
     if (spaceId) {
       const allTargets = await db.targets.toArray();

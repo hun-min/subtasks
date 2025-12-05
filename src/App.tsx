@@ -76,6 +76,7 @@ export default function App() {
   const [activeTimer, setActiveTimer] = useState<{taskId?: number, targetId?: number, timeLeft: number} | null>(null);
   const [changeDateModal, setChangeDateModal] = useState<{taskId: number, currentDate: string} | null>(null);
   const [isMouseDownInInput, setIsMouseDownInInput] = useState(false);
+  const [showInput, setShowInput] = useState(true);
   
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
@@ -193,6 +194,22 @@ export default function App() {
     });
     return grouped;
   }, [filteredCompletedTasks, allTargets, currentSpaceId, selectedDate]);
+
+  useEffect(() => {
+    let lastY = 0;
+    const handleScroll = () => {
+      const currentY = window.scrollY;
+      if (currentY > lastY && currentY > 50) {
+        setShowInput(false);
+      } else if (currentY < lastY - 3) {
+        setShowInput(true);
+      }
+      lastY = currentY;
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const initSpace = async () => {
@@ -422,7 +439,7 @@ export default function App() {
 
   const selectTarget = (item: Target) => {
     if (focusedInput === 'obj') {
-        setObjValue(item.title); setActValue(''); setSelectedTargetId(item.id!); setIsInputMode(true); setSuggestions([]);
+        setObjValue(item.title); setActValue(''); setSelectedTargetId(item.id!); setIsInputMode(false); setSuggestions([]);
     } else {
         setActValue(item.title); setSuggestions([]);
     }
@@ -499,26 +516,19 @@ export default function App() {
 
   const deleteTargetAsset = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
-    if (window.confirm('삭제?')) {
-      const target = await db.targets.get(id);
-      if (target) {
-        await db.targets.delete(id);
-        await supabase.from('targets').delete().eq('id', id);
-        const tasks = await db.tasks.where('targetId').equals(id).toArray();
-        await db.tasks.bulkDelete(tasks.map(t => t.id!));
-        await supabase.from('tasks').delete().eq('targetId', id);
-      } else {
-        const task = await db.tasks.get(id);
-        if (task) {
-          await db.tasks.delete(id);
-          await supabase.from('tasks').delete().eq('id', id);
-        }
+    if (!window.confirm('자동완성에서 숨기시겠습니까?')) return;
+    const target = await db.targets.get(id);
+    if (target) {
+      await db.targets.update(id, { hideFromAutocomplete: true });
+      await supabase.from('targets').update({ hideFromAutocomplete: true }).eq('id', id);
+    } else {
+      const task = await db.tasks.get(id);
+      if (task) {
+        await db.tasks.update(id, { hideFromAutocomplete: true });
+        await supabase.from('tasks').update({ hideFromAutocomplete: true }).eq('id', id);
       }
-      
-      setSuggestions([]);
-      setObjValue('');
-      setActValue('');
     }
+    setSuggestions([]);
   };
   const handleDeleteTask = async (taskId: number) => {
       if(window.confirm('삭제?')) {
@@ -607,12 +617,13 @@ export default function App() {
 
   return (
     <div 
-        className={`min-h-screen font-sans flex flex-col items-center p-4 pb-40 overflow-x-hidden bg-gray-950 text-gray-100 transition-colors duration-500`}
+        className={`min-h-screen font-sans flex flex-col items-center overflow-hidden bg-gray-950 text-gray-100 transition-colors duration-500`}
         onClick={() => {
             if (isMouseDownInInput) {
                 setIsMouseDownInInput(false);
                 return;
             }
+            setSuggestions([]);
             setExpandedGroup(null);
             if (editingId) saveEdit();
             setSpotlightGroup(null);
@@ -651,8 +662,8 @@ export default function App() {
           </div>
       )}
 
-      <div className="w-full max-w-md mt-8 space-y-8 relative z-10">
-        
+      {/* Header */}
+      <div className="w-full max-w-md pt-4 px-4 z-10 flex-shrink-0">
         <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm}>⦿</h1>
           <div className="hidden md:block">
@@ -670,40 +681,13 @@ export default function App() {
           </div>
         </header>
 
-        <div className={`md:hidden flex justify-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`}>
+        <div className={`md:hidden flex justify-center mt-2 transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`}>
           <WeekStreak getHeatmapData={getHeatmapData} currentSpaceId={currentSpaceId} />
         </div>
+      </div>
 
-        <div className={`relative w-full group z-50 transition-all duration-500 ${spotlightGroup ? 'opacity-0 pointer-events-none -translate-y-4' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
-          <div className={`relative flex flex-col shadow-2xl rounded-2xl bg-gray-900 border border-gray-800`}>
-            <div className="flex items-center px-3 py-2 relative">
-                <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
-                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
-                {objValue.trim() && !isInputMode && (
-                  <div className="absolute right-3 flex gap-1">
-                    <button onClick={handleImmediateDone} className="p-1 text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
-                  </div>
-                )}
-            </div>
-            {isInputMode && (
-                <div className="px-3 pb-2 flex items-center relative">
-                    <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
-                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Next Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-10" autoFocus />
-
-                </div>
-            )}
-          </div>
-          {suggestions.length > 0 && (
-            <ul className="absolute w-full mt-2 bg-gray-900/95 backdrop-blur-md border border-gray-800 rounded-2xl shadow-2xl overflow-hidden max-h-[50vh] overflow-y-auto z-50">
-              {suggestions.map((item, index) => (
-                <li key={item.id} onClick={() => selectTarget(item)} className={`px-5 py-3 cursor-pointer flex justify-between items-center border-b border-gray-800 last:border-0 group ${index === selectedIndex ? 'bg-blue-900/20' : 'hover:bg-gray-800/50'}`}>
-                  <span className={`font-bold text-base block ${index === selectedIndex ? 'text-blue-400' : 'text-gray-200'}`}>{item.title}</span>
-                  <button onClick={(e) => deleteTargetAsset(e, item.id!)} className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"><XIcon /></button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {/* Main Scrollable Content */}
+      <div className="main-scroll-container flex-1 w-full max-w-md overflow-y-auto px-4 pt-10 pb-40 scrollbar-hide">
         
         {/* --- Inbox (Always on top) --- */}
         {(() => {
@@ -715,7 +699,7 @@ export default function App() {
           const isExpanded = expandedGroup === inboxTarget.title;
           const isSpotlighted = spotlightGroup === inboxTarget.title;
           return (
-            <div className="space-y-2 pb-0 -mt-16">
+            <div className="space-y-2 pb-4">
               <div key={targetId}>
                 <div 
                     className={`flex items-center justify-between px-3 py-1.5 bg-gray-900 border transition-all duration-500 cursor-pointer select-none z-30 group
@@ -751,8 +735,8 @@ export default function App() {
                 {tasks.length > 0 && (
                 <div className="relative mb-2">
                   {/* Stacked card layers - only show when collapsed */}
-                  {!isExpanded && tasks.length >= 3 && <div className={`absolute left-1 right-1 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
-                  {!isExpanded && tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-0.5 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
+                  {!isExpanded && tasks.length >= 3 && <div className={`absolute left-1 right-1 top-2 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
+                  {!isExpanded && tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
                   
                   <div className={`relative bg-gray-900 border border-t-0 rounded-b-xl px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
@@ -819,8 +803,41 @@ export default function App() {
                     </div>
                 )}
 
-                {isExpanded && tasks.length > 0 && addingTaskToTarget !== targetId && (
+                {isExpanded && addingTaskToTarget === targetId && (
                     <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 py-0.5">
+                            <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
+                            <input 
+                                type="text" 
+                                value={newTaskTitle} 
+                                onChange={(e) => setNewTaskTitle(e.target.value)} 
+                                onBlur={async () => {
+                                    if (newTaskTitle.trim()) {
+                                        await addTask({ targetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
+                                    }
+                                    setAddingTaskToTarget(null);
+                                    setNewTaskTitle('');
+                                }}
+                                onKeyDown={async (e) => {
+                                    if (e.key === 'Enter' && newTaskTitle.trim()) {
+                                        await addTask({ targetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
+                                        setAddingTaskToTarget(null);
+                                        setNewTaskTitle('');
+                                    } else if (e.key === 'Escape') {
+                                        setAddingTaskToTarget(null);
+                                        setNewTaskTitle('');
+                                    }
+                                }}
+                                placeholder="Action..."
+                                className="flex-1 min-w-0 bg-transparent text-gray-200 text-sm outline-none"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {isExpanded && tasks.length > 0 && addingTaskToTarget !== targetId && (
+                    <div className="px-3 pb-2 flex items-center" onClick={(e) => e.stopPropagation()}>
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -908,8 +925,8 @@ export default function App() {
                 {tasks.length > 0 && (
                 <div className="relative mb-2">
                   {/* Stacked card layers - only show when collapsed */}
-                  {!isExpanded && tasks.length >= 3 && <div className={`absolute left-1 right-1 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
-                  {!isExpanded && tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-0.5 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
+                  {!isExpanded && tasks.length >= 3 && <div className={`absolute left-1 right-1 top-2 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/30 bg-gray-900/30' : 'border-gray-700/30 bg-gray-900/30'}`} />}
+                  {!isExpanded && tasks.length >= 2 && <div className={`absolute left-0.5 right-0.5 top-1 h-full rounded-b-xl border border-t-0 ${isSpotlighted ? 'border-blue-500/50 bg-gray-900/50' : 'border-gray-700/50 bg-gray-900/50'}`} />}
                   
                   <div className={`relative bg-gray-900 border border-t-0 rounded-b-xl px-3 py-2 space-y-1 transition-all duration-500 ${isSpotlighted ? 'border-blue-500' : 'border-gray-700'}`}>
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleTaskDragEnd(e, tasks)}>
@@ -982,7 +999,7 @@ export default function App() {
                 )}
 
                 {isExpanded && addingTaskToTarget !== targetId && (
-                    <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="px-3 pb-2 flex items-center" onClick={(e) => e.stopPropagation()}>
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -1005,17 +1022,17 @@ export default function App() {
         {/* --- Backlog Groups --- */}
         {activeTargets.filter(t => t.title !== '⚡ Inbox').length > 3 && (
           <div className={`mt-4 pt-4 border-t border-gray-900 transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`}>
-            <div className="flex items-center gap-2 mb-4 px-2 opacity-40">
-              <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Backlog ({activeTargets.filter(t => t.title !== '⚡ Inbox').length - 3})</span>
+            <div className="flex items-center gap-2 mb-4 px-0.5 opacity-60">
+              <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Backlog ({activeTargets.filter(t => t.title !== '⚡ Inbox').length - 3})</span>
             </div>
-            <div className="space-y-2 opacity-30 grayscale pointer-events-none select-none">
+            <div className="space-y-2 opacity-50 grayscale pointer-events-none select-none">
               {activeTargets.filter(t => t.title !== '⚡ Inbox').slice(3).map((target) => {
                 const title = target.title;
                 const tasks = groupedTasks[title] || [];
                 return (
                   <div key={target.id} className={`flex items-center justify-between px-3 py-1.5 border-2 rounded-xl transition-all ${keyboardFocusedItem?.type === 'backlog' && keyboardFocusedItem.id === target.id ? 'border-gray-400' : 'border-gray-800'}`}>
-                    <span className="text-gray-500 text-sm">{title}</span>
-                    <span className="text-xs text-gray-700 font-mono">{tasks.length}</span>
+                    <span className="text-gray-300 text-sm">{title}</span>
+                    <span className="text-xs text-gray-500 font-mono">{tasks.length}</span>
                   </div>
                 );
               })}
@@ -1096,7 +1113,7 @@ export default function App() {
 
         {/* Change Date Modal */}
         {changeDateModal && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={() => setChangeDateModal(null)}>
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={(e) => { e.stopPropagation(); setChangeDateModal(null); }}>
                 <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-80" onClick={(e) => e.stopPropagation()}>
                     <h3 className="text-lg font-bold text-white mb-4">Change Completion Date</h3>
                     <input 
@@ -1119,7 +1136,7 @@ export default function App() {
 
         {/* Space Edit Modal */}
         {showSpaceModal && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={() => setShowSpaceModal(false)}>
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={(e) => { e.stopPropagation(); setShowSpaceModal(false); }}>
                 <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-80" onClick={(e) => e.stopPropagation()}>
                     <h3 className="text-lg font-bold text-white mb-4">공간 편집</h3>
                     <input type="text" value={editSpaceTitle} onChange={(e) => setEditSpaceTitle(e.target.value)} placeholder="이름" className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg mb-4 outline-none" />
@@ -1134,7 +1151,7 @@ export default function App() {
         {/* History Log */}
         {showHistory && (
           <div className={`mt-10 pt-6 border-t border-gray-800 transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 px-0.5">
               <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Completed Log</h2>
               <div className="flex gap-2">
                 <button 
@@ -1282,6 +1299,42 @@ export default function App() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Bottom Input (Fixed) */}
+      <div 
+        className={`fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-gray-950 via-gray-950/80 to-transparent transition-all duration-300 ${spotlightGroup ? 'opacity-0 pointer-events-none translate-y-10' : showInput ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full pointer-events-none'}`}
+        onClick={() => setSuggestions([])}
+      >
+        <div className="w-full max-w-md mx-auto px-4 pt-2 pb-8 relative" onClick={(e) => e.stopPropagation()}>
+          <div className={`flex flex-col shadow-2xl rounded-xl bg-gray-900 border border-gray-700`}>
+            <div className="flex items-center px-4 py-3 relative">
+                <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
+                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
+                {objValue.trim() && !isInputMode && (
+                  <div className="absolute right-3 flex gap-1">
+                    <button onClick={handleImmediateDone} className="p-1 text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
+                  </div>
+                )}
+            </div>
+            {isInputMode && (
+                <div className="px-3 pb-2 flex items-center relative">
+                    <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
+                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-10" autoFocus />
+                </div>
+            )}
+          </div>
+          {suggestions.length > 0 && (
+            <ul className="absolute bottom-full left-4 right-4 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-[40vh] overflow-y-auto z-50" onClick={(e) => e.stopPropagation()}>
+              {suggestions.map((item, index) => (
+                <li key={item.id} onClick={() => selectTarget(item)} className={`px-5 py-2 cursor-pointer flex justify-between items-center border-b border-gray-800 last:border-0 group ${index === selectedIndex ? 'bg-blue-900/20' : 'hover:bg-gray-800/50'}`}>
+                  <span className={`font-bold text-base block ${index === selectedIndex ? 'text-blue-400' : 'text-gray-200'}`}>{item.title}</span>
+                  <button onClick={(e) => { e.stopPropagation(); deleteTargetAsset(e, item.id!); }} className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"><XIcon /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

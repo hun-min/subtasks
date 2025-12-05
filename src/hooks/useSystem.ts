@@ -85,6 +85,21 @@ export function useSystem() {
 
   const addTask = async (task: Omit<Task, 'id'>) => {
     const id = await db.tasks.add(task) as number;
+    
+    if (task.isCompleted && task.targetId) {
+      const target = await db.targets.get(task.targetId);
+      if (target) {
+        await db.targets.update(task.targetId, { 
+          usageCount: (target.usageCount || 0) + 1,
+          lastUsed: new Date()
+        });
+        supabase.from('targets').update({ 
+          usageCount: (target.usageCount || 0) + 1,
+          lastUsed: new Date()
+        }).eq('id', task.targetId).then();
+      }
+    }
+    
     if (task.targetId) {
       const targetExists = await db.targets.get(task.targetId);
       if (targetExists) {
@@ -133,11 +148,29 @@ export function useSystem() {
   };
 
   const completeTask = async (taskId: number) => {
-    const completedAt = new Date();
-    await db.tasks.update(taskId, { isCompleted: true, completedAt });
-    supabase.from('tasks').update({ isCompleted: true, completedAt }).eq('id', taskId).then(({ error }) => {
-      if (error) console.log('Supabase sync skipped:', error.message);
-    });
+    const task = await db.tasks.get(taskId);
+    if (task && !task.isCompleted) {
+      const completedAt = new Date();
+      await db.tasks.update(taskId, { isCompleted: true, completedAt });
+      
+      if (task.targetId) {
+        const target = await db.targets.get(task.targetId);
+        if (target) {
+          await db.targets.update(task.targetId, { 
+            usageCount: (target.usageCount || 0) + 1,
+            lastUsed: new Date() 
+          });
+          supabase.from('targets').update({ 
+            usageCount: (target.usageCount || 0) + 1,
+            lastUsed: new Date() 
+          }).eq('id', task.targetId).then();
+        }
+      }
+      
+      supabase.from('tasks').update({ isCompleted: true, completedAt }).eq('id', taskId).then(({ error }) => {
+        if (error) console.log('Supabase sync skipped:', error.message);
+      });
+    }
   };
 
   const completeTarget = async (targetId: number) => {

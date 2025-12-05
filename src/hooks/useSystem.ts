@@ -196,7 +196,8 @@ export function useSystem() {
         } else {
              await db.tasks.update(upperTask.id!, { createdAt: currentTask.createdAt });
              await db.tasks.update(currentTask.id!, { createdAt: upperTask.createdAt });
-             supabase.from('tasks').upsert([{ id: upperTask.id, createdAt: currentTask.createdAt }, { id: currentTask.id, createdAt: upperTask.createdAt }]).then();
+             supabase.from('tasks').update({ createdAt: currentTask.createdAt }).eq('id', upperTask.id).then();
+             supabase.from('tasks').update({ createdAt: upperTask.createdAt }).eq('id', currentTask.id).then();
         }
     }
   };
@@ -214,7 +215,8 @@ export function useSystem() {
         } else {
              await db.tasks.update(lowerTask.id!, { createdAt: currentTask.createdAt });
              await db.tasks.update(currentTask.id!, { createdAt: lowerTask.createdAt });
-             supabase.from('tasks').upsert([{ id: lowerTask.id, createdAt: currentTask.createdAt }, { id: currentTask.id, createdAt: lowerTask.createdAt }]).then();
+             supabase.from('tasks').update({ createdAt: currentTask.createdAt }).eq('id', lowerTask.id).then();
+             supabase.from('tasks').update({ createdAt: lowerTask.createdAt }).eq('id', currentTask.id).then();
         }
     }
   };

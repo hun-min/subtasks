@@ -175,7 +175,7 @@ export default function App() {
     });
     
     if (allTargets) {
-      const completed = allTargets.filter(target => target.isCompleted && (!currentSpaceId || target.spaceId === currentSpaceId) && !completedTargetIds.has(target.id!));
+      const completed = allTargets.filter(target => target.isCompleted && (!currentSpaceId || target.spaceId === currentSpaceId));
       const filtered = !selectedDate ? completed : completed.filter(target => {
         if (!target.lastUsed) return false;
         const targetDate = target.lastUsed instanceof Date ? target.lastUsed : new Date(target.lastUsed);
@@ -249,18 +249,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let initialHeight = window.innerHeight;
     const handleResize = () => {
-      if (window.visualViewport) {
-        const viewportHeight = window.visualViewport.height;
-        const windowHeight = window.innerHeight;
-        const diff = windowHeight - viewportHeight;
-        setKeyboardHeight(diff > 0 ? diff : 0);
-      }
+      const currentHeight = window.innerHeight;
+      const diff = initialHeight - currentHeight;
+      setKeyboardHeight(diff > 0 ? diff : 0);
     };
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize);
-      return () => window.visualViewport?.removeEventListener('resize', handleResize);
-    }
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -551,15 +547,16 @@ export default function App() {
   const toggleSpotlight = () => { if (contextMenu) { if (spotlightGroup === contextMenu.title) { setSpotlightGroup(null); } else { setSpotlightGroup(contextMenu.title); } } };
   const handleGeneralDelete = async () => {
       if (!contextMenu) return;
-      if (contextMenu.type === 'group') { if (window.confirm(`"${contextMenu.title}" 전체 삭제?`)) await deleteGroup(contextMenu.id); } 
+      if (contextMenu.type === 'group') { if (window.confirm('삭제?')) await deleteGroup(contextMenu.id); } 
       else if (contextMenu.type === 'space') { 
-        if (window.confirm(`"${contextMenu.title}" 공간을 삭제하시겠습니까? 모든 목표와 할일이 삭제됩니다.`)) {
+        const input = prompt('삭제하려면 "삭제"를 입력하세요:');
+        if (input === '삭제') {
           await deleteSpace(contextMenu.id);
           const spaces = await db.spaces.toArray();
           if (spaces.length > 0) setCurrentSpaceId(spaces[0].id!);
         }
       }
-      else { if (window.confirm(`삭제?`)) await deleteTask(contextMenu.id); }
+      else { if (window.confirm('삭제?')) await deleteTask(contextMenu.id); }
       setContextMenu(null);
   };
 
@@ -721,19 +718,13 @@ export default function App() {
                         <button 
                             onClick={(e) => { 
                                 e.stopPropagation(); 
-                                if(window.confirm(`"${inboxTarget.title}" 목표를 삭제하시겠습니까?`)) deleteGroup(targetId); 
+                                if(window.confirm('삭제?')) deleteGroup(targetId); 
                             }} 
                             className="text-gray-600 hover:text-red-400 transition-opacity opacity-0 group-hover:opacity-100"
                         >
                             <TrashIcon />
                         </button>
                         <span onClick={(e) => { e.stopPropagation(); setExpandedGroup(isExpanded ? null : inboxTarget.title); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all">{tasks.length}</span>
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); completeTarget(targetId); }} 
-                            className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"
-                        >
-                            <CheckIcon />
-                        </button>
                     </div>
                 </div>
                 {tasks.length > 0 && (
@@ -755,6 +746,7 @@ export default function App() {
                               <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : <TargetIcon />}</button>
                               {editingId?.type === 'task' && editingId.id === task.id ? (<input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => { e.stopPropagation(); setIsMouseDownInInput(true); }} autoFocus onClick={(e) => e.stopPropagation()} />) : (<span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>)}
                               {!isTimerActive && (<button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>)}
+                              <button onClick={(e) => { e.stopPropagation(); setExpandedGroup(inboxTarget.title); setAddingTaskToTarget(task.id!); setNewTaskTitle(''); }} className="text-gray-400 hover:text-blue-400 cursor-pointer transition-all flex-shrink-0 z-10 font-normal mr-1">↳</button>
 
                               <button onClick={(e) => { e.stopPropagation(); setActiveTimer(null); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
                           </div>
@@ -767,7 +759,50 @@ export default function App() {
                 </div>
                 )}
 
-
+                {isExpanded && addingTaskToTarget && tasks.find(t => t.id === addingTaskToTarget) && (
+                    <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 py-0.5">
+                            <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
+                            <input 
+                                type="text" 
+                                value={newTaskTitle} 
+                                onChange={(e) => setNewTaskTitle(e.target.value)} 
+                                onBlur={async () => {
+                                    if (newTaskTitle.trim()) {
+                                        const inboxTask = tasks.find(t => t.id === addingTaskToTarget);
+                                        if (inboxTask) {
+                                            const newTargetId = await addTarget({ spaceId: currentSpaceId!, title: inboxTask.title, defaultAction: '', notes: '', usageCount: 1, lastUsed: new Date() });
+                                            await addTask({ targetId: newTargetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
+                                            await deleteTask(inboxTask.id!);
+                                            setExpandedGroup(inboxTask.title);
+                                        }
+                                    }
+                                    setAddingTaskToTarget(null);
+                                    setNewTaskTitle('');
+                                }}
+                                onKeyDown={async (e) => {
+                                    if (e.key === 'Enter' && newTaskTitle.trim()) {
+                                        const inboxTask = tasks.find(t => t.id === addingTaskToTarget);
+                                        if (inboxTask) {
+                                            const newTargetId = await addTarget({ spaceId: currentSpaceId!, title: inboxTask.title, defaultAction: '', notes: '', usageCount: 1, lastUsed: new Date() });
+                                            await addTask({ targetId: newTargetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
+                                            await deleteTask(inboxTask.id!);
+                                            setExpandedGroup(inboxTask.title);
+                                        }
+                                        setAddingTaskToTarget(null);
+                                        setNewTaskTitle('');
+                                    } else if (e.key === 'Escape') {
+                                        setAddingTaskToTarget(null);
+                                        setNewTaskTitle('');
+                                    }
+                                }}
+                                placeholder="Action..."
+                                className="flex-1 min-w-0 bg-transparent text-gray-200 text-sm outline-none"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+                )}
 
                 {isExpanded && addingTaskToTarget === targetId && (
                     <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
@@ -863,21 +898,35 @@ export default function App() {
                         <button 
                             onClick={(e) => { 
                                 e.stopPropagation(); 
-                                if(window.confirm(`"${title}" 목표를 삭제하시겠습니까?`)) deleteGroup(targetId); 
+                                if(window.confirm('삭제?')) deleteGroup(targetId); 
                             }} 
                             className={`text-gray-600 hover:text-red-400 transition-opacity ${editingId?.type === 'target' && editingId.id === targetId ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                         >
                             <TrashIcon />
                         </button>
-                        <span 
-                            onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setExpandedGroup(isExpanded ? null : title);
-                            }}
-                            className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all"
-                        >
-                            {tasks.length}
-                        </span>
+                        {tasks.length === 0 ? (
+                            <button 
+                                onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setAddingTaskToTarget(targetId);
+                                    setNewTaskTitle('');
+                                    setExpandedGroup(title);
+                                }}
+                                className="text-gray-400 hover:text-blue-400 cursor-pointer transition-all font-normal mr-1"
+                            >
+                                ↳
+                            </button>
+                        ) : (
+                            <span 
+                                onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setExpandedGroup(isExpanded ? null : title);
+                                }}
+                                className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all"
+                            >
+                                {tasks.length}
+                            </span>
+                        )}
                         <button 
                             onClick={(e) => { e.stopPropagation(); completeTarget(targetId); }} 
                             className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all"
@@ -1275,7 +1324,7 @@ export default function App() {
         style={{ bottom: `${keyboardHeight}px` }}
         onClick={() => setSuggestions([])}
       >
-        <div className="w-full max-w-md mx-auto px-4 pt-2 pb-8 relative flex items-stretch gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="w-full max-w-md mx-auto px-3 pt-2 pb-8 relative flex items-stretch gap-2" onClick={(e) => e.stopPropagation()}>
           <div className={`flex-1 flex flex-col shadow-2xl rounded-xl bg-gray-900 border border-gray-700 transition-all duration-300 ${showInput ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
             <div className="flex items-center px-4 py-3 relative">
                 <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>

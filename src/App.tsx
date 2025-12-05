@@ -687,7 +687,7 @@ export default function App() {
       </div>
 
       {/* Main Scrollable Content */}
-      <div className="main-scroll-container flex-1 w-full max-w-md overflow-y-auto px-4 pt-10 pb-40 scrollbar-hide">
+      <div className="main-scroll-container flex-1 w-full max-w-md overflow-y-auto px-4 pt-10 pb-6 scrollbar-hide">
         
         {/* --- Inbox (Always on top) --- */}
         {(() => {
@@ -1018,6 +1018,8 @@ export default function App() {
         </div>
         </SortableContext>
         </DndContext>
+
+        <div className={activeTargets.filter(t => t.title !== '⚡ Inbox').length <= 3 ? '-mb-6' : ''}></div>
 
         {/* --- Backlog Groups --- */}
         {activeTargets.filter(t => t.title !== '⚡ Inbox').length > 3 && (

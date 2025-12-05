@@ -77,6 +77,7 @@ export default function App() {
   const [changeDateModal, setChangeDateModal] = useState<{taskId: number, currentDate: string} | null>(null);
   const [isMouseDownInInput, setIsMouseDownInInput] = useState(false);
   const [showInput, setShowInput] = useState(true);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
@@ -245,6 +246,21 @@ export default function App() {
       const handleClick = () => setContextMenu(null);
       window.addEventListener('click', handleClick);
       return () => window.removeEventListener('click', handleClick);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.visualViewport) {
+        const viewportHeight = window.visualViewport.height;
+        const windowHeight = window.innerHeight;
+        const diff = windowHeight - viewportHeight;
+        setKeyboardHeight(diff > 0 ? diff : 0);
+      }
+    };
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+      return () => window.visualViewport?.removeEventListener('resize', handleResize);
+    }
   }, []);
 
   useEffect(() => {
@@ -739,7 +755,7 @@ export default function App() {
                               <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}` : <TargetIcon />}</button>
                               {editingId?.type === 'task' && editingId.id === task.id ? (<input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => { e.stopPropagation(); setIsMouseDownInInput(true); }} autoFocus onClick={(e) => e.stopPropagation()} />) : (<span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>)}
                               {!isTimerActive && (<button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>)}
-                              <span onClick={(e) => { e.stopPropagation(); setAddingTaskToTarget(task.id!); setNewTaskTitle(''); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-blue-500 text-xs text-gray-400 flex items-center justify-center cursor-pointer transition-all flex-shrink-0 z-10">0</span>
+
                               <button onClick={(e) => { e.stopPropagation(); setActiveTimer(null); handleCompleteTask(task.id!); e.currentTarget.blur(); }} className="w-5 h-5 rounded-full border border-gray-500 hover:border-green-500 hover:bg-green-500/20 text-transparent hover:text-green-500 flex items-center justify-center transition-all flex-shrink-0 z-10"><CheckIcon /></button>
                           </div>
                         );
@@ -751,45 +767,7 @@ export default function App() {
                 </div>
                 )}
 
-                {isExpanded && addingTaskToTarget && tasks.find(t => t.id === addingTaskToTarget) && (
-                    <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-2 py-0.5">
-                            <span className="text-gray-600 ml-0.5 flex-shrink-0 leading-none">↳</span>
-                            <input 
-                                type="text" 
-                                value={newTaskTitle} 
-                                onChange={(e) => setNewTaskTitle(e.target.value)} 
-                                onBlur={async () => {
-                                    if (newTaskTitle.trim()) {
-                                        await addTarget({ spaceId: currentSpaceId!, title: newTaskTitle.trim(), defaultAction: '', notes: '', usageCount: 1, lastUsed: new Date() });
-                                        setExpandedGroup(newTaskTitle.trim());
-                                    }
-                                    setAddingTaskToTarget(null);
-                                    setNewTaskTitle('');
-                                }}
-                                onKeyDown={async (e) => {
-                                    if (e.key === 'Enter' && newTaskTitle.trim()) {
-                                        const inboxTask = tasks.find(t => t.id === addingTaskToTarget);
-                                        if (inboxTask) {
-                                            const newTargetId = await addTarget({ spaceId: currentSpaceId!, title: inboxTask.title, defaultAction: '', notes: '', usageCount: 1, lastUsed: new Date() });
-                                            await addTask({ targetId: newTargetId, title: newTaskTitle.trim(), isCompleted: false, createdAt: new Date() });
-                                            await deleteTask(inboxTask.id!);
-                                            setExpandedGroup(inboxTask.title);
-                                        }
-                                        setAddingTaskToTarget(null);
-                                        setNewTaskTitle('');
-                                    } else if (e.key === 'Escape') {
-                                        setAddingTaskToTarget(null);
-                                        setNewTaskTitle('');
-                                    }
-                                }}
-                                placeholder="Action..."
-                                className="flex-1 min-w-0 bg-transparent text-gray-200 text-sm outline-none"
-                                autoFocus
-                            />
-                        </div>
-                    </div>
-                )}
+
 
                 {isExpanded && addingTaskToTarget === targetId && (
                     <div className="px-3 pb-2" onClick={(e) => e.stopPropagation()}>
@@ -824,7 +802,7 @@ export default function App() {
                     </div>
                 )}
 
-                {isExpanded && tasks.length > 0 && addingTaskToTarget !== targetId && (
+                {isExpanded && addingTaskToTarget !== targetId && (
                     <div className="px-3 pb-2 flex items-center" onClick={(e) => e.stopPropagation()}>
                         <button 
                             onClick={(e) => {
@@ -1293,7 +1271,8 @@ export default function App() {
 
       {/* Bottom Input (Fixed) */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-gray-950 via-gray-950/80 to-transparent transition-all duration-300 ${spotlightGroup ? 'opacity-0 pointer-events-none translate-y-10' : 'opacity-100 translate-y-0'}`}
+        className={`fixed left-0 right-0 z-50 bg-gradient-to-t from-gray-950 via-gray-950/80 to-transparent transition-all duration-300 ${spotlightGroup ? 'opacity-0 pointer-events-none translate-y-10' : 'opacity-100 translate-y-0'}`}
+        style={{ bottom: `${keyboardHeight}px` }}
         onClick={() => setSuggestions([])}
       >
         <div className="w-full max-w-md mx-auto px-4 pt-2 pb-8 relative flex items-stretch gap-2" onClick={(e) => e.stopPropagation()}>

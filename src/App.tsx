@@ -1316,9 +1316,9 @@ export default function App() {
           </div>
           <button
             onClick={() => setShowInput(!showInput)}
-            className="w-12 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-all flex-shrink-0 text-xl self-stretch flex items-center justify-center"
+            className="w-10 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-all flex-shrink-0 self-stretch flex items-center justify-center"
           >
-            {showInput ? '↓' : '+'}
+            {showInput ? <XIcon /> : '+'}
           </button>
           {suggestions.length > 0 && (
             <ul className="absolute bottom-full left-4 right-4 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-[40vh] overflow-y-auto z-50" onClick={(e) => e.stopPropagation()}>

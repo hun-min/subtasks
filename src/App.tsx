@@ -158,6 +158,8 @@ export default function App() {
     });
   }, [completedTasks, selectedDate]);
 
+
+
   const groupedCompletedItems = React.useMemo(() => {
     const items: Array<{type: 'task' | 'target', data: Task | Target, date: Date}> = [];
     const completedTargetIds = new Set<number>();
@@ -195,21 +197,7 @@ export default function App() {
     return grouped;
   }, [filteredCompletedTasks, allTargets, currentSpaceId, selectedDate]);
 
-  useEffect(() => {
-    let lastY = 0;
-    const handleScroll = () => {
-      const currentY = window.scrollY;
-      if (currentY > lastY && currentY > 50) {
-        setShowInput(false);
-      } else if (currentY < lastY - 3) {
-        setShowInput(true);
-      }
-      lastY = currentY;
-    };
-    
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+
 
   useEffect(() => {
     const initSpace = async () => {
@@ -1305,17 +1293,17 @@ export default function App() {
 
       {/* Bottom Input (Fixed) */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-gray-950 via-gray-950/80 to-transparent transition-all duration-300 ${spotlightGroup ? 'opacity-0 pointer-events-none translate-y-10' : showInput ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full pointer-events-none'}`}
+        className={`fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-gray-950 via-gray-950/80 to-transparent transition-all duration-300 ${spotlightGroup ? 'opacity-0 pointer-events-none translate-y-10' : 'opacity-100 translate-y-0'}`}
         onClick={() => setSuggestions([])}
       >
-        <div className="w-full max-w-md mx-auto px-4 pt-2 pb-8 relative" onClick={(e) => e.stopPropagation()}>
-          <div className={`flex flex-col shadow-2xl rounded-xl bg-gray-900 border border-gray-700`}>
+        <div className="w-full max-w-md mx-auto px-4 pt-2 pb-8 relative flex items-stretch gap-2" onClick={(e) => e.stopPropagation()}>
+          <div className={`flex-1 flex flex-col shadow-2xl rounded-xl bg-gray-900 border border-gray-700 transition-all duration-300 ${showInput ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
             <div className="flex items-center px-4 py-3 relative">
                 <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
                 <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
                 {objValue.trim() && !isInputMode && (
                   <div className="absolute right-3 flex gap-1">
-                    <button onClick={handleImmediateDone} className="p-1 text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
+                    <button onClick={handleImmediateDone} className="w-6 h-6 flex items-center justify-center text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
                   </div>
                 )}
             </div>
@@ -1326,6 +1314,12 @@ export default function App() {
                 </div>
             )}
           </div>
+          <button
+            onClick={() => setShowInput(!showInput)}
+            className="w-12 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-all flex-shrink-0 text-xl self-stretch flex items-center justify-center"
+          >
+            {showInput ? '↓' : '+'}
+          </button>
           {suggestions.length > 0 && (
             <ul className="absolute bottom-full left-4 right-4 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-[40vh] overflow-y-auto z-50" onClick={(e) => e.stopPropagation()}>
               {suggestions.map((item, index) => (

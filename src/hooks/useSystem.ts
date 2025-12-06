@@ -103,7 +103,7 @@ export function useSystem() {
     if (task.targetId) {
       const targetExists = await db.targets.get(task.targetId);
       if (targetExists) {
-        supabase.from('tasks').insert([{ ...task, id }]).then(({ error }) => {
+        supabase.from('tasks').upsert([{ ...task, id }]).then(({ error }) => {
           if (error) console.error('Sync Error (Task):', error);
         });
       }
@@ -141,7 +141,7 @@ export function useSystem() {
   const addTarget = async (target: Omit<Target, 'id'>) => {
     const targetWithCompletion = { ...target, isCompleted: false };
     const id = await db.targets.add(targetWithCompletion) as number;
-    supabase.from('targets').insert([{ ...targetWithCompletion, id }]).then(({ error }) => {
+    supabase.from('targets').upsert([{ ...targetWithCompletion, id }]).then(({ error }) => {
       if (error) console.error('Sync Error (Target):', error);
     });
     return id;

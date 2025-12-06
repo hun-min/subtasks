@@ -663,6 +663,41 @@ export default function App() {
           </div>
       )}
 
+      {activeTimer && (() => {
+        const currentTask = activeTimer.taskId ? activeTasks?.find(t => t.id === activeTimer.taskId) : null;
+        const currentTarget = activeTimer.targetId ? allTargets?.find(t => t.id === activeTimer.targetId) : null;
+        if (!currentTask && !currentTarget) return null;
+        const targetTitle = currentTask ? getTargetTitle(currentTask.targetId) : currentTarget?.title || '';
+        const title = currentTask ? currentTask.title : currentTarget?.title || '';
+        const timeLeft = activeTimer.timeLeft;
+        const progress = ((300 - timeLeft) / 300) * 100;
+        return (
+          <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center transition-all duration-500">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-gray-950 to-gray-950" />
+            <div className="z-10 w-full max-w-2xl px-8 flex flex-col items-center text-center space-y-12">
+              <div className="space-y-2 opacity-80">
+                <span className="text-blue-400 font-medium tracking-[0.3em] uppercase text-xs">Current Objective</span>
+                <h2 className="text-xl text-gray-400 font-light">{targetTitle}</h2>
+              </div>
+              <div className="space-y-6">
+                <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight animate-in fade-in zoom-in-95 duration-500">{title}</h1>
+                <div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{Math.floor(timeLeft / 60)}<span className="animate-pulse">:</span>{Math.floor(timeLeft % 60).toString().padStart(2, '0')}</div>
+              </div>
+              <div className="w-full max-w-md h-1 bg-gray-900 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-blue-600 to-purple-500 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${progress}%` }} />
+              </div>
+              <div className="grid grid-cols-1 gap-4 pt-8 w-full max-w-xs">
+                <button onClick={() => { if(currentTask) { handleCompleteTask(currentTask.id!); } else if(currentTarget) { completeTarget(currentTarget.id!); } setActiveTimer(null); }} className="group relative py-5 px-8 rounded-2xl bg-white text-black font-bold text-xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] overflow-hidden">
+                  <span className="relative z-10 flex items-center justify-center gap-2">Done <CheckIcon /></span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-200/50 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                </button>
+                <button onClick={() => setActiveTimer(null)} className="text-gray-700 text-sm hover:text-gray-500 transition-colors">잠시 미루기 (Pause)</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Header */}
       <div className="w-full max-w-md pt-4 px-4 z-10 flex-shrink-0">
         <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>

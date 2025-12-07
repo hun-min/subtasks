@@ -78,6 +78,10 @@ export default function App() {
   const [isMouseDownInInput, setIsMouseDownInInput] = useState(false);
   const [showInput, setShowInput] = useState(true);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isReady, setIsReady] = useState(() => !!localStorage.getItem('manifesto'));
+  const [manifesto, setManifesto] = useState('');
+  const [showAudit, setShowAudit] = useState(false);
+  const [auditNote, setAuditNote] = useState('');
   
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
@@ -120,7 +124,7 @@ export default function App() {
 
   const activeTargets = React.useMemo(() => {
     if (!allTargets || !currentSpaceId) return [];
-    const filtered = allTargets.filter(t => !t.isCompleted && t.spaceId === currentSpaceId);
+    const filtered = allTargets.filter(t => !t.isCompleted && t.spaceId === currentSpaceId && t.title !== '📌 사명');
     return [...filtered].sort((a, b) => {
         const timeA = a.lastUsed ? new Date(a.lastUsed).getTime() : 0;
         const timeB = b.lastUsed ? new Date(b.lastUsed).getTime() : 0;
@@ -545,6 +549,106 @@ export default function App() {
   const handleTaskContextMenu = (e: React.MouseEvent, task: Task, isCompleted?: boolean) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: isCompleted ? 'completedTask' : 'task', id: task.id!, title: task.title }); };
   const handleSpaceContextMenu = (e: React.MouseEvent, spaceId: number, title: string) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'space', id: spaceId, title: title }); };
   const toggleSpotlight = () => { if (contextMenu) { if (spotlightGroup === contextMenu.title) { setSpotlightGroup(null); } else { setSpotlightGroup(contextMenu.title); } } };
+  if (!isReady) {
+    return (
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-8 z-[9999] font-mono">
+        <input 
+          type="text" 
+          value={manifesto}
+          onChange={(e) => setManifesto(e.target.value)}
+          onKeyDown={async (e) => { if (e.key === 'Enter' && manifesto.length > 0) { localStorage.setItem('manifesto', manifesto); if (currentSpaceId) { let missionTarget = await db.targets.where('title').equals('📌 사명').and(t => t.spaceId === currentSpaceId).first(); let targetId; if (!missionTarget) { targetId = await addTarget({ spaceId: currentSpaceId, title: '📌 사명', defaultAction: '', notes: '', usageCount: 9999, lastUsed: new Date() }); } else { targetId = missionTarget.id; } await addTask({ targetId: targetId!, title: manifesto, isCompleted: true, createdAt: new Date(), completedAt: new Date() }); } setIsReady(true); } }}
+          placeholder="오늘 당신의 사명은 무엇입니까?"
+          className="bg-transparent border-b border-gray-700 text-center text-2xl md:text-4xl text-white outline-none w-full max-w-xl py-2 focus:border-white transition-colors placeholder-gray-800"
+          autoFocus
+        />
+        <p className="text-gray-600 text-xs mt-8 opacity-50">Press Enter to Access System</p>
+      </div>
+    );
+  }
+
+  const DeepFocusOverlay = () => {
+    if (!activeTimer) return null;
+    const currentTask = activeTimer.taskId ? activeTasks?.find(t => t.id === activeTimer.taskId) : null;
+    const currentTarget = activeTimer.targetId ? allTargets?.find(t => t.id === activeTimer.targetId) : null;
+    if (!currentTask && !currentTarget) return null;
+    const title = currentTask ? currentTask.title : currentTarget?.title || '';
+    const targetTitle = currentTask ? getTargetTitle(currentTask.targetId) : currentTarget?.title || '';
+    const timeLeft = activeTimer.timeLeft;
+    const progress = ((300 - timeLeft) / 300) * 100;
+
+    if (showAudit) {
+      return (
+        <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-6 font-mono">
+          <div className="w-full max-w-md border border-gray-700 bg-gray-900 p-8 rounded-xl">
+            <h3 className="text-gray-500 text-xs uppercase tracking-widest mb-6">Mission Debriefing</h3>
+            <div className="mb-8 opacity-50">
+              <p className="text-xs text-blue-400 mb-1">INTENTION</p>
+              <h2 className="text-xl text-white">{title}</h2>
+            </div>
+            <div className="mb-8">
+              <p className="text-xs text-green-400 mb-2">REALITY (RESULT)</p>
+              <input 
+                type="text" 
+                value={auditNote}
+                onChange={(e) => setAuditNote(e.target.value)}
+                placeholder="무엇을 달성했는지 팩트만 기록하십시오."
+                className="w-full bg-black border-b border-gray-600 text-white p-2 outline-none focus:border-green-500 transition-colors"
+                autoFocus
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="mb-2">
+              <p className="text-xs text-yellow-400 mb-2">SATISFACTION SCORE</p>
+              <div className="flex justify-between gap-2">
+                {[1, 2, 3, 4, 5].map(score => (
+                  <button 
+                    key={score}
+                    className="w-10 h-10 rounded-full border border-gray-600 text-gray-400 hover:bg-white hover:text-black hover:border-white transition-all font-bold"
+                    onClick={async () => {
+                      if (currentTask) await handleCompleteTask(currentTask.id!);
+                      else if (currentTarget) await completeTarget(currentTarget.id!);
+                      setActiveTimer(null);
+                      setShowAudit(false);
+                      setAuditNote('');
+                    }}
+                  >
+                    {score}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-gray-950 to-gray-950" />
+        <div className="z-10 w-full max-w-2xl px-8 flex flex-col items-center text-center space-y-12">
+          <div className="space-y-2 opacity-80">
+            <span className="text-blue-400 font-medium tracking-[0.3em] uppercase text-xs">Current Objective</span>
+            <h2 className="text-xl text-gray-400 font-light">{targetTitle}</h2>
+          </div>
+          <div className="space-y-6">
+            <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">{title}</h1>
+            <div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{Math.floor(timeLeft / 60)}<span className="animate-pulse">:</span>{Math.floor(timeLeft % 60).toString().padStart(2, '0')}</div>
+          </div>
+          <div className="w-full max-w-md h-1 bg-gray-900 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-blue-600 to-purple-500 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${progress}%` }} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 pt-8 w-full max-w-xs">
+            <button onClick={() => setShowAudit(true)} className="group relative py-5 px-8 rounded-2xl bg-white text-black font-bold text-xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] overflow-hidden">
+              <span className="relative z-10 flex items-center justify-center gap-2">Mission Complete <CheckIcon /></span>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-200/50 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+            </button>
+            <button onClick={() => setActiveTimer(null)} className="text-gray-700 text-sm hover:text-gray-500 transition-colors">잠시 미루기 (Pause)</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const handleGeneralDelete = async () => {
       if (!contextMenu) return;
       if (contextMenu.type === 'group') { if (window.confirm('삭제?')) await deleteGroup(contextMenu.id); } 
@@ -663,40 +767,7 @@ export default function App() {
           </div>
       )}
 
-      {activeTimer && (() => {
-        const currentTask = activeTimer.taskId ? activeTasks?.find(t => t.id === activeTimer.taskId) : null;
-        const currentTarget = activeTimer.targetId ? allTargets?.find(t => t.id === activeTimer.targetId) : null;
-        if (!currentTask && !currentTarget) return null;
-        const targetTitle = currentTask ? getTargetTitle(currentTask.targetId) : currentTarget?.title || '';
-        const title = currentTask ? currentTask.title : currentTarget?.title || '';
-        const timeLeft = activeTimer.timeLeft;
-        const progress = ((300 - timeLeft) / 300) * 100;
-        return (
-          <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center transition-all duration-500">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-gray-950 to-gray-950" />
-            <div className="z-10 w-full max-w-2xl px-8 flex flex-col items-center text-center space-y-12">
-              <div className="space-y-2 opacity-80">
-                <span className="text-blue-400 font-medium tracking-[0.3em] uppercase text-xs">Current Objective</span>
-                <h2 className="text-xl text-gray-400 font-light">{targetTitle}</h2>
-              </div>
-              <div className="space-y-6">
-                <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight animate-in fade-in zoom-in-95 duration-500">{title}</h1>
-                <div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{Math.floor(timeLeft / 60)}<span className="animate-pulse">:</span>{Math.floor(timeLeft % 60).toString().padStart(2, '0')}</div>
-              </div>
-              <div className="w-full max-w-md h-1 bg-gray-900 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-blue-600 to-purple-500 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${progress}%` }} />
-              </div>
-              <div className="grid grid-cols-1 gap-4 pt-8 w-full max-w-xs">
-                <button onClick={() => { if(currentTask) { handleCompleteTask(currentTask.id!); } else if(currentTarget) { completeTarget(currentTarget.id!); } setActiveTimer(null); }} className="group relative py-5 px-8 rounded-2xl bg-white text-black font-bold text-xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] overflow-hidden">
-                  <span className="relative z-10 flex items-center justify-center gap-2">Done <CheckIcon /></span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-200/50 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                </button>
-                <button onClick={() => setActiveTimer(null)} className="text-gray-700 text-sm hover:text-gray-500 transition-colors">잠시 미루기 (Pause)</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <DeepFocusOverlay />
 
       {/* Header */}
       <div className="w-full max-w-md pt-4 px-4 z-10 flex-shrink-0">

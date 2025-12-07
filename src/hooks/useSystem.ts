@@ -167,7 +167,8 @@ export function useSystem() {
         }
       }
       
-      supabase.from('tasks').update({ isCompleted: true, completedAt }).eq('id', taskId).then(({ error }) => {
+      const updatedTask = await db.tasks.get(taskId);
+      supabase.from('tasks').update({ isCompleted: true, completedAt, auditNote: updatedTask?.auditNote }).eq('id', taskId).then(({ error }) => {
         if (error) console.log('Supabase sync skipped:', error.message);
       });
     }
@@ -176,7 +177,8 @@ export function useSystem() {
   const completeTarget = async (targetId: number) => {
     const completedAt = new Date();
     await db.targets.update(targetId, { isCompleted: true, lastUsed: completedAt });
-    supabase.from('targets').update({ isCompleted: true, lastUsed: completedAt }).eq('id', targetId).then(({ error }) => {
+    const updatedTarget = await db.targets.get(targetId);
+    supabase.from('targets').update({ isCompleted: true, lastUsed: completedAt, auditNote: updatedTarget?.auditNote }).eq('id', targetId).then(({ error }) => {
       if (error) console.log('Supabase sync skipped:', error.message);
     });
   };

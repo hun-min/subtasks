@@ -16,6 +16,7 @@ export interface Target {
   lastUsed: Date;
   isCompleted?: boolean;
   hideFromAutocomplete?: boolean;
+  auditNote?: string;
 }
 
 export interface Task {
@@ -27,6 +28,7 @@ export interface Task {
   completedAt?: Date;
   timerCount?: number;
   hideFromAutocomplete?: boolean;
+  auditNote?: string;
 }
 
 class SystemDB extends Dexie {
@@ -78,6 +80,11 @@ class SystemDB extends Dexie {
       spaces: '++id, title, createdAt',
       targets: '++id, spaceId, title, usageCount, lastUsed, isCompleted, hideFromAutocomplete',
       tasks: '++id, targetId, isCompleted, createdAt, completedAt, timerCount, hideFromAutocomplete'
+    });
+    this.version(7).stores({
+      spaces: '++id, title, createdAt',
+      targets: '++id, spaceId, title, usageCount, lastUsed, isCompleted, hideFromAutocomplete, auditNote',
+      tasks: '++id, targetId, isCompleted, createdAt, completedAt, timerCount, hideFromAutocomplete, auditNote'
     });
   }
 }

@@ -35,6 +35,45 @@ function SortableTaskItem({ task, children }: { task: Task, children: React.Reac
   return <div ref={setNodeRef} style={style} {...attributes} {...listeners}>{children}</div>;
 }
 
+const AuditScreen = React.memo(({ title, auditNote, setAuditNote, onComplete }: any) => (
+  <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-6 font-mono" onClick={(e) => e.stopPropagation()}>
+    <div className="w-full max-w-md border border-gray-700 bg-gray-900 p-8 rounded-xl" onClick={(e) => e.stopPropagation()}>
+      <h3 className="text-gray-500 text-xs uppercase tracking-widest mb-6">Mission Debriefing</h3>
+      <div className="mb-8 opacity-50">
+        <p className="text-xs text-blue-400 mb-1">PLANNED</p>
+        <h2 className="text-xl text-white">{title}</h2>
+      </div>
+      <div className="mb-8" onClick={(e) => e.stopPropagation()}>
+        <p className="text-xs text-green-400 mb-2">ACTUAL RESULT</p>
+        <input 
+          type="text" 
+          value={auditNote}
+          onChange={(e) => { e.stopPropagation(); setAuditNote(e.target.value); }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          placeholder="실제로 무엇을 달성했습니까?"
+          autoFocus
+          className="w-full bg-black border-b border-gray-600 text-white p-2 outline-none focus:border-green-500 transition-colors"
+        />
+      </div>
+      <div className="mb-2">
+        <p className="text-xs text-yellow-400 mb-2">SATISFACTION SCORE</p>
+        <div className="flex justify-between gap-2">
+          {[1, 2, 3, 4, 5].map(score => (
+            <button 
+              key={score}
+              className="w-10 h-10 rounded-full border border-gray-600 text-gray-400 hover:bg-white hover:text-black hover:border-white transition-all font-bold"
+              onMouseDown={(e) => { e.preventDefault(); onComplete(score); }}
+            >
+              {score}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+));
+
 export default function App() {
   const { allSpaces, activeTasks, completedTasks, allTargets, searchTargets, searchActions, completeTask, completeTarget, updateTaskTitle, updateTargetTitle, undoTask, undoTarget, deleteTask, deleteGroup, addTask, addTarget, addSpace, updateSpace, deleteSpace, updateTargetUsage, moveTaskUp, moveTaskDown, getHeatmapData, updateTimerCount } = useSystem();
   const [currentSpaceId, setCurrentSpaceId] = useState<number | null>(() => {
@@ -73,7 +112,8 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [focusIndex, setFocusIndex] = useState(-1);
   const [keyboardFocusedItem, setKeyboardFocusedItem] = useState<{type: string, id?: number} | null>(null);
-  const [activeTimer, setActiveTimer] = useState<{taskId?: number, targetId?: number, timeLeft: number} | null>(null);
+  const [activeTimer, setActiveTimer] = useState<{taskId?: number, targetId?: number} | null>(null);
+  const [timerLeft, setTimerLeft] = useState(300);
   const [changeDateModal, setChangeDateModal] = useState<{taskId: number, currentDate: string} | null>(null);
   const [isMouseDownInInput, setIsMouseDownInInput] = useState(false);
   const [showInput, setShowInput] = useState(true);
@@ -82,6 +122,7 @@ export default function App() {
   const [manifesto, setManifesto] = useState('');
   const [showAudit, setShowAudit] = useState(false);
   const [auditNote, setAuditNote] = useState('');
+  const [viewAuditModal, setViewAuditModal] = useState<{title: string, targetTitle: string, note: string} | null>(null);
   
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
@@ -124,7 +165,7 @@ export default function App() {
 
   const activeTargets = React.useMemo(() => {
     if (!allTargets || !currentSpaceId) return [];
-    const filtered = allTargets.filter(t => !t.isCompleted && t.spaceId === currentSpaceId && t.title !== '📌 사명');
+    const filtered = allTargets.filter(t => !t.isCompleted && (t.spaceId === currentSpaceId || t.spaceId === null) && t.title !== '📌 사명');
     return [...filtered].sort((a, b) => {
         const timeA = a.lastUsed ? new Date(a.lastUsed).getTime() : 0;
         const timeB = b.lastUsed ? new Date(b.lastUsed).getTime() : 0;
@@ -264,14 +305,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (activeTimer && timerLeft === 0 && !showAudit) {
+      setShowAudit(true);
+    }
+  }, [timerLeft]);
+
+  useEffect(() => {
     let interval: any;
-    if (activeTimer && activeTimer.timeLeft > 0) {
-      interval = setInterval(() => setActiveTimer(prev => prev ? {...prev, timeLeft: prev.timeLeft - 1} : null), 1000);
-    } else if (activeTimer && activeTimer.timeLeft === 0) {
-      setActiveTimer(null);
+    if (activeTimer && timerLeft > 0) {
+      interval = setInterval(() => setTimerLeft(prev => prev > 0 ? prev - 1 : 0), 1000);
     }
     return () => clearInterval(interval);
-  }, [activeTimer, activeTasks]);
+  }, [activeTimer?.taskId, activeTimer?.targetId, timerLeft > 0]);
 
   useEffect(() => {
       const handleKeyDown = async (e: KeyboardEvent) => {
@@ -551,17 +596,17 @@ export default function App() {
   const toggleSpotlight = () => { if (contextMenu) { if (spotlightGroup === contextMenu.title) { setSpotlightGroup(null); } else { setSpotlightGroup(contextMenu.title); } } };
   if (!isReady) {
     return (
-      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-8 z-[9999] font-mono">
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-6 z-[9999] font-mono">
         <input 
-          type="text" 
+          type="text"
           value={manifesto}
           onChange={(e) => setManifesto(e.target.value)}
-          onKeyDown={async (e) => { if (e.key === 'Enter' && manifesto.length > 0) { localStorage.setItem('manifesto', manifesto); if (currentSpaceId) { let missionTarget = await db.targets.where('title').equals('📌 사명').and(t => t.spaceId === currentSpaceId).first(); let targetId; if (!missionTarget) { targetId = await addTarget({ spaceId: currentSpaceId, title: '📌 사명', defaultAction: '', notes: '', usageCount: 9999, lastUsed: new Date() }); } else { targetId = missionTarget.id; } await addTask({ targetId: targetId!, title: manifesto, isCompleted: true, createdAt: new Date(), completedAt: new Date() }); } setIsReady(true); } }}
+          onKeyDown={async (e) => { if (e.key === 'Enter' && manifesto.length > 0) { e.preventDefault(); localStorage.setItem('manifesto', manifesto); let missionTarget = await db.targets.where('title').equals('📌 사명').first(); let targetId; if (!missionTarget) { targetId = await addTarget({ spaceId: null as any, title: '📌 사명', defaultAction: '', notes: '', usageCount: 9999, lastUsed: new Date() }); } else { targetId = missionTarget.id; } await addTask({ targetId: targetId!, title: manifesto, isCompleted: true, createdAt: new Date(), completedAt: new Date() }); setIsReady(true); } }}
           placeholder="오늘 당신의 사명은 무엇입니까?"
-          className="bg-transparent border-b border-gray-700 text-center text-2xl md:text-4xl text-white outline-none w-full max-w-xl py-2 focus:border-white transition-colors placeholder-gray-800"
+          className="bg-transparent border-b border-gray-700 text-center text-xl md:text-3xl text-white outline-none w-full max-w-xl py-2 focus:border-white transition-colors placeholder-gray-800"
           autoFocus
         />
-        <p className="text-gray-600 text-xs mt-8 opacity-50">Press Enter to Access System</p>
+        <p className="text-gray-600 text-xs mt-6 opacity-50">Press Enter to Access System</p>
       </div>
     );
   }
@@ -573,54 +618,7 @@ export default function App() {
     if (!currentTask && !currentTarget) return null;
     const title = currentTask ? currentTask.title : currentTarget?.title || '';
     const targetTitle = currentTask ? getTargetTitle(currentTask.targetId) : currentTarget?.title || '';
-    const timeLeft = activeTimer.timeLeft;
-    const progress = ((300 - timeLeft) / 300) * 100;
-
-    if (showAudit) {
-      return (
-        <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-6 font-mono">
-          <div className="w-full max-w-md border border-gray-700 bg-gray-900 p-8 rounded-xl">
-            <h3 className="text-gray-500 text-xs uppercase tracking-widest mb-6">Mission Debriefing</h3>
-            <div className="mb-8 opacity-50">
-              <p className="text-xs text-blue-400 mb-1">INTENTION</p>
-              <h2 className="text-xl text-white">{title}</h2>
-            </div>
-            <div className="mb-8">
-              <p className="text-xs text-green-400 mb-2">REALITY (RESULT)</p>
-              <input 
-                type="text" 
-                value={auditNote}
-                onChange={(e) => setAuditNote(e.target.value)}
-                placeholder="무엇을 달성했는지 팩트만 기록하십시오."
-                className="w-full bg-black border-b border-gray-600 text-white p-2 outline-none focus:border-green-500 transition-colors"
-                autoFocus
-                onKeyDown={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div className="mb-2">
-              <p className="text-xs text-yellow-400 mb-2">SATISFACTION SCORE</p>
-              <div className="flex justify-between gap-2">
-                {[1, 2, 3, 4, 5].map(score => (
-                  <button 
-                    key={score}
-                    className="w-10 h-10 rounded-full border border-gray-600 text-gray-400 hover:bg-white hover:text-black hover:border-white transition-all font-bold"
-                    onClick={async () => {
-                      if (currentTask) await handleCompleteTask(currentTask.id!);
-                      else if (currentTarget) await completeTarget(currentTarget.id!);
-                      setActiveTimer(null);
-                      setShowAudit(false);
-                      setAuditNote('');
-                    }}
-                  >
-                    {score}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
+    const progress = ((300 - timerLeft) / 300) * 100;
 
     return (
       <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center">
@@ -632,17 +630,17 @@ export default function App() {
           </div>
           <div className="space-y-6">
             <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">{title}</h1>
-            <div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{Math.floor(timeLeft / 60)}<span className="animate-pulse">:</span>{Math.floor(timeLeft % 60).toString().padStart(2, '0')}</div>
+            <div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{Math.floor(timerLeft / 60)}<span className="animate-pulse">:</span>{Math.floor(timerLeft % 60).toString().padStart(2, '0')}</div>
           </div>
           <div className="w-full max-w-md h-1 bg-gray-900 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-blue-600 to-purple-500 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${progress}%` }} />
           </div>
           <div className="grid grid-cols-1 gap-4 pt-8 w-full max-w-xs">
-            <button onClick={() => setShowAudit(true)} className="group relative py-5 px-8 rounded-2xl bg-white text-black font-bold text-xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] overflow-hidden">
-              <span className="relative z-10 flex items-center justify-center gap-2">Mission Complete <CheckIcon /></span>
+            <button onClick={() => { setAuditNote(''); setShowAudit(true); }} className="group relative py-5 px-8 rounded-2xl bg-white text-black font-bold text-xl shadow-[0_0_40px_rgba(255,255,255,0.3)] overflow-hidden">
+              <span className="relative z-10 flex items-center justify-center gap-2">완료 <CheckIcon /></span>
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-200/50 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
             </button>
-            <button onClick={() => setActiveTimer(null)} className="text-gray-700 text-sm hover:text-gray-500 transition-colors">잠시 미루기 (Pause)</button>
+            <button onClick={() => setActiveTimer(null)} className="text-gray-700 text-sm hover:text-gray-500 transition-colors">잠시 미루기</button>
           </div>
         </div>
       </div>
@@ -724,6 +722,7 @@ export default function App() {
     <div 
         className={`min-h-screen font-sans flex flex-col items-center overflow-hidden bg-gray-950 text-gray-100 transition-colors duration-500`}
         onClick={() => {
+            if (showAudit) return;
             if (isMouseDownInInput) {
                 setIsMouseDownInInput(false);
                 return;
@@ -767,12 +766,37 @@ export default function App() {
           </div>
       )}
 
-      <DeepFocusOverlay />
+      {showAudit ? (
+        <AuditScreen 
+          title={activeTimer?.taskId ? activeTasks?.find(t => t.id === activeTimer.taskId)?.title : allTargets?.find(t => t.id === activeTimer?.targetId)?.title}
+          auditNote={auditNote}
+          setAuditNote={setAuditNote}
+          onComplete={async (score: number) => {
+            const currentTask = activeTimer?.taskId ? activeTasks?.find(t => t.id === activeTimer.taskId) : null;
+            const currentTarget = activeTimer?.targetId ? allTargets?.find(t => t.id === activeTimer.targetId) : null;
+            const title = currentTask ? currentTask.title : currentTarget?.title || '';
+            const result = auditNote.trim() || '';
+            const noteToSave = `목표: ${title} | 결과: ${result} | 만족도: ${score}`;
+            if (currentTask) {
+              await db.tasks.update(currentTask.id!, { auditNote: noteToSave });
+              await handleCompleteTask(currentTask.id!);
+            } else if (currentTarget) {
+              await db.targets.update(currentTarget.id!, { auditNote: noteToSave });
+              await completeTarget(currentTarget.id!);
+            }
+            setActiveTimer(null);
+            setShowAudit(false);
+            setAuditNote('');
+          }}
+        />
+      ) : (
+        <DeepFocusOverlay />
+      )}
 
       {/* Header */}
       <div className="w-full max-w-md pt-4 px-4 z-10 flex-shrink-0">
         <header className={`pl-1 flex justify-between items-center transition-all duration-500 ${spotlightGroup ? 'opacity-30' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
-          <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm}>⦿</h1>
+          <h1 className="text-3xl font-bold text-white tracking-tighter cursor-pointer select-none" onClick={resetForm} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if(window.confirm('사명을 다시 입력하시겠습니까?')) { localStorage.removeItem('manifesto'); window.location.reload(); } }}>⦿</h1>
           <div className="hidden md:block">
             <WeekStreak getHeatmapData={getHeatmapData} currentSpaceId={currentSpaceId} />
           </div>
@@ -844,12 +868,11 @@ export default function App() {
                       <SortableContext items={tasks.filter(t => !(editingId?.type === 'task' && editingId.id === t.id)).map(t => t.id!)} strategy={verticalListSortingStrategy}>
                       {(isExpanded ? tasks : [tasks[0]]).map((task) => {
                         const isTimerActive = activeTimer?.taskId === task.id;
-                        const timeLeft = isTimerActive && activeTimer ? activeTimer.timeLeft : 300;
                         const isEditing = editingId?.type === 'task' && editingId.id === task.id;
                         const content = (
                           <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTimerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
-                              {isTimerActive && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />)}
-                              <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}(${task.timerCount || 0}회)` : <TargetIcon />}</button>
+                              {isTimerActive && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timerLeft/300)*100}%`}} />)}
+                              <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!}); setTimerLeft(300); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>{isTimerActive ? `${Math.floor(timerLeft/60)}:${(timerLeft%60).toString().padStart(2,'0')}(${task.timerCount || 0}회)` : <TargetIcon />}</button>
                               {editingId?.type === 'task' && editingId.id === task.id ? (<input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => { e.stopPropagation(); setIsMouseDownInInput(true); }} autoFocus onClick={(e) => e.stopPropagation()} />) : (<span onClick={(e) => { e.stopPropagation(); startEditing('task', task.id!, task.title); }} className={`flex-1 min-w-0 text-sm cursor-pointer transition-colors z-10 ${keyboardFocusedItem?.type === 'task' && keyboardFocusedItem.id === task.id ? 'text-white font-bold underline' : getTaskAgeStyle(task.createdAt) + ' hover:text-white'}`}>{task.title}</span>)}
                               {!isTimerActive && (<button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id!); }} className={`text-gray-600 hover:text-red-400 transition-opacity flex-shrink-0 z-10 ${editingId?.type === 'task' && editingId.id === task.id ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100'}`}><TrashIcon /></button>)}
                               <button onClick={(e) => { e.stopPropagation(); setExpandedGroup(inboxTarget.title); setAddingTaskToTarget(task.id!); setNewTaskTitle(''); }} className="text-gray-400 hover:text-blue-400 cursor-pointer transition-all flex-shrink-0 z-10 font-normal mr-1">↳</button>
@@ -991,8 +1014,8 @@ export default function App() {
 
 
                     <div className="flex items-center gap-2 w-full overflow-hidden relative z-10">
-                        {activeTimer?.targetId === targetId && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000 z-0" style={{width: `${((activeTimer?.timeLeft || 0)/300)*100}%`}} />)}
-                        <button onClick={(e) => { e.stopPropagation(); const isTimerActive = activeTimer?.targetId === targetId; if(isTimerActive) setActiveTimer(null); else { setActiveTimer({targetId: targetId, timeLeft: 300}); } }} className={`flex-shrink-0 text-xs font-mono cursor-pointer hover:text-blue-300 transition-colors z-10 ${activeTimer?.targetId === targetId ? 'text-yellow-500 font-bold' : isSpotlighted ? 'text-blue-400' : title === '⚡ Inbox' ? 'text-yellow-500' : 'text-gray-500'}`}>{activeTimer?.targetId === targetId ? `${Math.floor((activeTimer?.timeLeft || 0)/60)}:${((activeTimer?.timeLeft || 0)%60).toString().padStart(2,'0')}` : title === '⚡ Inbox' ? <ZapIcon /> : <TargetIcon />}</button>
+                        {activeTimer?.targetId === targetId && (<div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000 z-0" style={{width: `${(timerLeft/300)*100}%`}} />)}
+                        <button onClick={(e) => { e.stopPropagation(); const isTimerActive = activeTimer?.targetId === targetId; if(isTimerActive) setActiveTimer(null); else { setActiveTimer({targetId: targetId}); setTimerLeft(300); } }} className={`flex-shrink-0 text-xs font-mono cursor-pointer hover:text-blue-300 transition-colors z-10 ${activeTimer?.targetId === targetId ? 'text-yellow-500 font-bold' : isSpotlighted ? 'text-blue-400' : title === '⚡ Inbox' ? 'text-yellow-500' : 'text-gray-500'}`}>{activeTimer?.targetId === targetId ? `${Math.floor(timerLeft/60)}:${(timerLeft%60).toString().padStart(2,'0')}` : title === '⚡ Inbox' ? <ZapIcon /> : <TargetIcon />}</button>
                         {editingId?.type === 'target' && editingId.id === targetId ? (
                             <input className="bg-black text-white px-1 rounded border border-blue-500 outline-none w-full max-w-[calc(100%-31px)] text-base" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} onMouseDown={(e) => { e.stopPropagation(); setIsMouseDownInInput(true); }} autoFocus onClick={(e) => e.stopPropagation()} />
                         ) : (
@@ -1054,16 +1077,15 @@ export default function App() {
                     <SortableContext items={tasks.filter(t => !(editingId?.type === 'task' && editingId.id === t.id)).map(t => t.id!)} strategy={verticalListSortingStrategy}>
                     {(isExpanded ? tasks : [tasks[0]]).map((task) => {
                       const isTimerActive = activeTimer?.taskId === task.id;
-                      const timeLeft = isTimerActive && activeTimer ? activeTimer.timeLeft : 300;
                       return (() => {
                       const isEditing = editingId?.type === 'task' && editingId.id === task.id;
                       const content = (
                         <div className={`flex items-center gap-2 py-0.5 group/task relative overflow-hidden ${isTimerActive ? 'border-l-2 border-yellow-500 pl-1' : ''}`} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
                             {isTimerActive && (
-                              <div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timeLeft/300)*100}%`}} />
+                              <div className="absolute left-0 top-0 bottom-0 bg-yellow-500/10 transition-all duration-1000" style={{width: `${(timerLeft/300)*100}%`}} />
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!, timeLeft: 300}); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
-                              {isTimerActive ? `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}(${task.timerCount || 0}회)` : task.timerCount ? `▶${task.timerCount}` : '▶'}
+                            <button onClick={(e) => { e.stopPropagation(); if(isTimerActive) setActiveTimer(null); else { setActiveTimer({taskId: task.id!}); setTimerLeft(300); updateTimerCount(task.id!, (task.timerCount || 0) + 1); } }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }} onTouchStart={(e) => { const timer = setTimeout(() => { e.preventDefault(); const count = prompt('타이머 횟수:', String(task.timerCount || 0)); if(count !== null) updateTimerCount(task.id!, parseInt(count) || 0); }, 500); (e.target as any).longPressTimer = timer; }} onTouchEnd={(e) => { if((e.target as any).longPressTimer) clearTimeout((e.target as any).longPressTimer); }} className={`flex-shrink-0 text-xs font-mono z-10 ${isTimerActive ? 'text-yellow-500 font-bold' : 'text-gray-600 hover:text-yellow-500'}`}>
+                              {isTimerActive ? `${Math.floor(timerLeft/60)}:${(timerLeft%60).toString().padStart(2,'0')}(${task.timerCount || 0}회)` : task.timerCount ? `▶${task.timerCount}` : '▶'}
                             </button>
                             {editingId?.type === 'task' && editingId.id === task.id ? (
                                 <input className="flex-1 min-w-0 bg-transparent text-white px-1 rounded border border-blue-500 outline-none text-sm z-10" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingId(null); }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => { e.stopPropagation(); setIsMouseDownInInput(true); }} autoFocus onClick={(e) => e.stopPropagation()} />
@@ -1257,6 +1279,29 @@ export default function App() {
             </div>
         )}
 
+        {/* Audit View Modal */}
+        {viewAuditModal && (() => {
+            const parts = viewAuditModal.note.split(' | ');
+            const intention = parts[0]?.replace('목표: ', '') || '';
+            const reality = parts[1]?.replace('결과: ', '') || '';
+            const satisfaction = parts[2]?.replace('만족도: ', '') || '';
+            return (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={(e) => { e.stopPropagation(); setViewAuditModal(null); }}>
+                    <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-80 max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-xs text-gray-500 mb-2 uppercase tracking-widest">Target</h3>
+                        <p className="text-sm text-gray-400 mb-4">{viewAuditModal.targetTitle}</p>
+                        <h3 className="text-xs text-blue-400 mb-2 uppercase tracking-widest">Intention</h3>
+                        <p className="text-base text-white mb-4">{intention}</p>
+                        <h3 className="text-xs text-green-400 mb-2 uppercase tracking-widest">Reality</h3>
+                        <p className="text-sm text-gray-300 mb-4">{reality}</p>
+                        <h3 className="text-xs text-yellow-400 mb-2 uppercase tracking-widest">Satisfaction Score</h3>
+                        <p className="text-lg text-white font-bold mb-6">{satisfaction}</p>
+                        <button onClick={() => setViewAuditModal(null)} className="w-full bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors">닫기</button>
+                    </div>
+                </div>
+            );
+        })()}
+
         {/* Space Edit Modal */}
         {showSpaceModal && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={(e) => { e.stopPropagation(); setShowSpaceModal(false); }}>
@@ -1360,6 +1405,11 @@ export default function App() {
                       key={`task-${task.id}`} 
                       className={`flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border-2 group transition-all cursor-context-menu ${keyboardFocusedItem?.type === 'completedTask' && keyboardFocusedItem.id === task.id ? 'border-gray-400' : 'border-gray-800/50 hover:border-gray-700'}`}
                       onContextMenu={(e) => handleTaskContextMenu(e, task, true)}
+                      onClick={() => {
+                        if (task.auditNote) {
+                          setViewAuditModal({ title: task.title, targetTitle, note: task.auditNote });
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
                         <span className="text-[10px] text-blue-400/70 bg-blue-900/20 px-1 py-0.5 rounded border border-blue-900/30 whitespace-nowrap">
@@ -1392,6 +1442,11 @@ export default function App() {
                       key={`target-${target.id}`} 
                       className={`flex items-center justify-between px-2 py-1 rounded-lg bg-gray-900/50 border-2 group transition-all cursor-context-menu ${keyboardFocusedItem?.type === 'completedTarget' && keyboardFocusedItem.id === target.id ? 'border-gray-400' : 'border-gray-800/50 hover:border-gray-700'}`}
                       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'completedTarget', id: target.id!, title: target.title }); }}
+                      onClick={() => {
+                        if (target.auditNote) {
+                          setViewAuditModal({ title: target.title, targetTitle: target.title, note: target.auditNote });
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-2 w-full overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
                         <span className="text-blue-400/70"><TargetIcon /></span>
@@ -1430,13 +1485,13 @@ export default function App() {
         style={{ bottom: `${keyboardHeight}px` }}
         onClick={() => setSuggestions([])}
       >
-        <div className="w-full max-w-md mx-auto px-3 pt-2 pb-8 relative flex items-stretch gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="w-full max-w-md mx-auto px-4 pt-2 pb-8 relative flex items-stretch gap-2" onClick={(e) => e.stopPropagation()}>
           <div className={`flex-1 flex flex-col shadow-2xl rounded-xl bg-gray-900 border border-gray-700 transition-all duration-300 ${showInput ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-            <div className="flex items-center px-4 py-3 relative">
+            <div className="flex items-center px-3 py-3 relative">
                 <span className="text-blue-400 mr-2 flex-shrink-0"><TargetIcon /></span>
-                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-10 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
+                <input type="text" value={objValue} onChange={(e) => setObjValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => setFocusedInput('obj')} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Objective..." className={`flex-1 min-w-0 bg-transparent text-white focus:outline-none font-medium text-base placeholder-gray-600 pr-8 ${isInputMode ? 'text-blue-400' : ''}`} autoFocus />
                 {objValue.trim() && !isInputMode && (
-                  <div className="absolute right-3 flex gap-1">
+                  <div className="absolute right-2 flex gap-1">
                     <button onClick={handleImmediateDone} className="w-6 h-6 flex items-center justify-center text-green-500 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors" title="Done immediately (Ctrl+Enter)"><CheckIcon /></button>
                   </div>
                 )}
@@ -1444,7 +1499,7 @@ export default function App() {
             {isInputMode && (
                 <div className="px-3 pb-2 flex items-center relative">
                     <span className="text-gray-600 mr-2 ml-0.5 flex-shrink-0">↳</span>
-                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-10" autoFocus />
+                    <input type="text" value={actValue} onChange={(e) => setActValue(e.target.value)} onKeyDown={handleKeyDown} onFocus={() => { setFocusedInput('act'); }} onMouseDown={() => setIsMouseDownInInput(true)} placeholder="Action..." className="flex-1 min-w-0 bg-transparent text-gray-200 focus:outline-none text-sm pr-8" autoFocus />
                 </div>
             )}
           </div>

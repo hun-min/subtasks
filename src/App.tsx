@@ -205,7 +205,14 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning }: a
 
 // --- 메인 앱 ---
 export default function App() {
-  const [mode, setMode] = useState<'PLANNING' | 'FOCUS' | 'SUMMARY' | 'HISTORY'>('PLANNING');
+  const [mode, setMode] = useState<'PLANNING' | 'FOCUS' | 'SUMMARY' | 'HISTORY'>(() => {
+    const saved = localStorage.getItem('ultra_mode');
+    return (saved as any) || 'PLANNING';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ultra_mode', mode);
+  }, [mode]);
   const [viewDate, setViewDate] = useState(new Date());
   
   const [logs, setLogs] = useState<DailyLog[]>(() => {

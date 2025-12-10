@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from './supabase';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -12,7 +13,8 @@ type Task = {
   percent: number;      
   planTime: number;     
   actTime: number;      
-  isTimerOn: boolean;   
+  isTimerOn: boolean;
+  timerStartTime?: number; // 타이머 시작 시간 (timestamp)
 };
 
 type DailyLog = {
@@ -210,6 +212,26 @@ export default function App() {
     const saved = localStorage.getItem('ultra_tasks_v3');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Supabase에서 데이터 로드
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      try {
+        const { data } = await supabase.from('task_logs').select('*');
+        if (data && data.length > 0) {
+          const supabaseLogs = data.map(item => ({
+            date: item.date,
+            tasks: JSON.parse(item.tasks)
+          }));
+          setLogs(supabaseLogs);
+          localStorage.setItem('ultra_tasks_v3', JSON.stringify(supabaseLogs));
+        }
+      } catch (error) {
+        console.log('Supabase load error:', error);
+      }
+    };
+    loadFromSupabase();
+  }, []);
   const [tasks, setTasks] = useState<Task[]>([]);
   
   // 히스토리 모달 상태
@@ -245,8 +267,19 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // 저장/로드
-  useEffect(() => { localStorage.setItem('ultra_tasks_v3', JSON.stringify(logs)); }, [logs]);
+  // 저장/로드 + Supabase 동기화
+  useEffect(() => { 
+    localStorage.setItem('ultra_tasks_v3', JSON.stringify(logs)); 
+    // Supabase에 동기화
+    if (logs.length > 0) {
+      supabase.from('task_logs').upsert(logs.map(log => ({
+        date: log.date,
+        tasks: JSON.stringify(log.tasks)
+      }))).then(({ error }) => {
+        if (error) console.log('Supabase sync error:', error);
+      });
+    }
+  }, [logs]);
   useEffect(() => {
     const dateStr = viewDate.toDateString();
     const log = logs.find(l => l.date === dateStr);

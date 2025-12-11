@@ -136,7 +136,7 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
             };
             updateTask(updatedTask);
           }}
-          className={`flex-shrink-0 transition-colors ${subtask.done ? 'text-green-500' : 'text-gray-600 hover:text-white'}`}
+          className={`flex-shrink-0 transition-colors ${subtask.done ? 'text-green-500' : 'text-gray-800 hover:text-gray-600'}`}
         >
           <Check size={12} strokeWidth={4} />
         </button>
@@ -219,15 +219,13 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
           <GripVertical size={16} />
         </button>
         
-        {/* 체크 (완료) - PLANNING 모드에서는 숨김 */}
-        {isPlanning !== true && (
-          <button 
-            onClick={() => updateTask({ ...task, done: !task.done })} 
-            className={`flex-shrink-0 transition-colors ${task.done ? 'text-green-500' : 'text-gray-600 hover:text-white'}`}
-          >
-            <Check size={14} strokeWidth={4} />
-          </button>
-        )}
+        {/* 체크 (완료) */}
+        <button 
+          onClick={() => updateTask({ ...task, done: !task.done })} 
+          className={`flex-shrink-0 transition-colors ${task.done ? 'text-green-500' : 'text-gray-800 hover:text-gray-600'}`}
+        >
+          <Check size={14} strokeWidth={4} />
+        </button>
 
         {/* 제목 (한 줄로 쭉) */}
         <input 

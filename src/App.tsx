@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, GripVertical, Trash2, BarChart2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Pause, GripVertical, BarChart2, X, Check, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type Task = {
@@ -44,7 +44,12 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
   const historyMap = new Map();
   logs.forEach(log => {
     const found = log.tasks.find(t => t.text.trim() === taskName.trim());
-    if (found) historyMap.set(log.date, found);
+    if (found) {
+      historyMap.set(log.date, {
+        task: found,
+        subtasks: found.subtasks || []
+      });
+    }
   });
 
   // 달력 데이터 생성
@@ -86,23 +91,51 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
             return (
               <div key={i} className={`aspect-square rounded-lg border flex flex-col items-center justify-center relative
                 ${record 
-                  ? (record.done ? 'bg-blue-900/20 border-blue-500/50' : 'bg-red-900/20 border-red-500/50') 
+                  ? (record.task.done ? 'bg-blue-900/20 border-blue-500/50' : 'bg-red-900/20 border-red-500/50') 
                   : 'bg-gray-800/50 border-gray-800 text-gray-600'}
                 ${isToday ? 'ring-1 ring-white' : ''}
               `}>
                 <span className="text-xs font-medium">{d.getDate()}</span>
                 {record && (
-                  <span className={`text-[8px] font-mono mt-0.5 ${record.done ? 'text-blue-400' : 'text-red-400'}`}>
-                    {Math.floor(record.percent)}%
-                  </span>
+                  <>
+                    <span className={`text-[8px] font-mono mt-0.5 ${record.task.done ? 'text-blue-400' : 'text-red-400'}`}>
+                      {Math.floor(record.task.percent)}%
+                    </span>
+                    {record.subtasks.length > 0 && (
+                      <span className="text-[7px] text-gray-500 mt-0.5">
+                        +{record.subtasks.length}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             );
           })}
         </div>
 
-        <div className="text-center text-xs text-gray-500">
+        <div className="text-center text-xs text-gray-500 mb-4">
           이 일을 수행한 날짜와 퍼센트가 표시됩니다.
+        </div>
+
+        {/* 하위할일 목록 */}
+        <div className="max-h-40 overflow-y-auto scrollbar-hide">
+          {Array.from(historyMap.entries()).reverse().slice(0, 5).map(([date, data]) => (
+            <div key={date} className="mb-4 pb-4 border-b border-gray-800 last:border-0">
+              <div className="text-[10px] text-gray-500 mb-2">{new Date(date).toLocaleDateString()}</div>
+              {data.subtasks.length > 0 ? (
+                <div className="space-y-1">
+                  {data.subtasks.map((st: Task, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs">
+                      <span className={st.done ? 'text-green-500' : 'text-gray-600'}>•</span>
+                      <span className={st.done ? 'text-gray-500 line-through' : 'text-gray-300'}>{st.text}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-700">하위할일 없음</div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -188,17 +221,60 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
           }}
           className="text-gray-700 hover:text-red-500 p-0.5"
         >
-          <Trash2 size={10} />
+          <X size={10} />
         </button>
       </div>
     </div>
   );
 }
 
+// --- [컴포넌트] 날짜 선택 모달 ---
+function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date) => void, onClose: () => void }) {
+  const [viewDate, setViewDate] = useState(new Date());
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const days = Array.from({ length: firstDay }).fill(null).concat(
+    Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1))
+  );
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
+          <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+          <button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600">{d}</div>)}
+          {days.map((d: any, i) => {
+            if (!d) return <div key={i} />;
+            const isToday = d.toDateString() === new Date().toDateString();
+            return (
+              <button
+                key={i}
+                onClick={() => onSelectDate(d)}
+                className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors
+                  ${isToday ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}
+                `}
+              >
+                <span className="text-sm">{d.getDate()}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- [컴포넌트] 할 일 아이템 ---
-function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sensors }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, isPlanning?: boolean, sensors: any }) {
+function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sensors, onChangeDate }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, isPlanning?: boolean, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
 
   
@@ -237,13 +313,34 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
         
         {/* 삭제 버튼 */}
         <button onClick={() => deleteTask(task.id)} className="text-gray-800 hover:text-red-600 p-0.5">
-          <Trash2 size={14} />
+          <X size={14} />
         </button>
       </div>
 
       {/* 하단: 컨트롤들 일렬 배치 (오른쪽 정렬) */}
       {isPlanning !== true && (
       <div className="flex items-center justify-end gap-3 text-xs">
+        {/* 날짜 변경 버튼 */}
+        {onChangeDate && (
+          <>
+            <button 
+              onClick={() => setShowDatePicker(true)}
+              className="text-gray-700 hover:text-blue-400 p-1" 
+              title="날짜 변경"
+            >
+              <Calendar size={14} />
+            </button>
+            {showDatePicker && (
+              <DatePickerModal 
+                onSelectDate={(date) => {
+                  onChangeDate(task.id, date.toDateString());
+                  setShowDatePicker(false);
+                }}
+                onClose={() => setShowDatePicker(false)}
+              />
+            )}
+          </>
+        )}
         {/* 하위할일 추가 버튼 */}
         {!task.parentId && (
           <button 
@@ -408,6 +505,11 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
 export default function App() {
   const [mode, setMode] = useState<'PLANNING' | 'FOCUS' | 'SUMMARY' | 'HISTORY'>(() => {
     const saved = localStorage.getItem('ultra_mode');
+    const now = new Date();
+    // 23시 이후면 SUMMARY 모드로 시작
+    if (now.getHours() >= 23 && saved === 'FOCUS') {
+      return 'SUMMARY';
+    }
     return (saved as any) || 'PLANNING';
   });
 
@@ -459,7 +561,7 @@ export default function App() {
   useEffect(() => {
     const checkTime = setInterval(() => {
       const now = new Date();
-      if (now.getHours() === 23 && now.getMinutes() === 0 && mode === 'FOCUS') startSummary();
+      if (now.getHours() === 23 && now.getMinutes() === 0 && now.getSeconds() === 0 && mode === 'FOCUS') startSummary();
     }, 1000);
     return () => clearInterval(checkTime);
   }, [mode]);
@@ -559,7 +661,19 @@ export default function App() {
       
       // ▼▼▼ 여기가 핵심입니다. 과거 기록을 강제로 주입합니다. ▼▼▼
       percent: pastTask.percent || 0,        // 퍼센트 가져옴
-      planTime: pastTask.planTime || 30      // 계획 시간 가져옴
+      planTime: pastTask.planTime || 30,     // 계획 시간 가져옴
+      
+      // 하위할일도 복사 (완료된 것은 제외, done=false로 리셋)
+      subtasks: pastTask.subtasks ? pastTask.subtasks
+        .filter(st => !st.done)  // 완료된 하위할일은 제외
+        .map(st => ({
+          ...st,
+          id: Date.now() + Math.random(), // 새 ID 발급
+          done: false,                     // 완료 여부 리셋
+          isTimerOn: false,                // 타이머 끔
+          actTime: 0,                      // 실제 시간 리셋
+          parentId: Date.now()             // 새 부모 ID
+        })) : []
     };
     
     updateLogs([...tasks, newTaskObj]);
@@ -578,11 +692,18 @@ export default function App() {
     setTimeout(() => setSummaryStep(6), 8500);
   };
 
+  // 앱 시작 시 SUMMARY 모드면 애니메이션 실행
+  useEffect(() => {
+    if (mode === 'SUMMARY') {
+      startSummary();
+    }
+  }, []);
+
   const completedCount = tasks.filter(t => t.done).length;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans overflow-y-auto selection:bg-blue-500">
-      <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4">
+      <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-24">
         
         {/* 모달: 태스크 히스토리 */}
         {historyTarget && (
@@ -606,6 +727,7 @@ export default function App() {
                       onShowHistory={(name: string) => setHistoryTarget(name)}
                       isPlanning={true}
                       sensors={sensors}
+                      onChangeDate={undefined}
                     />
                   ))}
                 </SortableContext>
@@ -619,11 +741,9 @@ export default function App() {
                 ))}
               </div>
             )}
-            {tasks.length > 0 && (
-              <div className="text-center mt-12">
-                <button onClick={() => setMode('FOCUS')} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">START DAY</button>
-              </div>
-            )}
+            <div className="text-center mt-12">
+              <button onClick={() => setMode('FOCUS')} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">START DAY</button>
+            </div>
           </div>
         )}
 
@@ -632,7 +752,7 @@ export default function App() {
           <div className="flex-1 flex flex-col pt-6">
             <div className="flex justify-between items-center mb-6">
               <h1 className="text-xl font-bold tracking-tight text-white">TODAY'S PLAN</h1>
-              <div className="text-xs text-gray-500">{new Date().toDateString()}</div>
+              <button onClick={() => setMode('HISTORY')} className="text-xs text-gray-500 hover:text-white">{new Date().toDateString()}</button>
             </div>
             <div className="flex-1 space-y-1">
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -642,6 +762,30 @@ export default function App() {
                       key={task.id} task={task} updateTask={updateTask} deleteTask={deleteTask} 
                       onShowHistory={(name: string) => setHistoryTarget(name)}
                       sensors={sensors}
+                      onChangeDate={(taskId, newDate) => {
+                        const taskToMove = tasks.find(t => t.id === taskId);
+                        if (!taskToMove) return;
+                        const targetDate = new Date(newDate).toDateString();
+                        const currentDate = viewDate.toDateString();
+                        
+                        // 현재 날짜에서 제거
+                        const updatedCurrentTasks = tasks.filter(t => t.id !== taskId);
+                        setLogs(prev => {
+                          const newLogs = [...prev];
+                          const currentIdx = newLogs.findIndex(l => l.date === currentDate);
+                          if (currentIdx >= 0) newLogs[currentIdx] = { date: currentDate, tasks: updatedCurrentTasks };
+                          
+                          // 타겟 날짜에 추가
+                          const targetIdx = newLogs.findIndex(l => l.date === targetDate);
+                          if (targetIdx >= 0) {
+                            newLogs[targetIdx] = { date: targetDate, tasks: [...newLogs[targetIdx].tasks, taskToMove] };
+                          } else {
+                            newLogs.push({ date: targetDate, tasks: [taskToMove] });
+                          }
+                          return newLogs;
+                        });
+                        setTasks(updatedCurrentTasks);
+                      }}
                     />
                   ))}
                 </SortableContext>
@@ -792,7 +936,7 @@ export default function App() {
             </div>
 
             {/* 2. 하단 리스트 (여기가 핵심 수정됨: 타겟/결과 분리 + 수정 가능) */}
-            <div className="flex-1 overflow-y-auto scrollbar-hide pb-20 px-2">
+            <div className="flex-1 overflow-y-auto scrollbar-hide pb-96 px-2">
               <h3 className="text-xs font-bold text-gray-500 mb-6 uppercase tracking-widest text-center">Record of {viewDate.toLocaleDateString()}</h3>
               
               {tasks.length > 0 ? (
@@ -809,6 +953,30 @@ export default function App() {
                               key={task.id} task={task} updateTask={updateTask} deleteTask={deleteTask} 
                               onShowHistory={(name: string) => setHistoryTarget(name)}
                               sensors={sensors}
+                              onChangeDate={(taskId, newDate) => {
+                                const taskToMove = tasks.find(t => t.id === taskId);
+                                if (!taskToMove) return;
+                                const targetDate = new Date(newDate).toDateString();
+                                const currentDate = viewDate.toDateString();
+                                
+                                // 현재 날짜에서 제거
+                                const updatedCurrentTasks = tasks.filter(t => t.id !== taskId);
+                                setLogs(prev => {
+                                  const newLogs = [...prev];
+                                  const currentIdx = newLogs.findIndex(l => l.date === currentDate);
+                                  if (currentIdx >= 0) newLogs[currentIdx] = { date: currentDate, tasks: updatedCurrentTasks };
+                                  
+                                  // 타겟 날짜에 추가
+                                  const targetIdx = newLogs.findIndex(l => l.date === targetDate);
+                                  if (targetIdx >= 0) {
+                                    newLogs[targetIdx] = { date: targetDate, tasks: [...newLogs[targetIdx].tasks, taskToMove] };
+                                  } else {
+                                    newLogs.push({ date: targetDate, tasks: [taskToMove] });
+                                  }
+                                  return newLogs;
+                                });
+                                setTasks(updatedCurrentTasks);
+                              }}
                             />
                           ))}
                         </SortableContext>
@@ -829,6 +997,30 @@ export default function App() {
                             key={`done-${task.id}`} task={task} updateTask={updateTask} deleteTask={deleteTask} 
                             onShowHistory={(name: string) => setHistoryTarget(name)}
                             sensors={sensors}
+                            onChangeDate={(taskId, newDate) => {
+                              const taskToMove = tasks.find(t => t.id === taskId);
+                              if (!taskToMove) return;
+                              const targetDate = new Date(newDate).toDateString();
+                              const currentDate = viewDate.toDateString();
+                              
+                              // 현재 날짜에서 제거
+                              const updatedCurrentTasks = tasks.filter(t => t.id !== taskId);
+                              setLogs(prev => {
+                                const newLogs = [...prev];
+                                const currentIdx = newLogs.findIndex(l => l.date === currentDate);
+                                if (currentIdx >= 0) newLogs[currentIdx] = { date: currentDate, tasks: updatedCurrentTasks };
+                                
+                                // 타겟 날짜에 추가
+                                const targetIdx = newLogs.findIndex(l => l.date === targetDate);
+                                if (targetIdx >= 0) {
+                                  newLogs[targetIdx] = { date: targetDate, tasks: [...newLogs[targetIdx].tasks, taskToMove] };
+                                } else {
+                                  newLogs.push({ date: targetDate, tasks: [taskToMove] });
+                                }
+                                return newLogs;
+                              });
+                              setTasks(updatedCurrentTasks);
+                            }}
                           />
                         ))
                       ) : (
@@ -850,6 +1042,40 @@ export default function App() {
                   className="w-full bg-gray-900/30 p-3 rounded-lg text-gray-400 outline-none border border-transparent focus:border-gray-700 text-sm"
                 />
               </div>
+
+              {/* 통계 요약 (SUMMARY와 동일한 디자인) */}
+              {tasks.length > 0 && (
+                <div className="mt-6 text-center pt-8 border-t border-gray-900/50">
+                  <div className="text-6xl font-thin text-white">
+                    {tasks.filter(t => t.done).length}<span className="text-2xl text-gray-700 font-thin mx-2"> / </span>{tasks.length}<span className="text-2xl text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0}%)</span>
+                  </div>
+                  
+                  <div className="mt-8 flex justify-center gap-8 border-t border-gray-900/50 pt-6">
+                    <div className="text-center">
+                      <div className="text-[10px] text-blue-500 mb-1 tracking-widest font-bold">TOTAL PLAN</div>
+                      <div className="text-gray-400 font-mono font-bold text-lg">
+                        {formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] text-green-500 mb-1 tracking-widest font-bold">TOTAL ACTUAL</div>
+                      <div className="text-white font-mono font-bold text-lg">
+                        {formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] text-green-500 mb-1 tracking-widest font-bold opacity-0">.</div>
+                      <div className="text-gray-400 font-mono font-bold text-lg">
+                        ({(() => {
+                          const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                          const totalActual = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                          return totalPlan > 0 ? (totalActual / totalPlan * 100).toFixed(1) : '0.0';
+                        })()}%)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 하단 버튼 */}
@@ -860,6 +1086,30 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Material Design 3 하단 네비게이션 */}
+        <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-xl border-t border-gray-800 z-50">
+          <div className="max-w-xl mx-auto flex justify-around items-center py-3 px-4">
+            <button 
+              onClick={() => setMode('PLANNING')} 
+              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${mode === 'PLANNING' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <div className="text-xs font-medium">Planning</div>
+            </button>
+            <button 
+              onClick={() => setMode('FOCUS')} 
+              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${mode === 'FOCUS' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <div className="text-xs font-medium">Detail</div>
+            </button>
+            <button 
+              onClick={() => setMode('HISTORY')} 
+              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${mode === 'HISTORY' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <div className="text-xs font-medium">Calendar</div>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

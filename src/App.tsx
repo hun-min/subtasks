@@ -155,7 +155,7 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
 
   return (
     <div ref={setNodeRef} style={style}>
-      <div className="flex items-center gap-2 py-1 px-3 bg-gray-900/50 rounded">
+      <div className="flex items-center gap-2 py-1 pl-2 pr-1 bg-gray-900/50 rounded">
         <button {...attributes} {...listeners} className="text-gray-600 hover:text-white p-1 touch-none">
           <GripVertical size={12} />
         </button>
@@ -275,6 +275,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isSubtasksCollapsed, setIsSubtasksCollapsed] = useState(false);
 
 
   
@@ -345,6 +346,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
         {!task.parentId && (
           <button 
             onClick={() => {
+              setIsSubtasksCollapsed(false);
               const newSubtask: Task = {
                 id: Date.now(),
                 text: '',
@@ -366,6 +368,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
             +
           </button>
         )}
+
         
         {/* 히스토리 버튼 */}
         <button onClick={() => onShowHistory(task.text)} className="text-gray-700 hover:text-blue-400 p-1" title="기록">
@@ -442,59 +445,68 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
       
       {/* 하위할일들 (간단한 형태) */}
       {task.subtasks && task.subtasks.length > 0 && (
-        <div className="ml-8 space-y-1">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => {
-            const { active, over } = event;
-            if (active.id !== over?.id) {
-              const oldIndex = task.subtasks!.findIndex((st: Task) => st.id === active.id);
-              const newIndex = task.subtasks!.findIndex((st: Task) => st.id === over?.id);
-              const reorderedSubtasks = arrayMove(task.subtasks!, oldIndex, newIndex);
-              const updatedTask = { ...task, subtasks: reorderedSubtasks };
-              updateTask(updatedTask);
-            }
-          }}>
-            <SortableContext items={task.subtasks!.map((st: Task) => st.id)} strategy={verticalListSortingStrategy}>
-              {task.subtasks.map((subtask: Task) => (
-                <SubtaskItem 
-                  key={subtask.id} 
-                  subtask={subtask} 
-                  task={task} 
-                  updateTask={updateTask} 
-                  setFocusedSubtaskId={setFocusedSubtaskId}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
+        <div className={`ml-6 space-y-1 ${!isSubtasksCollapsed ? 'pb-3 border-b border-gray-900' : ''}`}>
+          <button 
+            onClick={() => setIsSubtasksCollapsed(!isSubtasksCollapsed)}
+            className="w-full h-[12px] bg-gray-1000/30 hover:bg-gray-900/50 transition-colors relative flex items-center justify-center"
+          >
+            <span className="text-[8px] text-gray-500 absolute">{isSubtasksCollapsed ? '▼' : '▲'}</span>
+          </button>
           
-          {focusedSubtaskId && (
-            <div className="flex justify-center mt-2">
-              <button 
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  const newSubtask: Task = {
-                    id: Date.now(),
-                    text: '',
-                    done: false,
-                    percent: 0,
-                    planTime: 15,
-                    actTime: 0,
-                    isTimerOn: false,
-                    parentId: task.id
-                  };
-                  const updatedTask = {
-                    ...task,
-                    subtasks: [...(task.subtasks || []), newSubtask]
-                  };
+          {!isSubtasksCollapsed && (
+            <>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => {
+                const { active, over } = event;
+                if (active.id !== over?.id) {
+                  const oldIndex = task.subtasks!.findIndex((st: Task) => st.id === active.id);
+                  const newIndex = task.subtasks!.findIndex((st: Task) => st.id === over?.id);
+                  const reorderedSubtasks = arrayMove(task.subtasks!, oldIndex, newIndex);
+                  const updatedTask = { ...task, subtasks: reorderedSubtasks };
                   updateTask(updatedTask);
-                }}
-                className="text-gray-600 hover:text-blue-400 px-2 py-1 text-xs"
-              >
-                +
-              </button>
-            </div>
+                }
+              }}>
+                <SortableContext items={task.subtasks!.map((st: Task) => st.id)} strategy={verticalListSortingStrategy}>
+                  {task.subtasks.map((subtask: Task) => (
+                    <SubtaskItem 
+                      key={subtask.id} 
+                      subtask={subtask} 
+                      task={task} 
+                      updateTask={updateTask} 
+                      setFocusedSubtaskId={setFocusedSubtaskId}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+              
+              {focusedSubtaskId && (
+                <div className="flex justify-center mt-2">
+                  <button 
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      const newSubtask: Task = {
+                        id: Date.now(),
+                        text: '',
+                        done: false,
+                        percent: 0,
+                        planTime: 15,
+                        actTime: 0,
+                        isTimerOn: false,
+                        parentId: task.id
+                      };
+                      const updatedTask = {
+                        ...task,
+                        subtasks: [...(task.subtasks || []), newSubtask]
+                      };
+                      updateTask(updatedTask);
+                    }}
+                    className="text-gray-600 hover:text-blue-400 px-2 py-1 text-xs"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+            </>
           )}
-          
-
         </div>
       )}
     </div>
@@ -515,6 +527,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('ultra_mode', mode);
+    // PLANNING이나 FOCUS 모드로 전환하면 오늘 날짜로 설정
+    if (mode === 'PLANNING' || mode === 'FOCUS') {
+      setViewDate(new Date());
+    }
   }, [mode]);
   const [viewDate, setViewDate] = useState(new Date());
   
@@ -701,6 +717,29 @@ export default function App() {
 
   const completedCount = tasks.filter(t => t.done).length;
 
+  // 완료율에 따른 평가 메시지 (날짜 기반으로 고정)
+  const getEvaluationMessage = (completionRate: number, dateStr: string) => {
+    const messages = {
+      veryLow: ["시작이 반은 무슨, 시작은 그냥 0이다.", "시작이 반이라던데 아직 0임", "숨 쉬는 거 빼고 다 귀찮네", "내일의 내가 욕하고 있을 듯", "폰 볼 시간은 있고 이거 할 시간은 없지", "일단 눕고 생각할까", "로딩 중... 뇌가 연결되지 않음", "의욕 0, 귀찮음 100", "이거 꼭 해야 됨? (ㅇㅇ 해야 됨)", "시작 버튼 누르는 게 제일 힘듦", "도망치고 싶다 격렬하게", "청소 핑계 그만 대라", "멍 때리다 10분 순삭", "하기 싫어서 몸 비트는 중", "딱 5분만 더... 하다가 망함", "누구 머리 대신 써줄 사람", "영감님은 안 오신다 그냥 해라", "침대랑 접착제로 붙은 듯", "오늘따라 벽지가 재밌네", "숨 참고 다이브 말고 그냥 다이브 하고 싶다", "계획은 완벽했지, 실행이 문제지", "뇌세포 파업 선언", "미루기의 신 강림", "지금 안 하면 이따가 피눈물", "손가락 하나 움직이기 싫음", "0에서 1 만드는 게 제일 빡셈", "유튜브 알고리즘이 날 놔주질 않네", "슬슬 발등 뜨거워질 시간", "아 몰라 배째", "생각만 하다가 하루 다 감", "일단 앱 켠 게 어디냐"],
+      low: ["하긴 하는데, 티가 안 나네 티가.", "진도가 안 나감. 고장 났나?", "딴짓하느라 바쁨", "집중력 5분을 못 넘김", "영혼 없이 손만 움직이는 중", "이 속도면 내년에 끝남", "좀비 모드 ON", "뇌는 멈췄고 손만 일함", "아 당 떨어진다", "폰 좀 그만 봐 제발", "내가 뭘 하고 있는지 까먹음", "노동요 고르다 시간 다 감", "진척도 1도 안 오르는 마법", "슬슬 엉덩이 아픔", "고지가 안 보여", "배고픈데 밥부터 먹을까? (안 됨)", "머리는 거부하고 몸은 억지로 함", "모니터 뚫어지겠다", "아직도 초반인 게 레전드", "누가 시간 좀 멈춰봐", "멍하니 있다가 침 흘릴 뻔", "카페인으로 버티는 중", "격하게 아무것도 안 하고 싶다", "억지로 끌려가는 기분", "지금 포기하면 쓰레기겠지", "산 넘어 산이네", "백스페이스를 더 많이 누름", "눈이 침침해짐", "그냥 잘까? (악마의 속삭임)", "늪에 빠진 기분", "물음표 살인마 빙의 중"],
+      medium: ["반이나 남았어? 반밖에 안 했어?", "반타작 인생", "웃음이 실실 나네 미쳤나", "아직도 반이나 남음", "기계처럼 하는 중", "뇌 빼고 손만 움직여", "슬슬 눈에 뵈는 게 없음", "마우스 던질 뻔", "돌아가기엔 너무 멀리 옴", "해탈의 경지", "오늘 안에 끝나긴 하냐", "퀄리티 타협 중", "나 자신과의 싸움 (지는 중)", "뇌가 흐물흐물해짐", "여기가 어디요 나는 누구요", "악으로 깡으로 버텨", "정신줄 잡아라", "40과 60 사이의 림보", "스트레스 지수 폭발", "이 짓을 왜 시작했을까", "시스템 종료 마렵다", "완벽주의 갖다 버림", "허리 끊어질 듯", "사리 나오겠다", "그냥 대충 할까", "중꺾마는 무슨 그냥 꺾임", "영혼 가출", "인간 승리 도전 중", "멘탈 바사삭", "좀비처럼 걷는 중", "비명 지르고 싶다"],
+      high: ["어? 이거 끝나겠는데?", "이제 좀 속도 붙네", "비켜 방해하지 마", "갑자기 삘 받음", "끝이 보인다 보여", "아드레날린 도는 중", "미친 속도, 오타는 나중에", "내가 이걸 해내네", "불도저 모드 가동", "막판 스퍼트", "전투력 상승", "존버는 승리한다", "터널 끝에 빛이 보임", "밥 안 먹어도 배부름 (뻥임)", "멈추면 죽는 병 걸림", "집중력 최고조", "딴짓만 안 하면 금방임", "런닝맨 찍는 기분", "빈칸 채워지는 맛", "슬슬 끝낼 준비", "뒷심 발휘 중", "각성 상태", "눕기 1시간 전", "에라 모르겠다 질러", "마법처럼 채워짐", "손가락에서 연기 남", "70 넘으면 다 한 거지", "설레발 치는 중", "누구도 날 막을 수 없다", "저장 버튼 연타 중", "곧 자유다"],
+      veryHigh: ["끝. 더 이상은 못 해.", "해치웠다", "찢었다", "나 좀 제법인 듯", "박수 칠 때 떠나라", "체크 완료. 이 맛이지.", "오늘 할 일 끝", "앓던 이 빠진 기분", "자유다", "나 자신 고생했다", "당분간 찾지 마쇼", "하얗게 불태움", "승자의 여유", "완료 버튼 누르는 맛", "100% 채움", "고생 끝 꿀잠 시작", "이제 놀아도 됨", "발 뻗고 자겠다", "세상을 다 가진 기분", "치킨 시켜라", "내가 해냄", "드디어 끝", "지긋지긋했다 잘 가라", "레벨업", "셔터 내림", "퇴근하겠습니다 (마음만은)", "완벽해", "쾌감 쩐다", "마무리까지 깔끔", "국보급 결과물", "수고했어 오늘도"]
+    };
+    
+    let pool;
+    if (completionRate >= 80) pool = messages.veryHigh;
+    else if (completionRate >= 60) pool = messages.high;
+    else if (completionRate >= 40) pool = messages.medium;
+    else if (completionRate >= 20) pool = messages.low;
+    else pool = messages.veryLow;
+    
+    // 날짜 문자열을 숫자로 변환하여 시드로 사용
+    const seed = dateStr.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const index = seed % pool.length;
+    return pool[index];
+  };
+
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans overflow-y-auto selection:bg-blue-500">
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-24">
@@ -733,14 +772,22 @@ export default function App() {
                 </SortableContext>
               </DndContext>
             </div>
-            <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-2xl outline-none border-b-2 border-gray-700 focus:border-white pb-3 placeholder:text-gray-700" autoFocus />
+            {/* 자동완성 칩 (입력창 위에) */}
             {suggestions.length > 0 && (
-              <div className="flex gap-2 justify-center mt-4">
+              <div className="flex gap-2 justify-center mb-4 overflow-x-auto scrollbar-hide">
                 {suggestions.map(s => (
-                  <button key={s.id} onClick={() => selectSuggestion(s)} className="text-xs bg-gray-900 px-3 py-1 rounded-full text-gray-400 hover:text-white border border-gray-800">{s.text}</button>
+                  <button 
+                    key={s.id} 
+                    onClick={() => selectSuggestion(s)} 
+                    className="flex items-center gap-1 text-xs px-3 py-2 bg-gray-800 rounded-lg text-blue-300 border border-blue-900/30 whitespace-nowrap hover:bg-gray-700 flex-shrink-0"
+                  >
+                    <span className="font-bold text-white">{s.text}</span>
+                    <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
+                  </button>
                 ))}
               </div>
             )}
+            <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-2xl outline-none border-b-2 border-gray-700 focus:border-white pb-3 placeholder:text-gray-700" autoFocus />
             <div className="text-center mt-12">
               <button onClick={() => setMode('FOCUS')} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">START DAY</button>
             </div>
@@ -831,7 +878,8 @@ export default function App() {
             
             <div className="flex justify-between items-center py-8">
               <button onClick={() => setMode('PLANNING')} className="text-sm text-gray-500 hover:text-white transition-colors">← PLANNING</button>
-              <button onClick={() => { if(window.confirm('하루를 종료하시겠습니까?')) startSummary(); }} className="text-sm text-gray-500 hover:text-red-400 transition-colors">FINISH DAY →</button>
+              <button onClick={() => { if(window.confirm('하루를 종료하시겠습니까?')) startSummary(); }} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">FINISH DAY</button>
+              <button onClick={() => setMode('HISTORY')} className="text-sm text-gray-500 hover:text-white transition-colors">CALENDAR →</button>
             </div>
           </div>
         )}
@@ -862,6 +910,11 @@ export default function App() {
             <div className={`text-center pt-8 transition-all duration-700 ${summaryStep >= 5 ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
               <div className="text-6xl font-thin text-white">
                 {completedCount}<span className="text-2xl text-gray-700 font-thin mx-2"> / </span>{tasks.length}<span className="text-2xl text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0}%)</span>
+              </div>
+              
+              {/* 평가 메시지 */}
+              <div className="mt-4 text-lg text-blue-400 font-medium">
+                {getEvaluationMessage(tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0, viewDate.toDateString())}
               </div>
               
               <div className="mt-8 flex justify-center gap-8 border-t border-gray-900/50 pt-6">
@@ -897,16 +950,22 @@ export default function App() {
 
         {/* === HISTORY 모드 (수정된 버전) === */}
         {mode === 'HISTORY' && (
-          <div className="flex-1 flex flex-col pt-4">
+          <div className="flex-1 flex flex-col pt-6">
             
             {/* 1. 상단 캘린더 (유지) */}
             <div className="mb-8 bg-gray-900/50 p-4 rounded-2xl border border-gray-800">
-              <div className="flex justify-between items-center mb-4 px-2">
-                <span className="font-bold text-lg text-white">{viewDate.toLocaleString('default', { month: 'long' })}</span>
-                <div className="flex gap-4">
-                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}><ChevronLeft size={20} className="text-gray-400" /></button>
-                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}><ChevronRight size={20} className="text-gray-400" /></button>
+              <div className="flex items-center mb-4 px-2">
+                <div className="flex gap-2 w-24">
+                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1))} className="text-gray-500 hover:text-white"><ChevronLeft size={16} /></button>
+                  <span className="font-bold text-sm text-white">{viewDate.getFullYear()}</span>
+                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1))} className="text-gray-500 hover:text-white"><ChevronRight size={16} /></button>
                 </div>
+                <div className="flex-1 flex justify-center items-center gap-2">
+                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="text-gray-400 hover:text-white"><ChevronLeft size={20} /></button>
+                  <span className="font-bold text-lg text-white">{viewDate.toLocaleString('default', { month: 'long' })}</span>
+                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="text-gray-400 hover:text-white"><ChevronRight size={20} /></button>
+                </div>
+                <button onClick={() => setViewDate(new Date())} className="text-xs text-blue-400 hover:text-blue-300 w-24 text-right">●</button>
               </div>
               {/* 달력 그리드 (기존 유지) */}
               <div className="grid grid-cols-7 gap-2">
@@ -1036,6 +1095,21 @@ export default function App() {
               
               {/* 과거 날짜에도 추가 가능하게 입력창 유지 */}
               <div className="mt-8 pt-4 border-t border-gray-900">
+                {/* 자동완성 칩 (입력창 위에) */}
+                {suggestions.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mb-2">
+                    {suggestions.map(s => (
+                      <button 
+                        key={s.id} 
+                        onClick={() => selectSuggestion(s)} 
+                        className="flex items-center gap-1 text-xs px-3 py-2 bg-gray-800 rounded-lg text-blue-300 border border-blue-900/30 whitespace-nowrap hover:bg-gray-700 flex-shrink-0"
+                      >
+                        <span className="font-bold text-white">{s.text}</span>
+                        <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <input
                   type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }}
                   placeholder="+ Add task to history"
@@ -1048,6 +1122,11 @@ export default function App() {
                 <div className="mt-6 text-center pt-8 border-t border-gray-900/50">
                   <div className="text-6xl font-thin text-white">
                     {tasks.filter(t => t.done).length}<span className="text-2xl text-gray-700 font-thin mx-2"> / </span>{tasks.length}<span className="text-2xl text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0}%)</span>
+                  </div>
+                  
+                  {/* 평가 메시지 */}
+                  <div className="mt-4 text-lg text-blue-400 font-medium">
+                    {getEvaluationMessage(tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0, viewDate.toDateString())}
                   </div>
                   
                   <div className="mt-8 flex justify-center gap-8 border-t border-gray-900/50 pt-6">
@@ -1076,40 +1155,16 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* 하단 버튼 */}
-            <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-gray-900 p-4 flex gap-3 max-w-xl mx-auto">
-              <button onClick={() => { setViewDate(new Date()); setMode('FOCUS'); }} className="flex-1 py-3 bg-white text-black hover:bg-gray-200 text-xs font-bold rounded-lg">
-                BACK TO TODAY
-              </button>
+              {/* 하단 버튼 */}
+              <div className="text-center mt-12">
+                <button onClick={() => { setViewDate(new Date()); setMode('FOCUS'); }} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">BACK TO DETAIL</button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Material Design 3 하단 네비게이션 */}
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-xl border-t border-gray-800 z-50">
-          <div className="max-w-xl mx-auto flex justify-around items-center py-3 px-4">
-            <button 
-              onClick={() => setMode('PLANNING')} 
-              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${mode === 'PLANNING' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
-            >
-              <div className="text-xs font-medium">Planning</div>
-            </button>
-            <button 
-              onClick={() => setMode('FOCUS')} 
-              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${mode === 'FOCUS' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
-            >
-              <div className="text-xs font-medium">Detail</div>
-            </button>
-            <button 
-              onClick={() => setMode('HISTORY')} 
-              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${mode === 'HISTORY' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
-            >
-              <div className="text-xs font-medium">Calendar</div>
-            </button>
-          </div>
-        </div>
+
       </div>
     </div>
   );

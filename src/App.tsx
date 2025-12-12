@@ -206,7 +206,7 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
               updateTask(updatedTask);
             }
           }}
-          className={`flex-1 bg-transparent outline-none text-sm ${subtask.done ? 'text-gray-500 line-through' : 'text-gray-300'}`}
+          className={`flex-1 bg-transparent outline-none text-xs ${subtask.done ? 'text-gray-500 line-through' : 'text-gray-300'}`}
         />
         
         <button 
@@ -219,7 +219,7 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
               updateTask(updatedTask);
             }
           }}
-          className="text-gray-700 hover:text-rose-500 p-1 transition-colors"
+          className="text-gray-700 hover:text-rose-500 active:text-rose-500 p-1 transition-colors"
         >
           <X size={10} />
         </button>
@@ -276,6 +276,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isSubtasksCollapsed, setIsSubtasksCollapsed] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
 
   
@@ -288,20 +289,20 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
 
   return (
     <div>
-      <div ref={setNodeRef} style={style} className={`group flex flex-col gap-1 py-3 px-4 mb-2 rounded-2xl border transition-all ${task.done ? 'bg-black/20 border-white/5 opacity-60' : task.isTimerOn ? 'bg-[#0f0f14] border-indigo-500/50 shadow-[0_0_20px_-5px_rgba(99,102,241,0.4)]' : 'bg-[#0f0f14] border-white/5 hover:border-white/10'} ${task.parentId ? 'ml-6' : ''}`}>
+      <div ref={setNodeRef} style={style} className={`group flex flex-col gap-1 py-2 px-3 mb-2 rounded-2xl border transition-all ${task.done ? 'bg-black/20 border-white/5 opacity-60' : task.isTimerOn ? 'bg-[#0f0f14] border-indigo-500/50 shadow-[0_0_20px_-5px_rgba(99,102,241,0.4)]' : 'bg-[#0f0f14] border-white/5 hover:border-white/10'} ${task.parentId ? 'ml-6' : ''}`}>
       {/* 상단: 제목 줄 */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {/* 핸들 */}
-        <button {...attributes} {...listeners} className="text-gray-600 hover:text-white p-1 touch-none">
-          <GripVertical size={16} />
+        <button {...attributes} {...listeners} className="text-gray-600 hover:text-white p-0.5 touch-none">
+          <GripVertical size={14} />
         </button>
         
         {/* 체크 (완료) */}
         <button 
           onClick={() => updateTask({ ...task, done: !task.done })} 
-          className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center border transition-all ${task.done ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-transparent border-gray-700 text-transparent hover:border-gray-500'}`}
+          className={`flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center border transition-all ${task.done ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-transparent border-gray-700 text-transparent hover:border-gray-500'}`}
         >
-          <Check size={12} strokeWidth={4} />
+          <Check size={10} strokeWidth={4} />
         </button>
 
         {/* 제목 (한 줄로 쭉) */}
@@ -309,27 +310,38 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
           type="text" 
           value={task.text}
           onChange={(e) => updateTask({ ...task, text: e.target.value })}
-          className={`flex-1 bg-transparent outline-none text-sm whitespace-nowrap ${task.done ? 'text-gray-500 line-through' : 'text-white'}`}
+          className={`flex-1 bg-transparent outline-none text-xs whitespace-nowrap ${task.done ? 'text-gray-500 line-through' : 'text-white'}`}
         />
         
         {/* 삭제 버튼 */}
-        <button onClick={() => deleteTask(task.id)} className="text-gray-700 hover:text-rose-500 p-1 transition-colors">
-          <X size={14} />
+        <button 
+          onMouseDown={() => setIsDeleting(true)}
+          onMouseUp={() => setIsDeleting(false)}
+          onTouchStart={() => setIsDeleting(true)}
+          onTouchEnd={() => setIsDeleting(false)}
+          onClick={() => {
+            if(window.confirm('삭제하시겠습니까?')) {
+              deleteTask(task.id);
+            }
+          }} 
+          className={`p-0.5 transition-colors ${isDeleting ? 'text-rose-500' : 'text-gray-700'}`}
+        >
+          <X size={12} />
         </button>
       </div>
 
       {/* 하단: 컨트롤들 일렬 배치 (오른쪽 정렬) */}
       {isPlanning !== true && (
-      <div className="flex items-center justify-end gap-3 text-xs">
+      <div className="flex items-center justify-end gap-2 text-xs">
         {/* 날짜 변경 버튼 */}
         {onChangeDate && (
           <>
             <button 
               onClick={() => setShowDatePicker(true)}
-              className="text-gray-700 hover:text-blue-400 p-1" 
+              className="text-gray-700 hover:text-blue-400 p-0.5" 
               title="날짜 변경"
             >
-              <Calendar size={14} />
+              <Calendar size={12} />
             </button>
             {showDatePicker && (
               <DatePickerModal 
@@ -371,12 +383,12 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
 
         
         {/* 히스토리 버튼 */}
-        <button onClick={() => onShowHistory(task.text)} className="text-gray-700 hover:text-blue-400 p-1" title="기록">
-          <BarChart2 size={14} />
+        <button onClick={() => onShowHistory(task.text)} className="text-gray-700 hover:text-blue-400 p-0.5" title="기록">
+          <BarChart2 size={12} />
         </button>
 
         {/* 퍼센트 */}
-        <div className="flex items-center bg-gray-900 rounded px-2 py-1 border border-gray-800">
+        <div className="flex items-center bg-gray-900 rounded px-1.5 py-0.5 border border-gray-800">
           <input 
             type="number" min="0" max="100" step="1"
             value={task.percent}
@@ -385,26 +397,26 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
                if(val < 0) val = 0; if(val > 100) val = 100;
                updateTask({ ...task, percent: val });
             }}
-            className="w-8 bg-transparent text-right text-blue-400 font-bold outline-none text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="w-7 bg-transparent text-right text-blue-400 font-bold outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
-          <span className="text-gray-600 text-xs">%</span>
+          <span className="text-gray-600 text-[10px]">%</span>
         </div>
 
         {/* Plan Time */}
-        <div className="flex items-center text-gray-500 -space-x-2">
-          <span className="text-xs opacity-50">P</span>
+        <div className="flex items-center bg-gray-900 rounded px-1.5 py-0.5 border border-gray-800">
+          <span className="text-[10px] text-gray-500 opacity-50">P</span>
           <input 
             type="number" min="0"
             value={task.planTime}
             onChange={(e) => updateTask({ ...task, planTime: Math.max(0, parseInt(e.target.value) || 0) })}
-            className="w-8 bg-transparent text-right outline-none text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+            className="w-7 bg-transparent text-right text-gray-400 outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
           />
         </div>
         
         {/* Actual Time + Timer */}
-        <div className={`flex items-center gap-0.5 ${task.isTimerOn ? 'text-green-400' : 'text-gray-400'}`}>
+        <div className={`flex items-center gap-0.5 bg-gray-900 rounded px-1.5 py-0.5 border border-gray-800 ${task.isTimerOn ? 'text-green-400' : 'text-gray-400'}`}>
           <button onClick={() => updateTask({ ...task, isTimerOn: !task.isTimerOn })}>
-            {task.isTimerOn ? <Pause size={10} className="fill-current" /> : <Play size={10} className="fill-current" />}
+            {task.isTimerOn ? <Pause size={9} className="fill-current" /> : <Play size={9} className="fill-current" />}
           </button>
           <input 
             type="number" min="0"
@@ -419,9 +431,9 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
                 updateTask({ ...task, actTime: newMinutes + keepSeconds / 60 });
               }
             }}
-            className="w-6 bg-transparent text-right outline-none text-xs font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="w-5 bg-transparent text-right outline-none text-[10px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
-          <span className="text-xs">m</span>
+          <span className="text-[10px]">m</span>
           <input 
             type="number" min="0" max="59"
             value={Math.floor((task.actTime % 1) * 60)}
@@ -435,9 +447,9 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
                 updateTask({ ...task, actTime: keepMinutes + newSeconds / 60 });
               }
             }}
-            className="w-6 bg-transparent text-right outline-none text-xs font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none -ml-2"
+            className="w-5 bg-transparent text-right outline-none text-[10px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none -ml-1.5"
           />
-          <span className="text-xs">s</span>
+          <span className="text-[10px]">s</span>
         </div>
       </div>
       )}
@@ -445,7 +457,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
       
       {/* 하위할일들 (간단한 형태) */}
       {task.subtasks && task.subtasks.length > 0 && (
-        <div className={`ml-6 space-y-1 ${!isSubtasksCollapsed ? 'pb-3 border-b border-gray-900' : ''}`}>
+        <div className={`ml-6 space-y-1 ${!isSubtasksCollapsed ? 'pb-3' : ''}`}>
           <button 
             onClick={() => setIsSubtasksCollapsed(!isSubtasksCollapsed)}
             className="w-full h-[12px] bg-gray-1000/30 hover:bg-gray-900/50 transition-colors relative flex items-center justify-center"
@@ -479,7 +491,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
               </DndContext>
               
               {focusedSubtaskId && (
-                <div className="flex justify-center mt-2">
+                <div className="flex justify-center mt-0.5">
                   <button 
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
@@ -499,7 +511,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
                       };
                       updateTask(updatedTask);
                     }}
-                    className="text-gray-600 hover:text-blue-400 px-2 py-1 text-xs"
+                    className="text-gray-600 hover:text-blue-400 px-1 py-0 text-[10px]"
                   >
                     +
                   </button>
@@ -565,6 +577,7 @@ export default function App() {
 
   const [newTask, setNewTask] = useState('');
   const [suggestions, setSuggestions] = useState<Task[]>([]); 
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [summaryStep, setSummaryStep] = useState(0);
 
   const sensors = useSensors(
@@ -645,7 +658,8 @@ export default function App() {
   // 1. 자동완성 감지 (입력할 때마다 실행)
   useEffect(() => {
     if (!newTask.trim()) { 
-      setSuggestions([]); 
+      setSuggestions([]);
+      setSelectedSuggestionIndex(-1);
       return; 
     }
     
@@ -665,6 +679,7 @@ export default function App() {
     });
     
     setSuggestions(matches.slice(0, 5)); // 최대 5개까지 추천
+    setSelectedSuggestionIndex(-1);
   }, [newTask, logs]);
 
   const selectSuggestion = (pastTask: Task) => {
@@ -775,21 +790,35 @@ export default function App() {
             {/* 자동완성 칩 (입력창 위에) */}
             {suggestions.length > 0 && (
               <div className="flex gap-2 justify-center mb-4 overflow-x-auto scrollbar-hide">
-                {suggestions.map(s => (
+                {suggestions.map((s, idx) => (
                   <button 
                     key={s.id} 
                     onClick={() => selectSuggestion(s)} 
-                    className="flex items-center gap-1 text-xs px-3 py-2 bg-gray-800 rounded-lg text-blue-300 border border-blue-900/30 whitespace-nowrap hover:bg-gray-700 flex-shrink-0"
+                    className={`flex items-center gap-1 px-3 py-2 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-sm ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
                   >
                     <span className="font-bold text-white">{s.text}</span>
-                    <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
+                    <span className="text-gray-500 text-xs">({s.planTime}m / {s.percent}%)</span>
                   </button>
                 ))}
               </div>
             )}
-            <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-2xl outline-none border-b-2 border-gray-700 focus:border-white pb-3 placeholder:text-gray-700 transition-colors" autoFocus />
-            <div className="text-center mt-12">
-              <button onClick={() => setMode('FOCUS')} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">START DAY</button>
+            <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { 
+              if (e.key === 'Enter') {
+                if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
+                  selectSuggestion(suggestions[selectedSuggestionIndex]);
+                } else {
+                  addTask();
+                }
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev);
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+              }
+            }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-lg outline-none border-b-2 border-gray-700 focus:border-white pb-2 placeholder:text-gray-700 transition-colors" autoFocus />
+            <div className="text-center mt-8">
+              <button onClick={() => setMode('FOCUS')} className="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all">START DAY</button>
             </div>
           </div>
         )}
@@ -840,35 +869,44 @@ export default function App() {
             </div>
 
             {/* FOCUS 모드 하단 입력창 */}
-            <div className="p-4 bg-[#0a0a0f]/90 backdrop-blur-xl border-t border-white/5">
+            <div className="p-3 bg-[#0a0a0f]/90 backdrop-blur-xl border-t border-white/5">
               
               <div className="flex flex-col-reverse gap-2">
-                {/* 입력 & 버튼 */}
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={newTask} 
-                    onChange={(e) => setNewTask(e.target.value)} 
-                    onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }} 
-                    placeholder="할 일 입력..." 
-                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500 transition-colors"
-                  />
-                  
-                  {/* 시간 입력칸 삭제 (자동완성 쓰거나 기본값 30분 사용, 추가 후 리스트에서 수정) */}
-                  <button onClick={addTask} className="bg-indigo-600 text-white px-4 rounded-xl font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20">+</button>
-                </div>
+                {/* 입력 */}
+                <input 
+                  type="text" 
+                  value={newTask} 
+                  onChange={(e) => setNewTask(e.target.value)} 
+                  onKeyDown={(e) => { 
+                    if (e.key === 'Enter') {
+                      if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
+                        selectSuggestion(suggestions[selectedSuggestionIndex]);
+                      } else {
+                        addTask();
+                      }
+                    } else if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev);
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+                    }
+                  }} 
+                  placeholder="할 일 입력..." 
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                />
 
                 {/* 자동완성 칩 (입력창 바로 위에 고정됨) */}
                 {suggestions.length > 0 && (
                   <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                    {suggestions.map(s => (
+                    {suggestions.map((s, idx) => (
                       <button 
                         key={s.id} 
                         onClick={() => selectSuggestion(s)} 
-                        className="flex items-center gap-1 text-xs px-3 py-2 bg-gray-800 rounded-lg text-blue-300 border border-blue-900/30 whitespace-nowrap hover:bg-gray-700 flex-shrink-0"
+                        className={`flex items-center gap-1 px-3 py-2 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-sm ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
                       >
                         <span className="font-bold text-white">{s.text}</span>
-                        <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
+                        <span className="text-gray-500 text-xs">({s.planTime}m / {s.percent}%)</span>
                       </button>
                     ))}
                   </div>
@@ -876,10 +914,10 @@ export default function App() {
               </div>
             </div>
             
-            <div className="flex justify-between items-center py-8">
-              <button onClick={() => setMode('PLANNING')} className="text-sm text-gray-500 hover:text-white transition-colors">← PLANNING</button>
-              <button onClick={() => { if(window.confirm('하루를 종료하시겠습니까?')) startSummary(); }} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">FINISH DAY</button>
-              <button onClick={() => setMode('HISTORY')} className="text-sm text-gray-500 hover:text-white transition-colors">CALENDAR →</button>
+            <div className="flex justify-between items-center py-6">
+              <button onClick={() => setMode('PLANNING')} className="text-xs text-gray-500 hover:text-white transition-colors">← PLANNING</button>
+              <button onClick={() => { if(window.confirm('하루를 종료하시겠습니까?')) startSummary(); }} className="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all whitespace-nowrap">FINISH DAY</button>
+              <button onClick={() => setMode('HISTORY')} className="text-xs text-gray-500 hover:text-white transition-colors">CALENDAR →</button>
             </div>
           </div>
         )}
@@ -907,32 +945,32 @@ export default function App() {
               </div>
             </div>
             {/* 3. 점수 표시 부분 (수정) */}
-            <div className={`text-center pt-8 transition-all duration-700 ${summaryStep >= 5 ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
-              <div className="text-6xl font-thin text-white">
-                {completedCount}<span className="text-2xl text-gray-700 font-thin mx-2"> / </span>{tasks.length}<span className="text-2xl text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0}%)</span>
+            <div className={`text-center pt-6 transition-all duration-700 ${summaryStep >= 5 ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+              <div className="text-4xl font-thin text-white">
+                {completedCount}<span className="text-xl text-gray-700 font-thin mx-1"> / </span>{tasks.length}<span className="text-lg text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0}%)</span>
               </div>
               
               {/* 평가 메시지 */}
-              <div className="mt-4 text-lg text-blue-400 font-medium">
+              <div className="mt-3 text-sm text-blue-400 font-medium">
                 {getEvaluationMessage(tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0, viewDate.toDateString())}
               </div>
               
-              <div className="mt-8 flex justify-center gap-8 border-t border-gray-900/50 pt-6">
+              <div className="mt-6 flex justify-center gap-6 border-t border-gray-900/50 pt-4">
                 <div className="text-center">
-                  <div className="text-[10px] text-blue-500 mb-1 tracking-widest font-bold">TOTAL PLAN</div>
-                  <div className="text-gray-400 font-mono font-bold text-lg">
+                  <div className="text-[9px] text-blue-500 mb-1 tracking-widest font-bold">TOTAL PLAN</div>
+                  <div className="text-gray-400 font-mono font-bold text-sm">
                     {formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-[10px] text-green-500 mb-1 tracking-widest font-bold">TOTAL ACTUAL</div>
-                  <div className="text-white font-mono font-bold text-lg">
+                  <div className="text-[9px] text-green-500 mb-1 tracking-widest font-bold">TOTAL ACTUAL</div>
+                  <div className="text-white font-mono font-bold text-sm">
                     {formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-[10px] text-green-500 mb-1 tracking-widest font-bold opacity-0">.</div>
-                  <div className="text-gray-400 font-mono font-bold text-lg">
+                  <div className="text-[9px] text-green-500 mb-1 tracking-widest font-bold opacity-0">.</div>
+                  <div className="text-gray-400 font-mono font-bold text-sm">
                     ({(() => {
                       const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
                       const totalActual = tasks.reduce((acc, t) => acc + t.actTime, 0);
@@ -943,7 +981,7 @@ export default function App() {
               </div>
             </div>
             <div className={`text-center transition-all duration-1000 ${summaryStep >= 6 ? 'opacity-100' : 'opacity-0'}`}>
-              <button onClick={() => { setMode('HISTORY'); setViewDate(new Date()); }} className="px-10 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200">NEXT</button>
+              <button onClick={() => { setMode('HISTORY'); setViewDate(new Date()); }} className="px-8 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200">NEXT</button>
             </div>
           </div>
         )}
@@ -1098,56 +1136,67 @@ export default function App() {
                 {/* 자동완성 칩 (입력창 위에) */}
                 {suggestions.length > 0 && (
                   <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mb-2">
-                    {suggestions.map(s => (
+                    {suggestions.map((s, idx) => (
                       <button 
                         key={s.id} 
                         onClick={() => selectSuggestion(s)} 
-                        className="flex items-center gap-1 text-xs px-3 py-2 bg-gray-800 rounded-lg text-blue-300 border border-blue-900/30 whitespace-nowrap hover:bg-gray-700 flex-shrink-0"
+                        className={`flex items-center gap-1 px-3 py-2 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-sm ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
                       >
                         <span className="font-bold text-white">{s.text}</span>
-                        <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
+                        <span className="text-gray-500 text-xs">({s.planTime}m / {s.percent}%)</span>
                       </button>
                     ))}
                   </div>
                 )}
-                <div className="flex gap-2">
-                  <input
-                    type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }}
-                    placeholder="+ Add task to history"
-                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500 transition-colors"
-                  />
-                  <button onClick={addTask} className="bg-indigo-600 text-white px-4 rounded-xl font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20">+</button>
-                </div>
+                <input
+                  type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { 
+                    if (e.key === 'Enter') {
+                      if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
+                        selectSuggestion(suggestions[selectedSuggestionIndex]);
+                      } else {
+                        addTask();
+                      }
+                    } else if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev);
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+                    }
+                  }}
+                  placeholder="+ Add task to history"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                />
               </div>
 
               {/* 통계 요약 (SUMMARY와 동일한 디자인) */}
               {tasks.length > 0 && (
-                <div className="mt-6 text-center pt-8 border-t border-gray-900/50">
-                  <div className="text-6xl font-thin text-white">
-                    {tasks.filter(t => t.done).length}<span className="text-2xl text-gray-700 font-thin mx-2"> / </span>{tasks.length}<span className="text-2xl text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0}%)</span>
+                <div className="mt-6 text-center pt-6 border-t border-gray-900/50">
+                  <div className="text-4xl font-thin text-white">
+                    {tasks.filter(t => t.done).length}<span className="text-xl text-gray-700 font-thin mx-1"> / </span>{tasks.length}<span className="text-lg text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0}%)</span>
                   </div>
                   
                   {/* 평가 메시지 */}
-                  <div className="mt-4 text-lg text-blue-400 font-medium">
+                  <div className="mt-3 text-sm text-blue-400 font-medium">
                     {getEvaluationMessage(tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0, viewDate.toDateString())}
                   </div>
                   
-                  <div className="mt-8 flex justify-center gap-8 border-t border-gray-900/50 pt-6">
+                  <div className="mt-6 flex justify-center gap-6 border-t border-gray-900/50 pt-4">
                     <div className="text-center">
-                      <div className="text-[10px] text-blue-500 mb-1 tracking-widest font-bold">TOTAL PLAN</div>
-                      <div className="text-gray-400 font-mono font-bold text-lg">
+                      <div className="text-[9px] text-blue-500 mb-1 tracking-widest font-bold">TOTAL PLAN</div>
+                      <div className="text-gray-400 font-mono font-bold text-sm">
                         {formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-[10px] text-green-500 mb-1 tracking-widest font-bold">TOTAL ACTUAL</div>
-                      <div className="text-white font-mono font-bold text-lg">
+                      <div className="text-[9px] text-green-500 mb-1 tracking-widest font-bold">TOTAL ACTUAL</div>
+                      <div className="text-white font-mono font-bold text-sm">
                         {formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-[10px] text-green-500 mb-1 tracking-widest font-bold opacity-0">.</div>
-                      <div className="text-gray-400 font-mono font-bold text-lg">
+                      <div className="text-[9px] text-green-500 mb-1 tracking-widest font-bold opacity-0">.</div>
+                      <div className="text-gray-400 font-mono font-bold text-sm">
                         ({(() => {
                           const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
                           const totalActual = tasks.reduce((acc, t) => acc + t.actTime, 0);
@@ -1161,7 +1210,7 @@ export default function App() {
 
               {/* 하단 버튼 */}
               <div className="text-center mt-12">
-                <button onClick={() => { setViewDate(new Date()); setMode('FOCUS'); }} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">BACK TO DETAIL</button>
+                <button onClick={() => { setViewDate(new Date()); setMode('FOCUS'); }} className="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all whitespace-nowrap">BACK TO DETAIL</button>
               </div>
             </div>
           </div>

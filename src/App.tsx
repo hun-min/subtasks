@@ -280,6 +280,8 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
 
 
   
+  const progressPercent = task.planTime > 0 ? (task.actTime / task.planTime) * 100 : 0;
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -287,11 +289,16 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const progressStyle = {
+    background: `linear-gradient(90deg, rgba(59, 130, 246, 0.15) ${Math.min(progressPercent, 100)}%, transparent ${Math.min(progressPercent, 100)}%)`
+  };
+
   return (
     <div>
-      <div ref={setNodeRef} style={style} className={`group flex flex-col gap-1 py-2 px-3 mb-2 rounded-2xl border transition-all ${task.done ? 'bg-black/20 border-white/5 opacity-60' : task.isTimerOn ? 'bg-[#0f0f14] border-indigo-500/50 shadow-[0_0_20px_-5px_rgba(99,102,241,0.4)]' : 'bg-[#0f0f14] border-white/5 hover:border-white/10'} ${task.parentId ? 'ml-6' : ''}`}>
+      <div ref={setNodeRef} style={style} className={`relative overflow-hidden group flex flex-col gap-1 py-2 px-3 mb-2 rounded-2xl border transition-all ${task.done ? 'bg-black/20 border-white/5 opacity-60' : task.isTimerOn ? 'bg-[#0f0f14] border-indigo-500/50 shadow-[0_0_20px_-5px_rgba(99,102,241,0.4)]' : 'bg-[#0f0f14] border-white/5 hover:border-white/10'} ${task.parentId ? 'ml-6' : ''}`}>
+      <div className="absolute inset-0 z-0 pointer-events-none transition-all duration-500" style={progressStyle} />
       {/* 상단: 제목 줄 */}
-      <div className="flex items-center gap-1.5">
+      <div className="relative z-10 flex items-center gap-1.5">
         {/* 핸들 */}
         <button {...attributes} {...listeners} className="text-gray-600 hover:text-white p-0.5 touch-none">
           <GripVertical size={14} />
@@ -332,7 +339,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
 
       {/* 하단: 컨트롤들 일렬 배치 (오른쪽 정렬) */}
       {isPlanning !== true && (
-      <div className="flex items-center justify-end gap-2 text-xs">
+      <div className="relative z-10 flex items-center justify-end gap-1.5 text-xs">
         {/* 날짜 변경 버튼 */}
         {onChangeDate && (
           <>
@@ -794,10 +801,10 @@ export default function App() {
                   <button 
                     key={s.id} 
                     onClick={() => selectSuggestion(s)} 
-                    className={`flex items-center gap-1 px-3 py-2 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-sm ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-xs ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
                   >
-                    <span className="font-bold text-white">{s.text}</span>
-                    <span className="text-gray-500 text-xs">({s.planTime}m / {s.percent}%)</span>
+                    <span className="font-bold text-white text-xs">{s.text}</span>
+                    <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
                   </button>
                 ))}
               </div>
@@ -816,7 +823,7 @@ export default function App() {
                 e.preventDefault();
                 setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
               }
-            }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-lg outline-none border-b-2 border-gray-700 focus:border-white pb-2 placeholder:text-gray-700 transition-colors" autoFocus />
+            }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-base outline-none border-b-2 border-gray-700 focus:border-white pb-2 placeholder:text-gray-700 transition-colors" autoFocus />
             <div className="text-center mt-8">
               <button onClick={() => setMode('FOCUS')} className="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all">START DAY</button>
             </div>
@@ -903,10 +910,10 @@ export default function App() {
                       <button 
                         key={s.id} 
                         onClick={() => selectSuggestion(s)} 
-                        className={`flex items-center gap-1 px-3 py-2 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-sm ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-xs ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
                       >
-                        <span className="font-bold text-white">{s.text}</span>
-                        <span className="text-gray-500 text-xs">({s.planTime}m / {s.percent}%)</span>
+                        <span className="font-bold text-white text-xs">{s.text}</span>
+                        <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
                       </button>
                     ))}
                   </div>
@@ -926,22 +933,28 @@ export default function App() {
         {mode === 'SUMMARY' && (
           <div className="flex-1 flex flex-col justify-center space-y-10 py-10">
             <div className={`transition-all duration-700 ${summaryStep >= 1 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
-              <h2 className="text-blue-500 text-xs font-bold tracking-widest mb-3">원하는 것들</h2>
-              <div className={`space-y-2 transition-all duration-700 ${summaryStep >= 2 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
+              <h2 className="text-blue-500 text-[10px] font-bold tracking-widest mb-3 border-b border-blue-900/30 pb-1">원하는 것들</h2>
+              <div className={`space-y-1 transition-all duration-700 ${summaryStep >= 2 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
                 {tasks.map(t => (
-                  <div key={t.id} className="flex justify-between text-gray-400 py-1 border-b border-gray-800"><span>{t.text}</span><span className="font-mono text-xs">{t.planTime}m</span></div>
+                  <div key={t.id} className="flex justify-between items-center text-gray-400 py-1.5 px-2 bg-black/20 rounded-lg border border-gray-800">
+                    <span className="text-xs">{t.text}</span>
+                    <span className="font-mono text-[10px]">{t.planTime}m</span>
+                  </div>
                 ))}
               </div>
             </div>
             <div className={`transition-all duration-700 ${summaryStep >= 3 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
-              <h2 className="text-green-500 text-xs font-bold tracking-widest mb-3">완료한 일들</h2>
-              <div className={`space-y-2 transition-all duration-700 ${summaryStep >= 4 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
+              <h2 className="text-green-500 text-[10px] font-bold tracking-widest mb-3 border-b border-green-900/30 pb-1">완료한 일들</h2>
+              <div className={`space-y-1 transition-all duration-700 ${summaryStep >= 4 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
                 {tasks.filter(t => t.done).length > 0 ? tasks.filter(t => t.done).map(t => (
-                  <div key={t.id} className="flex justify-between text-white py-1 border-b border-gray-800">
-                    <span>{t.text}</span>
-                    <div className="flex gap-3 text-xs font-mono"><span className="text-gray-500">{formatFullTime(t.actTime)}</span><span className="text-blue-400">{t.percent}%</span></div>
+                  <div key={t.id} className="flex justify-between items-center text-white py-1.5 px-2 bg-black/20 rounded-lg border border-gray-800">
+                    <span className="text-xs">{t.text}</span>
+                    <div className="flex gap-2 text-[10px] font-mono items-center">
+                      <span className="text-gray-500">{formatFullTime(t.actTime)}</span>
+                      <span className="text-blue-400">{t.percent}%</span>
+                    </div>
                   </div>
-                )) : <div className="text-gray-600 text-sm">No completed tasks</div>}
+                )) : <div className="text-gray-600 text-xs">No completed tasks</div>}
               </div>
             </div>
             {/* 3. 점수 표시 부분 (수정) */}
@@ -955,28 +968,51 @@ export default function App() {
                 {getEvaluationMessage(tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0, viewDate.toDateString())}
               </div>
               
-              <div className="mt-6 flex justify-center gap-6 border-t border-gray-900/50 pt-4">
-                <div className="text-center">
-                  <div className="text-[9px] text-blue-500 mb-1 tracking-widest font-bold">TOTAL PLAN</div>
-                  <div className="text-gray-400 font-mono font-bold text-sm">
-                    {formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}
+              {/* Plan vs Actual 막대 그래프 */}
+              <div className="flex flex-col gap-3 max-w-xs mx-auto mt-8 mb-8 px-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] w-8 text-right text-gray-500">PLAN</span>
+                  <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-500/50 rounded-full transition-all duration-1000" 
+                      style={{ width: `${(() => {
+                        const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                        const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                        const maxValue = Math.max(totalPlan, totalAct, 1);
+                        return (totalPlan / maxValue) * 100;
+                      })()}%` }}
+                    />
                   </div>
+                  <span className="text-[10px] w-12 font-mono text-gray-400">{formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}</span>
                 </div>
-                <div className="text-center">
-                  <div className="text-[9px] text-green-500 mb-1 tracking-widest font-bold">TOTAL ACTUAL</div>
-                  <div className="text-white font-mono font-bold text-sm">
-                    {formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] w-8 text-right text-gray-500">ACT</span>
+                  <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ${(() => {
+                        const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                        const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                        return totalAct > totalPlan ? 'bg-green-500/60' : 'bg-blue-500/60';
+                      })()}`}
+                      style={{ width: `${(() => {
+                        const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                        const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                        const maxValue = Math.max(totalPlan, totalAct, 1);
+                        return (totalAct / maxValue) * 100;
+                      })()}%` }}
+                    />
                   </div>
+                  <span className="text-[10px] w-12 font-mono text-white">{formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}</span>
                 </div>
-                <div className="text-center">
-                  <div className="text-[9px] text-green-500 mb-1 tracking-widest font-bold opacity-0">.</div>
-                  <div className="text-gray-400 font-mono font-bold text-sm">
-                    ({(() => {
-                      const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                      const totalActual = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                      return totalPlan > 0 ? (totalActual / totalPlan * 100).toFixed(1) : '0.0';
-                    })()}%)
-                  </div>
+                <div className="text-center mt-2 text-xs">
+                  {(() => {
+                    const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                    const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                    const percent = totalPlan > 0 ? ((totalAct / totalPlan) * 100).toFixed(1) : '0.0';
+                    return totalAct > totalPlan 
+                      ? <span className="text-blue-400">계획보다 {formatFullTime(totalAct - totalPlan)} 더 했습니다. ({percent}%)</span>
+                      : <span className="text-gray-500">계획보다 {formatFullTime(totalPlan - totalAct)} 덜 했습니다. ({percent}%)</span>;
+                  })()}
                 </div>
               </div>
             </div>
@@ -1140,10 +1176,10 @@ export default function App() {
                       <button 
                         key={s.id} 
                         onClick={() => selectSuggestion(s)} 
-                        className={`flex items-center gap-1 px-3 py-2 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-sm ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-xs ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
                       >
-                        <span className="font-bold text-white">{s.text}</span>
-                        <span className="text-gray-500 text-xs">({s.planTime}m / {s.percent}%)</span>
+                        <span className="font-bold text-white text-xs">{s.text}</span>
+                        <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
                       </button>
                     ))}
                   </div>
@@ -1181,28 +1217,51 @@ export default function App() {
                     {getEvaluationMessage(tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0, viewDate.toDateString())}
                   </div>
                   
-                  <div className="mt-6 flex justify-center gap-6 border-t border-gray-900/50 pt-4">
-                    <div className="text-center">
-                      <div className="text-[9px] text-blue-500 mb-1 tracking-widest font-bold">TOTAL PLAN</div>
-                      <div className="text-gray-400 font-mono font-bold text-sm">
-                        {formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}
+                  {/* Plan vs Actual 막대 그래프 */}
+                  <div className="flex flex-col gap-3 max-w-xs mx-auto mt-8 mb-8 px-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] w-8 text-right text-gray-500">PLAN</span>
+                      <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500/50 rounded-full transition-all duration-1000" 
+                          style={{ width: `${(() => {
+                            const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                            const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                            const maxValue = Math.max(totalPlan, totalAct, 1);
+                            return (totalPlan / maxValue) * 100;
+                          })()}%` }}
+                        />
                       </div>
+                      <span className="text-[10px] w-12 font-mono text-gray-400">{formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}</span>
                     </div>
-                    <div className="text-center">
-                      <div className="text-[9px] text-green-500 mb-1 tracking-widest font-bold">TOTAL ACTUAL</div>
-                      <div className="text-white font-mono font-bold text-sm">
-                        {formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] w-8 text-right text-gray-500">ACT</span>
+                      <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-1000 ${(() => {
+                            const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                            const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                            return totalAct > totalPlan ? 'bg-green-500/60' : 'bg-blue-500/60';
+                          })()}`}
+                          style={{ width: `${(() => {
+                            const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                            const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                            const maxValue = Math.max(totalPlan, totalAct, 1);
+                            return (totalAct / maxValue) * 100;
+                          })()}%` }}
+                        />
                       </div>
+                      <span className="text-[10px] w-12 font-mono text-white">{formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}</span>
                     </div>
-                    <div className="text-center">
-                      <div className="text-[9px] text-green-500 mb-1 tracking-widest font-bold opacity-0">.</div>
-                      <div className="text-gray-400 font-mono font-bold text-sm">
-                        ({(() => {
-                          const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                          const totalActual = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                          return totalPlan > 0 ? (totalActual / totalPlan * 100).toFixed(1) : '0.0';
-                        })()}%)
-                      </div>
+                    <div className="text-center mt-2 text-xs">
+                      {(() => {
+                        const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
+                        const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
+                        const percent = totalPlan > 0 ? ((totalAct / totalPlan) * 100).toFixed(1) : '0.0';
+                        return totalAct > totalPlan 
+                          ? <span className="text-blue-400">계획보다 {formatFullTime(totalAct - totalPlan)} 더 했습니다. ({percent}%)</span>
+                          : <span className="text-gray-500">계획보다 {formatFullTime(totalPlan - totalAct)} 덜 했습니다. ({percent}%)</span>;
+                      })()}
                     </div>
                   </div>
                 </div>

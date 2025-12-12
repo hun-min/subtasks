@@ -81,7 +81,7 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
 
         {/* 달력 그리드 */}
         <div className="grid grid-cols-7 gap-2 mb-6">
-          {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600">{d}</div>)}
+          {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`weekday-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}
           {days.map((d: any, i) => {
             if (!d) return <div key={i} />;
             const dateStr = d.toDateString();
@@ -248,7 +248,7 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
           <button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button>
         </div>
         <div className="grid grid-cols-7 gap-2">
-          {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600">{d}</div>)}
+          {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}
           {days.map((d: any, i) => {
             if (!d) return <div key={i} />;
             const isToday = d.toDateString() === new Date().toDateString();
@@ -969,7 +969,7 @@ export default function App() {
               </div>
               {/* 달력 그리드 (기존 유지) */}
               <div className="grid grid-cols-7 gap-2">
-                {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600">{d}</div>)}
+                {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`cal-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}
                 {Array.from({length: 35}).map((_, i) => {
                   const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
                   d.setDate(d.getDate() + (i - d.getDay()));

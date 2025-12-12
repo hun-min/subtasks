@@ -62,8 +62,8 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
   );
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
         <div className="flex justify-between items-start mb-6">
           <div>
             <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase mb-1">TASK HISTORY</h2>
@@ -155,7 +155,7 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
 
   return (
     <div ref={setNodeRef} style={style}>
-      <div className="flex items-center gap-2 py-1 pl-2 pr-1 bg-gray-900/50 rounded">
+      <div className="group flex items-center gap-2 py-1.5 pl-2 pr-1 bg-black/30 hover:bg-black/50 rounded-lg transition-colors border border-transparent hover:border-white/5">
         <button {...attributes} {...listeners} className="text-gray-600 hover:text-white p-1 touch-none">
           <GripVertical size={12} />
         </button>
@@ -169,7 +169,7 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
             };
             updateTask(updatedTask);
           }}
-          className={`flex-shrink-0 transition-colors ${subtask.done ? 'text-green-500' : 'text-gray-800 hover:text-gray-600'}`}
+          className={`flex-shrink-0 transition-colors ${subtask.done ? 'text-emerald-500' : 'text-gray-800 hover:text-gray-600'}`}
         >
           <Check size={12} strokeWidth={4} />
         </button>
@@ -219,7 +219,7 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
               updateTask(updatedTask);
             }
           }}
-          className="text-gray-700 hover:text-red-500 p-0.5"
+          className="text-gray-700 hover:text-rose-500 p-1 transition-colors"
         >
           <X size={10} />
         </button>
@@ -240,8 +240,8 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
   );
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
           <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
@@ -288,7 +288,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
 
   return (
     <div>
-      <div ref={setNodeRef} style={style} className={`flex flex-col gap-1 py-2 px-3 border-b border-gray-800 bg-gray-950 mb-1 rounded-lg ${task.done ? 'opacity-50' : 'opacity-100'} ${task.parentId ? 'ml-6 bg-gray-900' : ''}`}>
+      <div ref={setNodeRef} style={style} className={`group flex flex-col gap-1 py-3 px-4 mb-2 rounded-2xl border transition-all ${task.done ? 'bg-black/20 border-white/5 opacity-60' : task.isTimerOn ? 'bg-[#0f0f14] border-indigo-500/50 shadow-[0_0_20px_-5px_rgba(99,102,241,0.4)]' : 'bg-[#0f0f14] border-white/5 hover:border-white/10'} ${task.parentId ? 'ml-6' : ''}`}>
       {/* 상단: 제목 줄 */}
       <div className="flex items-center gap-2">
         {/* 핸들 */}
@@ -299,9 +299,9 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
         {/* 체크 (완료) */}
         <button 
           onClick={() => updateTask({ ...task, done: !task.done })} 
-          className={`flex-shrink-0 transition-colors ${task.done ? 'text-green-500' : 'text-gray-800 hover:text-gray-600'}`}
+          className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center border transition-all ${task.done ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-transparent border-gray-700 text-transparent hover:border-gray-500'}`}
         >
-          <Check size={14} strokeWidth={4} />
+          <Check size={12} strokeWidth={4} />
         </button>
 
         {/* 제목 (한 줄로 쭉) */}
@@ -313,7 +313,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
         />
         
         {/* 삭제 버튼 */}
-        <button onClick={() => deleteTask(task.id)} className="text-gray-800 hover:text-red-600 p-0.5">
+        <button onClick={() => deleteTask(task.id)} className="text-gray-700 hover:text-rose-500 p-1 transition-colors">
           <X size={14} />
         </button>
       </div>
@@ -741,7 +741,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white font-sans overflow-y-auto selection:bg-blue-500">
+    <div className="min-h-screen bg-[#09090b] text-white font-sans overflow-y-auto selection:bg-indigo-500/30">
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-24">
         
         {/* 모달: 태스크 히스토리 */}
@@ -787,7 +787,7 @@ export default function App() {
                 ))}
               </div>
             )}
-            <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-2xl outline-none border-b-2 border-gray-700 focus:border-white pb-3 placeholder:text-gray-700" autoFocus />
+            <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-2xl outline-none border-b-2 border-gray-700 focus:border-white pb-3 placeholder:text-gray-700 transition-colors" autoFocus />
             <div className="text-center mt-12">
               <button onClick={() => setMode('FOCUS')} className="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-all">START DAY</button>
             </div>
@@ -839,8 +839,8 @@ export default function App() {
               </DndContext>
             </div>
 
-            {/* FOCUS 모드 하단 입력창 (통째로 교체하세요) */}
-            <div className="p-4 bg-gray-900/90 border-t border-gray-800 backdrop-blur-xl">
+            {/* FOCUS 모드 하단 입력창 */}
+            <div className="p-4 bg-[#0a0a0f]/90 backdrop-blur-xl border-t border-white/5">
               
               <div className="flex flex-col-reverse gap-2">
                 {/* 입력 & 버튼 */}
@@ -851,11 +851,11 @@ export default function App() {
                     onChange={(e) => setNewTask(e.target.value)} 
                     onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }} 
                     placeholder="할 일 입력..." 
-                    className="flex-1 bg-black border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-colors"
+                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500 transition-colors"
                   />
                   
                   {/* 시간 입력칸 삭제 (자동완성 쓰거나 기본값 30분 사용, 추가 후 리스트에서 수정) */}
-                  <button onClick={addTask} className="bg-blue-600 text-white px-4 rounded-xl font-bold hover:bg-blue-500">+</button>
+                  <button onClick={addTask} className="bg-indigo-600 text-white px-4 rounded-xl font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20">+</button>
                 </div>
 
                 {/* 자동완성 칩 (입력창 바로 위에 고정됨) */}
@@ -952,8 +952,8 @@ export default function App() {
         {mode === 'HISTORY' && (
           <div className="flex-1 flex flex-col pt-6">
             
-            {/* 1. 상단 캘린더 (유지) */}
-            <div className="mb-8 bg-gray-900/50 p-4 rounded-2xl border border-gray-800">
+            {/* 1. 상단 캘린더 */}
+            <div className="mb-8 bg-[#0f0f14]/50 backdrop-blur-sm p-5 rounded-3xl border border-white/5">
               <div className="flex items-center mb-4 px-2">
                 <div className="flex gap-2 w-24">
                   <button onClick={() => setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1))} className="text-gray-500 hover:text-white"><ChevronLeft size={16} /></button>
@@ -1110,11 +1110,14 @@ export default function App() {
                     ))}
                   </div>
                 )}
-                <input
-                  type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }}
-                  placeholder="+ Add task to history"
-                  className="w-full bg-gray-900/30 p-3 rounded-lg text-gray-400 outline-none border border-transparent focus:border-gray-700 text-sm"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }}
+                    placeholder="+ Add task to history"
+                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  <button onClick={addTask} className="bg-indigo-600 text-white px-4 rounded-xl font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20">+</button>
+                </div>
               </div>
 
               {/* 통계 요약 (SUMMARY와 동일한 디자인) */}

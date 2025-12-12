@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head><title>Restore Dec 11</title></head>
+<body>
+<h1>복구 중...</h1>
+<script>
+const dec11Data = {
+  "date": "Thu Dec 11 2025",
+  "tasks": [
+    {"id":1765380001,"text":"온동","done":true,"percent":40,"planTime":2,"actTime":0.9667,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380002,"text":"subtask","done":true,"percent":97,"planTime":30,"actTime":35,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380003,"text":"두 줄로 수정","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380004,"text":"작위할일 추가","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380005,"text":"planning은 어디갔지","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380006,"text":"휴지통 중 x로 바꾸자 쓰레기장인줄","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380007,"text":"start day를 Detail view로 수정 > 구","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380008,"text":"날짜 바꾸기 기능도 필요","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380009,"text":"왜 11시지 날는데 결과창 안뜨고 그냥","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380010,"text":"크리고 캘린더보에서도 화로 끌나 고도","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380011,"text":"학위할일을 계속 쓰는데 상위할일을 자동","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380012,"text":"Add task to hidtory는 자동완성이 없","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380013,"text":"결과에 왜 글이 안뜨는 것 같지","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]},
+    {"id":1765380014,"text":"캘린더뷰 보니 뭐가 없다갔다하네요","done":true,"percent":0,"planTime":30,"actTime":0,"isTimerOn":false,"subtasks":[]}
+  ]
+};
+
+const existing = JSON.parse(localStorage.getItem('ultra_tasks_space_9') || '[]');
+const filtered = existing.filter(log => log.date !== 'Thu Dec 11 2025');
+filtered.push(dec11Data);
+localStorage.setItem('ultra_tasks_space_9', JSON.stringify(filtered));
+
+alert('11일 데이터 복구 완료! 앱에서 F5 누르세요.');
+</script>
+</body>
+</html>

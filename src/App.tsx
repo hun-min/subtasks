@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
+import { useAuth } from './contexts/AuthContext';
+import { useSpace } from './contexts/SpaceContext';
+import { AuthModal } from './components/AuthModal';
+import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -189,21 +193,7 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
           onBlur={() => setFocusedSubtaskId(null)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              const newSubtask: Task = {
-                id: Date.now(),
-                text: '',
-                done: false,
-                percent: 0,
-                planTime: 15,
-                actTime: 0,
-                isTimerOn: false,
-                parentId: task.id
-              };
-              const updatedTask = {
-                ...task,
-                subtasks: [...(task.subtasks || []), newSubtask]
-              };
-              updateTask(updatedTask);
+              e.currentTarget.blur();
             }
           }}
           className={`flex-1 bg-transparent outline-none text-xs ${subtask.done ? 'text-gray-500 line-through' : 'text-gray-300'}`}
@@ -326,11 +316,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
           onMouseUp={() => setIsDeleting(false)}
           onTouchStart={() => setIsDeleting(true)}
           onTouchEnd={() => setIsDeleting(false)}
-          onClick={() => {
-            if(window.confirm('삭제하시겠습니까?')) {
-              deleteTask(task.id);
-            }
-          }} 
+          onClick={() => deleteTask(task.id)} 
           className={`p-0.5 transition-colors ${isDeleting ? 'text-rose-500' : 'text-gray-700'}`}
         >
           <X size={12} />
@@ -381,6 +367,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
                 subtasks: [...(task.subtasks || []), newSubtask]
               };
               updateTask(updatedTask);
+              setTimeout(() => setFocusedSubtaskId(newSubtask.id), 0);
             }}
             className="text-gray-600 hover:text-blue-400"
           >
@@ -534,13 +521,11 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
 
 // --- 메인 앱 ---
 export default function App() {
+  const { user, signOut } = useAuth();
+  const { currentSpace, loading: spaceLoading } = useSpace();
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [mode, setMode] = useState<'PLANNING' | 'FOCUS' | 'SUMMARY' | 'HISTORY'>(() => {
     const saved = localStorage.getItem('ultra_mode');
-    const now = new Date();
-    // 23시 이후면 SUMMARY 모드로 시작
-    if (now.getHours() >= 23 && saved === 'FOCUS') {
-      return 'SUMMARY';
-    }
     return (saved as any) || 'PLANNING';
   });
 
@@ -553,30 +538,55 @@ export default function App() {
   }, [mode]);
   const [viewDate, setViewDate] = useState(new Date());
   
-  const [logs, setLogs] = useState<DailyLog[]>(() => {
-    const saved = localStorage.getItem('ultra_tasks_v3');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [logs, setLogs] = useState<DailyLog[]>([]);
+  const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
 
-  // Supabase에서 데이터 로드
+  // 로컬 데이터 로드
   useEffect(() => {
-    const loadFromSupabase = async () => {
-      try {
-        const { data } = await supabase.from('task_logs').select('*');
-        if (data && data.length > 0) {
-          const supabaseLogs = data.map(item => ({
-            date: item.date,
-            tasks: JSON.parse(item.tasks)
-          }));
-          setLogs(supabaseLogs);
-          localStorage.setItem('ultra_tasks_v3', JSON.stringify(supabaseLogs));
-        }
-      } catch (error) {
-        console.log('Supabase load error:', error);
+    if (currentSpace) {
+      const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
+      if (saved) {
+        const parsedLogs = JSON.parse(saved);
+        setLogs(parsedLogs);
+        console.log('Logs loaded for space', currentSpace.id, ':', parsedLogs);
+      } else {
+        setLogs([]);
+        console.log('No data for space', currentSpace.id);
       }
-    };
-    loadFromSupabase();
-  }, []);
+      setLocalLogsLoaded(true);
+    }
+  }, [currentSpace]);
+
+  // Supabase 동기화 (로그인 시에만)
+  useEffect(() => {
+    if (!user || !currentSpace || !localLogsLoaded) return;
+    
+    // 로컬에 데이터가 있으면 Supabase 로드 건너뛴기 (새 공간 보호)
+    const localData = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
+    if (localData && JSON.parse(localData).length === 0) {
+      // 빈 공간이면 Supabase에서 불러오기
+      const loadFromSupabase = async () => {
+        try {
+          const { data } = await supabase
+            .from('task_logs')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('space_id', currentSpace.id);
+          if (data && data.length > 0) {
+            const supabaseLogs = data.map(item => ({
+              date: item.date,
+              tasks: JSON.parse(item.tasks)
+            }));
+            setLogs(supabaseLogs);
+            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(supabaseLogs));
+          }
+        } catch (error) {
+          console.log('Supabase load error:', error);
+        }
+      };
+      loadFromSupabase();
+    }
+  }, [user, currentSpace, localLogsLoaded]);
   const [tasks, setTasks] = useState<Task[]>([]);
   
   // 히스토리 모달 상태
@@ -597,8 +607,20 @@ export default function App() {
   useEffect(() => {
     const checkTime = setInterval(() => {
       const now = new Date();
-      if (now.getHours() === 23 && now.getMinutes() === 0 && now.getSeconds() === 0 && mode === 'FOCUS') startSummary();
-    }, 1000);
+      const today = now.toDateString();
+      const lastSummaryDate = localStorage.getItem('lastSummaryDate');
+      
+      // 자정 지나면 lastSummaryDate 초기화
+      if (lastSummaryDate && lastSummaryDate !== today) {
+        localStorage.removeItem('lastSummaryDate');
+      }
+      
+      // 23시(11PM) 0분~59분 사이에 FOCUS 모드이고 아직 오늘 summary 안 했으면 실행
+      if (now.getHours() === 23 && mode === 'FOCUS' && lastSummaryDate !== today) {
+        localStorage.setItem('lastSummaryDate', today);
+        startSummary();
+      }
+    }, 30000); // 30초마다 체크 (부하 줄이기)
     return () => clearInterval(checkTime);
   }, [mode]);
 
@@ -613,25 +635,30 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // 저장/로드 + Supabase 동기화
-  useEffect(() => { 
-    localStorage.setItem('ultra_tasks_v3', JSON.stringify(logs)); 
-    // Supabase에 동기화
-    if (logs.length > 0) {
+  // 저장 + Supabase 동기화
+  useEffect(() => {
+    if (!currentSpace || !localLogsLoaded) return;
+    
+    localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
+    
+    // 로그인 시에만 Supabase 동기화
+    if (user && logs.length > 0) {
       supabase.from('task_logs').upsert(logs.map(log => ({
         date: log.date,
+        user_id: user.id,
+        space_id: currentSpace.id,
         tasks: JSON.stringify(log.tasks)
       }))).then(({ error }) => {
         if (error) console.log('Supabase sync error:', error);
       });
     }
-  }, [logs]);
+  }, [logs, user, currentSpace, localLogsLoaded]);
   useEffect(() => {
     const dateStr = viewDate.toDateString();
     const log = logs.find(l => l.date === dateStr);
     if (log) setTasks(log.tasks);
     else setTasks([]);
-  }, [viewDate]); 
+  }, [viewDate, logs]); 
 
   const updateLogs = (newTasks: Task[]) => {
     setTasks(newTasks);
@@ -730,12 +757,33 @@ export default function App() {
     setTimeout(() => setSummaryStep(6), 8500);
   };
 
-  // 앱 시작 시 SUMMARY 모드면 애니메이션 실행
+  // 앱 시작 시 23시 지나고 summary 안 본 날이 있으면 그 날로 이동해서 summary 표시
   useEffect(() => {
-    if (mode === 'SUMMARY') {
+    if (!localLogsLoaded) return;
+    
+    const now = new Date();
+    const today = now.toDateString();
+    const saved = localStorage.getItem('ultra_mode');
+    const lastSummaryDate = localStorage.getItem('lastSummaryDate');
+    
+    // 어제 23시 이후에 summary를 안 봤는지 확인
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+    
+    // 어제 데이터가 있고, 어제 summary를 안 봤으면 어제로 이동해서 summary 표시
+    const yesterdayLog = logs.find(l => l.date === yesterdayStr);
+    if (yesterdayLog && yesterdayLog.tasks.length > 0 && lastSummaryDate !== yesterdayStr) {
+      setViewDate(yesterday);
+      localStorage.setItem('lastSummaryDate', yesterdayStr);
+      startSummary();
+    } else if (now.getHours() >= 23 && saved === 'FOCUS' && lastSummaryDate !== today) {
+      localStorage.setItem('lastSummaryDate', today);
+      startSummary();
+    } else if (mode === 'SUMMARY') {
       startSummary();
     }
-  }, []);
+  }, [localLogsLoaded]);
 
   const completedCount = tasks.filter(t => t.done).length;
 
@@ -762,9 +810,26 @@ export default function App() {
     return pool[index];
   };
 
+  if (spaceLoading) {
+    return <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-white">Loading...</div>;
+  }
+
   return (
     <div className="min-h-screen bg-[#09090b] text-white font-sans overflow-y-auto selection:bg-indigo-500/30">
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-24">
+        
+        {/* 상단 헤더: Space 선택 + 로그인 */}
+        <div className="mb-4 flex justify-between items-center">
+          <SpaceSelector />
+          <button
+            onClick={() => user ? signOut() : setShowAuthModal(true)}
+            className="text-xs text-gray-500 hover:text-white"
+          >
+            {user ? '로그아웃' : '로그인'}
+          </button>
+        </div>
         
         {/* 모달: 태스크 히스토리 */}
         {historyTarget && (

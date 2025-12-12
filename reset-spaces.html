@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Reset Spaces</title>
+</head>
+<body>
+  <h1>Resetting...</h1>
+  <script type="module">
+    import Dexie from 'https://cdn.jsdelivr.net/npm/dexie@3.2.7/+esm';
+
+    const db = new Dexie('MySystemDB');
+    db.version(7).stores({
+      spaces: '++id, title, createdAt',
+      targets: '++id, spaceId, title, usageCount, lastUsed, isCompleted, hideFromAutocomplete, auditNote',
+      tasks: '++id, targetId, isCompleted, createdAt, completedAt, timerCount, hideFromAutocomplete, auditNote'
+    });
+
+    async function reset() {
+      // 1. 모든 Space 삭제
+      await db.spaces.clear();
+      
+      // 2. "기본" Space 생성
+      const defaultId = await db.spaces.add({ title: '기본', createdAt: new Date() });
+      
+      // 3. localStorage에서 기존 데이터 복구
+      const oldData = localStorage.getItem('ultra_tasks_v3');
+      if (oldData) {
+        localStorage.setItem(`ultra_tasks_space_${defaultId}`, oldData);
+        console.log('기존 데이터 복구 완료');
+      }
+      
+      // 4. currentSpaceId 설정
+      localStorage.setItem('currentSpaceId', defaultId.toString());
+      
+      alert('완료! 페이지를 새로고침하세요.');
+    }
+
+    reset();
+  </script>
+</body>
+</html>

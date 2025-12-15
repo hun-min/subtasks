@@ -6,6 +6,7 @@ type SpaceContextType = {
   currentSpace: Space | null;
   setCurrentSpace: (space: Space) => void;
   addSpace: (title: string) => Promise<void>;
+  updateSpace: (id: number, title: string) => Promise<void>;
   deleteSpace: (id: number) => Promise<void>;
   loading: boolean;
 };
@@ -47,6 +48,11 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     await loadSpaces();
   };
 
+  const updateSpace = async (id: number, title: string) => {
+    await db.spaces.update(id, { title });
+    await loadSpaces();
+  };
+
   const deleteSpace = async (id: number) => {
     if (spaces.length <= 1) {
       alert('최소 1개의 공간이 필요합니다.');
@@ -57,7 +63,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SpaceContext.Provider value={{ spaces, currentSpace, setCurrentSpace: handleSetCurrentSpace, addSpace, deleteSpace, loading }}>
+    <SpaceContext.Provider value={{ spaces, currentSpace, setCurrentSpace: handleSetCurrentSpace, addSpace, updateSpace, deleteSpace, loading }}>
       {children}
     </SpaceContext.Provider>
   );

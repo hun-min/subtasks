@@ -526,11 +526,17 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [mode, setMode] = useState<'PLANNING' | 'FOCUS' | 'SUMMARY' | 'HISTORY'>(() => {
     const saved = localStorage.getItem('ultra_mode');
+    // 핵심: 저장된 게 'SUMMARY'면 강제로 'PLANNING'으로 바꿈 (무한 루프 방지)
+    if (saved === 'SUMMARY') return 'PLANNING';
     return (saved as any) || 'PLANNING';
   });
 
   useEffect(() => {
-    localStorage.setItem('ultra_mode', mode);
+    // [수정] SUMMARY 모드는 저장하지 않음 (새로고침 시 또 뜨는 것 방지)
+    if (mode !== 'SUMMARY') {
+      localStorage.setItem('ultra_mode', mode);
+    }
+    
     // PLANNING이나 FOCUS 모드로 전환하면 오늘 날짜로 설정
     if (mode === 'PLANNING' || mode === 'FOCUS') {
       setViewDate(new Date());

@@ -524,24 +524,7 @@ export default function App() {
   const { user, signOut } = useAuth();
   const { currentSpace, loading: spaceLoading } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [mode, setMode] = useState<'PLANNING' | 'FOCUS' | 'SUMMARY' | 'HISTORY'>(() => {
-    const saved = localStorage.getItem('ultra_mode');
-    // 핵심: 저장된 게 'SUMMARY'면 강제로 'PLANNING'으로 바꿈 (무한 루프 방지)
-    if (saved === 'SUMMARY') return 'PLANNING';
-    return (saved as any) || 'PLANNING';
-  });
 
-  useEffect(() => {
-    // [수정] SUMMARY 모드는 저장하지 않음 (새로고침 시 또 뜨는 것 방지)
-    if (mode !== 'SUMMARY') {
-      localStorage.setItem('ultra_mode', mode);
-    }
-    
-    // PLANNING이나 FOCUS 모드로 전환하면 오늘 날짜로 설정
-    if (mode === 'PLANNING' || mode === 'FOCUS') {
-      setViewDate(new Date());
-    }
-  }, [mode]);
   const [viewDate, setViewDate] = useState(new Date());
   
   const [logs, setLogs] = useState<DailyLog[]>([]);
@@ -609,7 +592,7 @@ export default function App() {
   const [newTask, setNewTask] = useState('');
   const [suggestions, setSuggestions] = useState<Task[]>([]); 
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
-  const [summaryStep, setSummaryStep] = useState(0);
+
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -617,33 +600,20 @@ export default function App() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // 11시 자동 정산
-  useEffect(() => {
-    const checkTime = setInterval(() => {
-      const now = new Date();
-      const today = now.toDateString();
-      const lastSummaryDate = localStorage.getItem('lastSummaryDate');
-      
-      // 자정 지나면 lastSummaryDate 초기화
-      if (lastSummaryDate && lastSummaryDate !== today) {
-        localStorage.removeItem('lastSummaryDate');
-      }
-      
-      // 23시(11PM) 0분~59분 사이에 FOCUS 모드이고 아직 오늘 summary 안 했으면 실행
-      if (now.getHours() === 23 && mode === 'FOCUS' && lastSummaryDate !== today) {
-        localStorage.setItem('lastSummaryDate', today);
-        startSummary();
-      }
-    }, 30000); // 30초마다 체크 (부하 줄이기)
-    return () => clearInterval(checkTime);
-  }, [mode]);
 
-  // 타이머
+
+  // 타이머 (timestamp 기반)
   useEffect(() => {
     const timer = setInterval(() => {
       setTasks(prev => {
-        if (!prev.some(t => t.isTimerOn)) return prev;
-        return prev.map(t => t.isTimerOn ? { ...t, actTime: t.actTime + (1 / 60) } : t);
+        const now = Date.now();
+        return prev.map(t => {
+          if (t.isTimerOn && t.timerStartTime) {
+            const elapsed = (now - t.timerStartTime) / 1000 / 60;
+            return { ...t, actTime: t.actTime + elapsed, timerStartTime: now };
+          }
+          return t;
+        });
       });
     }, 1000);
     return () => clearInterval(timer);
@@ -691,7 +661,20 @@ export default function App() {
     setNewTask(''); setSuggestions([]);
   };
 
-  const updateTask = (updated: Task) => updateLogs(tasks.map(t => t.id === updated.id ? updated : t));
+  const updateTask = (updated: Task) => {
+    const now = Date.now();
+    const oldTask = tasks.find(t => t.id === updated.id);
+    
+    if (updated.isTimerOn && !oldTask?.isTimerOn) {
+      updated.timerStartTime = now;
+    } else if (!updated.isTimerOn && oldTask?.isTimerOn && oldTask.timerStartTime) {
+      const elapsed = (now - oldTask.timerStartTime) / 1000 / 60;
+      updated.actTime = oldTask.actTime + elapsed;
+      updated.timerStartTime = undefined;
+    }
+    
+    updateLogs(tasks.map(t => t.id === updated.id ? updated : t));
+  };
   const deleteTask = (id: number) => { if(window.confirm('삭제하시겠습니까?')) updateLogs(tasks.filter(t => t.id !== id)); };
   
   const handleDragEnd = (event: DragEndEvent) => {
@@ -760,54 +743,21 @@ export default function App() {
     setSuggestions([]);
   };
 
-  const startSummary = () => {
-    setMode('SUMMARY');
-    setSummaryStep(0);
-    setTimeout(() => setSummaryStep(1), 1000);
-    setTimeout(() => setSummaryStep(2), 2500);
-    setTimeout(() => setSummaryStep(3), 4000);
-    setTimeout(() => setSummaryStep(4), 5500);
-    setTimeout(() => setSummaryStep(5), 7000);
-    setTimeout(() => setSummaryStep(6), 8500);
-  };
 
-  // 앱 시작 시 23시 지나고 summary 안 본 날이 있으면 그 날로 이동해서 summary 표시
-  useEffect(() => {
-    if (!localLogsLoaded) return;
-    
-    const now = new Date();
-    const today = now.toDateString();
-    const saved = localStorage.getItem('ultra_mode');
-    const lastSummaryDate = localStorage.getItem('lastSummaryDate');
-    
-    // 어제 23시 이후에 summary를 안 봤는지 확인
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toDateString();
-    
-    // 어제 데이터가 있고, 어제 summary를 안 봤으면 어제로 이동해서 summary 표시
-    const yesterdayLog = logs.find(l => l.date === yesterdayStr);
-    if (yesterdayLog && yesterdayLog.tasks.length > 0 && lastSummaryDate !== yesterdayStr) {
-      setViewDate(yesterday);
-      localStorage.setItem('lastSummaryDate', yesterdayStr);
-      startSummary();
-    } else if (now.getHours() >= 23 && saved === 'FOCUS' && lastSummaryDate !== today) {
-      localStorage.setItem('lastSummaryDate', today);
-      startSummary();
-    } else if (mode === 'SUMMARY') {
-      startSummary();
-    }
-  }, [localLogsLoaded]);
 
-  const completedCount = tasks.filter(t => t.done).length;
+
+
+  const totalPlanTime = tasks.reduce((acc, t) => acc + t.planTime, 0);
+  const totalActTime = tasks.reduce((acc, t) => acc + t.actTime, 0);
+  const timeProgress = totalPlanTime > 0 ? (totalActTime / totalPlanTime) * 100 : 0;
 
   // 완료율에 따른 평가 메시지 (날짜 기반으로 고정)
   const getEvaluationMessage = (completionRate: number, dateStr: string) => {
     const messages = {
-      veryLow: ["시작이 반은 무슨, 시작은 그냥 0이다.", "시작이 반이라던데 아직 0임", "숨 쉬는 거 빼고 다 귀찮네", "내일의 내가 욕하고 있을 듯", "폰 볼 시간은 있고 이거 할 시간은 없지", "일단 눕고 생각할까", "로딩 중... 뇌가 연결되지 않음", "의욕 0, 귀찮음 100", "이거 꼭 해야 됨? (ㅇㅇ 해야 됨)", "시작 버튼 누르는 게 제일 힘듦", "도망치고 싶다 격렬하게", "청소 핑계 그만 대라", "멍 때리다 10분 순삭", "하기 싫어서 몸 비트는 중", "딱 5분만 더... 하다가 망함", "누구 머리 대신 써줄 사람", "영감님은 안 오신다 그냥 해라", "침대랑 접착제로 붙은 듯", "오늘따라 벽지가 재밌네", "숨 참고 다이브 말고 그냥 다이브 하고 싶다", "계획은 완벽했지, 실행이 문제지", "뇌세포 파업 선언", "미루기의 신 강림", "지금 안 하면 이따가 피눈물", "손가락 하나 움직이기 싫음", "0에서 1 만드는 게 제일 빡셈", "유튜브 알고리즘이 날 놔주질 않네", "슬슬 발등 뜨거워질 시간", "아 몰라 배째", "생각만 하다가 하루 다 감", "일단 앱 켠 게 어디냐"],
-      low: ["하긴 하는데, 티가 안 나네 티가.", "진도가 안 나감. 고장 났나?", "딴짓하느라 바쁨", "집중력 5분을 못 넘김", "영혼 없이 손만 움직이는 중", "이 속도면 내년에 끝남", "좀비 모드 ON", "뇌는 멈췄고 손만 일함", "아 당 떨어진다", "폰 좀 그만 봐 제발", "내가 뭘 하고 있는지 까먹음", "노동요 고르다 시간 다 감", "진척도 1도 안 오르는 마법", "슬슬 엉덩이 아픔", "고지가 안 보여", "배고픈데 밥부터 먹을까? (안 됨)", "머리는 거부하고 몸은 억지로 함", "모니터 뚫어지겠다", "아직도 초반인 게 레전드", "누가 시간 좀 멈춰봐", "멍하니 있다가 침 흘릴 뻔", "카페인으로 버티는 중", "격하게 아무것도 안 하고 싶다", "억지로 끌려가는 기분", "지금 포기하면 쓰레기겠지", "산 넘어 산이네", "백스페이스를 더 많이 누름", "눈이 침침해짐", "그냥 잘까? (악마의 속삭임)", "늪에 빠진 기분", "물음표 살인마 빙의 중"],
-      medium: ["반이나 남았어? 반밖에 안 했어?", "반타작 인생", "웃음이 실실 나네 미쳤나", "아직도 반이나 남음", "기계처럼 하는 중", "뇌 빼고 손만 움직여", "슬슬 눈에 뵈는 게 없음", "마우스 던질 뻔", "돌아가기엔 너무 멀리 옴", "해탈의 경지", "오늘 안에 끝나긴 하냐", "퀄리티 타협 중", "나 자신과의 싸움 (지는 중)", "뇌가 흐물흐물해짐", "여기가 어디요 나는 누구요", "악으로 깡으로 버텨", "정신줄 잡아라", "40과 60 사이의 림보", "스트레스 지수 폭발", "이 짓을 왜 시작했을까", "시스템 종료 마렵다", "완벽주의 갖다 버림", "허리 끊어질 듯", "사리 나오겠다", "그냥 대충 할까", "중꺾마는 무슨 그냥 꺾임", "영혼 가출", "인간 승리 도전 중", "멘탈 바사삭", "좀비처럼 걷는 중", "비명 지르고 싶다"],
-      high: ["어? 이거 끝나겠는데?", "이제 좀 속도 붙네", "비켜 방해하지 마", "갑자기 삘 받음", "끝이 보인다 보여", "아드레날린 도는 중", "미친 속도, 오타는 나중에", "내가 이걸 해내네", "불도저 모드 가동", "막판 스퍼트", "전투력 상승", "존버는 승리한다", "터널 끝에 빛이 보임", "밥 안 먹어도 배부름 (뻥임)", "멈추면 죽는 병 걸림", "집중력 최고조", "딴짓만 안 하면 금방임", "런닝맨 찍는 기분", "빈칸 채워지는 맛", "슬슬 끝낼 준비", "뒷심 발휘 중", "각성 상태", "눕기 1시간 전", "에라 모르겠다 질러", "마법처럼 채워짐", "손가락에서 연기 남", "70 넘으면 다 한 거지", "설레발 치는 중", "누구도 날 막을 수 없다", "저장 버튼 연타 중", "곧 자유다"],
+      veryLow: ["시작이 반은 무슨, 시작은 그냥 0이다.", "시작이 반이라던데 아직 0임", "숨 쉬는 거 빼고 다 귀찮네", "내일의 내가 욕하고 있을 듯", "딴짓할 시간은 있고 이거 할 시간은 없지", "일단 눕고 생각할까", "로딩 중... 뇌가 연결되지 않음", "의욕 0, 귀찮음 100", "이거 꼭 해야 됨? (ㅇㅇ 해야 됨)", "시작 버튼 누르는 게 제일 힘듦", "도망치고 싶다 격렬하게", "청소 핑계 그만 대라", "멍 때리다 10분 순삭", "하기 싫어서 몸 비트는 중", "딱 5분만 더... 하다가 망함", "누구 머리 대신 써줄 사람", "영감님은 안 오신다 그냥 해라", "침대랑 접착제로 붙은 듯", "오늘따라 벽지가 재밌네", "숨 참고 다이브 말고 그냥 다이브 하고 싶다", "계획은 완벽했지, 실행이 문제지", "뇌세포 파업 선언", "미루기의 신 강림", "지금 안 하면 이따가 피눈물", "손가락 하나 움직이기 싫음", "0에서 1 만드는 게 제일 빡셈", "유튜브 알고리즘이 날 놔주질 않네", "슬슬 발등 뜨거워질 시간", "아 몰라 배째", "생각만 하다가 하루 다 감", "일단 앱 켠 게 어디냐"],
+      low: ["하긴 하는데, 티가 안 나네 티가.", "진도가 안 나감. 고장 났나?", "딴짓하느라 바쁨", "집중력 5분을 못 넘김", "영혼 없이 손만 움직이는 중", "이 속도면 내년에 끝남", "좀비 모드 ON", "뇌는 멈췄고 손만 일함", "아 당 떨어진다", "딴짓 좀 그만해 제발", "내가 뭘 하고 있는지 까먹음", "노동요 고르다 시간 다 감", "진척도 1도 안 오르는 마법", "슬슬 엉덩이 아픔", "고지가 안 보여", "배고픈데 밥부터 먹을까? (안 됨)", "머리는 거부하고 몸은 억지로 함", "화면 뚫어지겠다", "아직도 초반인 게 레전드", "누가 시간 좀 멈춰봐", "멍하니 있다가 침 흘릴 뻔", "카페인으로 버티는 중", "격하게 아무것도 안 하고 싶다", "지금 포기하면 쓰레기겠지", "산 넘어 산이네", "지우기를 더 많이 함", "눈이 침침해짐", "그냥 잘까? (악마의 속삭임)", "늪에 빠진 기분", "물음표 살인마 빙의 중"],
+      medium: ["반이나 남았어? 반밖에 안 했어?", "반타작 인생", "웃음이 실실 나네 미쳤나", "아직도 반이나 남음", "기계처럼 하는 중", "뇌 빼고 손만 움직여", "슬슬 눈에 뵈는 게 없음", "기기 던질 뻔", "돌아가기엔 너무 멀리 옴", "해탈의 경지", "오늘 안에 끝나긴 하냐", "퀄리티 타협 중", "나 자신과의 싸움 (지는 중)", "뇌가 흐물흐물해짐", "여기가 어디요 나는 누구요", "악으로 깡으로 버텨", "정신줄 잡아라", "40과 60 사이의 림보", "스트레스 지수 폭발", "이 짓을 왜 시작했을까", "시스템 종료 마렵다", "완벽주의 갖다 버림", "허리 끊어질 듯", "사리 나오겠다", "그냥 대충 할까", "중꺾마는 무슨 그냥 꺾임", "영혼 가출", "인간 승리 도전 중", "멘탈 바사삭", "좀비처럼 걷는 중", "비명 지르고 싶다", "억지로 끌려가는 기분"],
+      high: ["어? 이거 끝나겠는데?", "이제 좀 속도 붙네", "비켜 방해하지 마", "갑자기 삘 받음", "끝이 보인다 보여", "아드레날린 도는 중", "미친 속도, 수정은 나중에", "내가 이걸 해내네", "불도저 모드 가동", "막판 스퍼트", "전투력 상승", "존버는 승리한다", "터널 끝에 빛이 보임", "밥 안 먹어도 배부름 (뻥임)", "멈추면 죽는 병 걸림", "집중력 최고조", "딴짓만 안 하면 금방임", "런닝맨 찍는 기분", "빈칸 채워지는 맛", "슬슬 끝낼 준비", "뒷심 발휘 중", "각성 상태", "눕기 1시간 전", "에라 모르겠다 질러", "마법처럼 채워짐", "손가락에서 연기 남", "70 넘으면 다 한 거지", "설레발 치는 중", "누구도 날 막을 수 없다", "저장 버튼 연타 중", "곧 자유다"],
       veryHigh: ["끝. 더 이상은 못 해.", "해치웠다", "찢었다", "나 좀 제법인 듯", "박수 칠 때 떠나라", "체크 완료. 이 맛이지.", "오늘 할 일 끝", "앓던 이 빠진 기분", "자유다", "나 자신 고생했다", "당분간 찾지 마쇼", "하얗게 불태움", "승자의 여유", "완료 버튼 누르는 맛", "100% 채움", "고생 끝 꿀잠 시작", "이제 놀아도 됨", "발 뻗고 자겠다", "세상을 다 가진 기분", "치킨 시켜라", "내가 해냄", "드디어 끝", "지긋지긋했다 잘 가라", "레벨업", "셔터 내림", "퇴근하겠습니다 (마음만은)", "완벽해", "쾌감 쩐다", "마무리까지 깔끔", "국보급 결과물", "수고했어 오늘도"]
     };
     
@@ -850,263 +800,12 @@ export default function App() {
           <TaskHistoryModal taskName={historyTarget} logs={logs} onClose={() => setHistoryTarget(null)} />
         )}
 
-        {/* PLANNING */}
-        {mode === 'PLANNING' && (
-          <div className="flex-1 flex flex-col justify-center">
-            <h1 className="text-gray-600 text-xs tracking-[0.3em] mb-6 text-center">PLANNING</h1>
-            {/* 수정 후: TaskItem을 사용하여 수정/삭제/순서변경 가능 */}
-            <div className="space-y-1 mb-8">
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                  {tasks.map(task => (
-                    <TaskItem 
-                      key={task.id} 
-                      task={task} 
-                      updateTask={updateTask}
-                      deleteTask={deleteTask}
-                      onShowHistory={(name: string) => setHistoryTarget(name)}
-                      isPlanning={true}
-                      sensors={sensors}
-                      onChangeDate={undefined}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            </div>
-            {/* 자동완성 칩 (입력창 위에) */}
-            {suggestions.length > 0 && (
-              <div className="flex gap-2 justify-center mb-4 overflow-x-auto scrollbar-hide">
-                {suggestions.map((s, idx) => (
-                  <button 
-                    key={s.id} 
-                    onClick={() => selectSuggestion(s)} 
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-xs ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
-                  >
-                    <span className="font-bold text-white text-xs">{s.text}</span>
-                    <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { 
-              if (e.key === 'Enter') {
-                if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
-                  selectSuggestion(suggestions[selectedSuggestionIndex]);
-                } else {
-                  addTask();
-                }
-              } else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev);
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
-              }
-            }} placeholder="오늘의 목표..." className="w-full bg-transparent text-center text-base outline-none border-b-2 border-gray-700 focus:border-white pb-2 placeholder:text-gray-700 transition-colors" autoFocus />
-            <div className="text-center mt-8">
-              <button onClick={() => setMode('FOCUS')} className="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all">START DAY</button>
-            </div>
-          </div>
-        )}
-
-        {/* FOCUS */}
-        {mode === 'FOCUS' && (
-          <div className="flex-1 flex flex-col pt-6">
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-xl font-bold tracking-tight text-white">TODAY'S PLAN</h1>
-              <button onClick={() => setMode('HISTORY')} className="text-xs text-gray-500 hover:text-white">{new Date().toDateString()}</button>
-            </div>
-            <div className="flex-1 space-y-1">
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                  {tasks.map(task => (
-                    <TaskItem 
-                      key={task.id} task={task} updateTask={updateTask} deleteTask={deleteTask} 
-                      onShowHistory={(name: string) => setHistoryTarget(name)}
-                      sensors={sensors}
-                      onChangeDate={(taskId, newDate) => {
-                        const taskToMove = tasks.find(t => t.id === taskId);
-                        if (!taskToMove) return;
-                        const targetDate = new Date(newDate).toDateString();
-                        const currentDate = viewDate.toDateString();
-                        
-                        // 현재 날짜에서 제거
-                        const updatedCurrentTasks = tasks.filter(t => t.id !== taskId);
-                        setLogs(prev => {
-                          const newLogs = [...prev];
-                          const currentIdx = newLogs.findIndex(l => l.date === currentDate);
-                          if (currentIdx >= 0) newLogs[currentIdx] = { date: currentDate, tasks: updatedCurrentTasks };
-                          
-                          // 타겟 날짜에 추가
-                          const targetIdx = newLogs.findIndex(l => l.date === targetDate);
-                          if (targetIdx >= 0) {
-                            newLogs[targetIdx] = { date: targetDate, tasks: [...newLogs[targetIdx].tasks, taskToMove] };
-                          } else {
-                            newLogs.push({ date: targetDate, tasks: [taskToMove] });
-                          }
-                          return newLogs;
-                        });
-                        setTasks(updatedCurrentTasks);
-                      }}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            </div>
-
-            {/* FOCUS 모드 하단 입력창 */}
-            <div className="p-3 bg-[#0a0a0f]/90 backdrop-blur-xl border-t border-white/5">
-              
-              <div className="flex flex-col-reverse gap-2">
-                {/* 입력 */}
-                <input 
-                  type="text" 
-                  value={newTask} 
-                  onChange={(e) => setNewTask(e.target.value)} 
-                  onKeyDown={(e) => { 
-                    if (e.key === 'Enter') {
-                      if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
-                        selectSuggestion(suggestions[selectedSuggestionIndex]);
-                      } else {
-                        addTask();
-                      }
-                    } else if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev);
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
-                    }
-                  }} 
-                  placeholder="할 일 입력..." 
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
-                />
-
-                {/* 자동완성 칩 (입력창 바로 위에 고정됨) */}
-                {suggestions.length > 0 && (
-                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                    {suggestions.map((s, idx) => (
-                      <button 
-                        key={s.id} 
-                        onClick={() => selectSuggestion(s)} 
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-xs ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
-                      >
-                        <span className="font-bold text-white text-xs">{s.text}</span>
-                        <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex justify-between items-center py-6">
-              <button onClick={() => setMode('PLANNING')} className="text-xs text-gray-500 hover:text-white transition-colors">← PLANNING</button>
-              <button onClick={() => { if(window.confirm('하루를 종료하시겠습니까?')) startSummary(); }} className="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all whitespace-nowrap">FINISH DAY</button>
-              <button onClick={() => setMode('HISTORY')} className="text-xs text-gray-500 hover:text-white transition-colors">CALENDAR →</button>
-            </div>
-          </div>
-        )}
-
-        {/* SUMMARY (턱턱턱) */}
-        {mode === 'SUMMARY' && (
-          <div className="flex-1 flex flex-col justify-center space-y-10 py-10">
-            <div className={`transition-all duration-700 ${summaryStep >= 1 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
-              <h2 className="text-blue-500 text-[10px] font-bold tracking-widest mb-3 border-b border-blue-900/30 pb-1">원하는 것들</h2>
-              <div className={`space-y-1 transition-all duration-700 ${summaryStep >= 2 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
-                {tasks.map(t => (
-                  <div key={t.id} className="flex justify-between items-center text-gray-400 py-1.5 px-2 bg-black/20 rounded-lg border border-gray-800">
-                    <span className="text-xs">{t.text}</span>
-                    <span className="font-mono text-[10px]">{t.planTime}m</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className={`transition-all duration-700 ${summaryStep >= 3 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
-              <h2 className="text-green-500 text-[10px] font-bold tracking-widest mb-3 border-b border-green-900/30 pb-1">완료한 일들</h2>
-              <div className={`space-y-1 transition-all duration-700 ${summaryStep >= 4 ? 'opacity-100' : 'opacity-0 translate-y-4'}`}>
-                {tasks.filter(t => t.done).length > 0 ? tasks.filter(t => t.done).map(t => (
-                  <div key={t.id} className="flex justify-between items-center text-white py-1.5 px-2 bg-black/20 rounded-lg border border-gray-800">
-                    <span className="text-xs">{t.text}</span>
-                    <div className="flex gap-2 text-[10px] font-mono items-center">
-                      <span className="text-gray-500">{formatFullTime(t.actTime)}</span>
-                      <span className="text-blue-400">{t.percent}%</span>
-                    </div>
-                  </div>
-                )) : <div className="text-gray-600 text-xs">No completed tasks</div>}
-              </div>
-            </div>
-            {/* 3. 점수 표시 부분 (수정) */}
-            <div className={`text-center pt-6 transition-all duration-700 ${summaryStep >= 5 ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
-              <div className="text-4xl font-thin text-white">
-                {completedCount}<span className="text-xl text-gray-700 font-thin mx-1"> / </span>{tasks.length}<span className="text-lg text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0}%)</span>
-              </div>
-              
-              {/* 평가 메시지 */}
-              <div className="mt-3 text-sm text-blue-400 font-medium">
-                {getEvaluationMessage(tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0, viewDate.toDateString())}
-              </div>
-              
-              {/* Plan vs Actual 막대 그래프 */}
-              <div className="flex flex-col gap-3 max-w-xs mx-auto mt-8 mb-8 px-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] w-8 text-right text-gray-500">PLAN</span>
-                  <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-blue-500/50 rounded-full transition-all duration-1000" 
-                      style={{ width: `${(() => {
-                        const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                        const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                        const maxValue = Math.max(totalPlan, totalAct, 1);
-                        return (totalPlan / maxValue) * 100;
-                      })()}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] w-12 font-mono text-gray-400">{formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] w-8 text-right text-gray-500">ACT</span>
-                  <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-1000 ${(() => {
-                        const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                        const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                        return totalAct > totalPlan ? 'bg-green-500/60' : 'bg-blue-500/60';
-                      })()}`}
-                      style={{ width: `${(() => {
-                        const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                        const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                        const maxValue = Math.max(totalPlan, totalAct, 1);
-                        return (totalAct / maxValue) * 100;
-                      })()}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] w-12 font-mono text-white">{formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}</span>
-                </div>
-                <div className="text-center mt-2 text-xs">
-                  {(() => {
-                    const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                    const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                    const percent = totalPlan > 0 ? ((totalAct / totalPlan) * 100).toFixed(1) : '0.0';
-                    return totalAct > totalPlan 
-                      ? <span className="text-blue-400">계획보다 {formatFullTime(totalAct - totalPlan)} 더 했습니다. ({percent}%)</span>
-                      : <span className="text-gray-500">계획보다 {formatFullTime(totalPlan - totalAct)} 덜 했습니다. ({percent}%)</span>;
-                  })()}
-                </div>
-              </div>
-            </div>
-            <div className={`text-center transition-all duration-1000 ${summaryStep >= 6 ? 'opacity-100' : 'opacity-0'}`}>
-              <button onClick={() => { setMode('HISTORY'); setViewDate(new Date()); }} className="px-8 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200">NEXT</button>
-            </div>
-          </div>
-        )}
-
-        {/* === HISTORY 모드 (수정된 버전) === */}
-        {mode === 'HISTORY' && (
+        {/* === 캘린더 페이지 === */}
+        {
           <div className="flex-1 flex flex-col pt-6">
             
-            {/* 1. 상단 캘린더 */}
-            <div className="mb-8 bg-[#0f0f14]/50 backdrop-blur-sm p-5 rounded-3xl border border-white/5">
+            {/* 상단 캘린더 */}
+            <div className="mb-6 bg-[#0f0f14]/50 backdrop-blur-sm p-5 rounded-3xl border border-white/5">
               <div className="flex items-center mb-4 px-2">
                 <div className="flex gap-2 w-24">
                   <button onClick={() => setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1))} className="text-gray-500 hover:text-white"><ChevronLeft size={16} /></button>
@@ -1147,7 +846,57 @@ export default function App() {
               </div>
             </div>
 
-            {/* 2. 하단 리스트 (여기가 핵심 수정됨: 타겟/결과 분리 + 수정 가능) */}
+            {/* 플랜 시간 진행바 */}
+            {tasks.length > 0 && (
+              <div className="mb-6 bg-[#0f0f14]/50 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase">Time Progress</span>
+                  <span className="text-xs font-mono text-gray-400">
+                    {formatFullTime(totalActTime)} / {totalPlanTime}m
+                  </span>
+                </div>
+                <div className="relative h-4 bg-gray-900 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-500 ${totalActTime > totalPlanTime ? 'bg-green-500' : 'bg-blue-500'}`}
+                    style={{ width: `${Math.min(timeProgress, 100)}%` }}
+                  />
+                  {totalActTime > totalPlanTime && (
+                    <div 
+                      className="absolute top-0 left-0 h-full bg-blue-500/30"
+                      style={{ width: '100%' }}
+                    />
+                  )}
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-[10px] text-gray-600">
+                    {totalPlanTime > 0 ? Math.round(timeProgress) : 0}% 진행
+                  </span>
+                  {totalActTime > totalPlanTime ? (
+                    <span className="text-[10px] text-green-400 font-bold">
+                      {formatFullTime(totalActTime - totalPlanTime)} 더 함
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-blue-400">
+                      {formatFullTime(totalPlanTime - totalActTime)} 남음
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 평가 메시지 */}
+            {tasks.length > 0 && (
+              <div className="mb-6 text-center">
+                <div className="text-4xl font-thin text-white mb-2">
+                  {tasks.filter(t => t.done).length}<span className="text-xl text-gray-700 font-thin mx-1"> / </span>{tasks.length}<span className="text-lg text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0}%)</span>
+                </div>
+                <div className="text-sm text-blue-400 font-medium">
+                  {getEvaluationMessage(tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0, viewDate.toDateString())}
+                </div>
+              </div>
+            )}
+
+            {/* 하단 리스트 */}
             <div className="flex-1 overflow-y-auto scrollbar-hide pb-96 px-2">
               <h3 className="text-xs font-bold text-gray-500 mb-6 uppercase tracking-widest text-center">Record of {viewDate.toLocaleDateString()}</h3>
               
@@ -1284,76 +1033,12 @@ export default function App() {
                 />
               </div>
 
-              {/* 통계 요약 (SUMMARY와 동일한 디자인) */}
-              {tasks.length > 0 && (
-                <div className="mt-6 text-center pt-6 border-t border-gray-900/50">
-                  <div className="text-4xl font-thin text-white">
-                    {tasks.filter(t => t.done).length}<span className="text-xl text-gray-700 font-thin mx-1"> / </span>{tasks.length}<span className="text-lg text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0}%)</span>
-                  </div>
-                  
-                  {/* 평가 메시지 */}
-                  <div className="mt-3 text-sm text-blue-400 font-medium">
-                    {getEvaluationMessage(tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0, viewDate.toDateString())}
-                  </div>
-                  
-                  {/* Plan vs Actual 막대 그래프 */}
-                  <div className="flex flex-col gap-3 max-w-xs mx-auto mt-8 mb-8 px-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] w-8 text-right text-gray-500">PLAN</span>
-                      <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-500/50 rounded-full transition-all duration-1000" 
-                          style={{ width: `${(() => {
-                            const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                            const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                            const maxValue = Math.max(totalPlan, totalAct, 1);
-                            return (totalPlan / maxValue) * 100;
-                          })()}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] w-12 font-mono text-gray-400">{formatFullTime(tasks.reduce((acc, t) => acc + t.planTime, 0))}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] w-8 text-right text-gray-500">ACT</span>
-                      <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full transition-all duration-1000 ${(() => {
-                            const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                            const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                            return totalAct > totalPlan ? 'bg-green-500/60' : 'bg-blue-500/60';
-                          })()}`}
-                          style={{ width: `${(() => {
-                            const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                            const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                            const maxValue = Math.max(totalPlan, totalAct, 1);
-                            return (totalAct / maxValue) * 100;
-                          })()}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] w-12 font-mono text-white">{formatFullTime(tasks.reduce((acc, t) => acc + t.actTime, 0))}</span>
-                    </div>
-                    <div className="text-center mt-2 text-xs">
-                      {(() => {
-                        const totalPlan = tasks.reduce((acc, t) => acc + t.planTime, 0);
-                        const totalAct = tasks.reduce((acc, t) => acc + t.actTime, 0);
-                        const percent = totalPlan > 0 ? ((totalAct / totalPlan) * 100).toFixed(1) : '0.0';
-                        return totalAct > totalPlan 
-                          ? <span className="text-blue-400">계획보다 {formatFullTime(totalAct - totalPlan)} 더 했습니다. ({percent}%)</span>
-                          : <span className="text-gray-500">계획보다 {formatFullTime(totalPlan - totalAct)} 덜 했습니다. ({percent}%)</span>;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              )}
 
-              {/* 하단 버튼 */}
-              <div className="text-center mt-12">
-                <button onClick={() => { setViewDate(new Date()); setMode('FOCUS'); }} className="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all whitespace-nowrap">BACK TO DETAIL</button>
-              </div>
+
+
             </div>
           </div>
-        )}
-
+        }
 
       </div>
     </div>

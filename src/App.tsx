@@ -1063,6 +1063,7 @@ export default function App() {
                                 
                                 // 현재 날짜에서 제거
                                 const updatedCurrentTasks = tasks.filter(t => t.id !== taskId);
+                                
                                 setLogs(prev => {
                                   const newLogs = [...prev];
                                   const currentIdx = newLogs.findIndex(l => l.date === currentDate);
@@ -1075,6 +1076,15 @@ export default function App() {
                                   } else {
                                     newLogs.push({ date: targetDate, tasks: [taskToMove] });
                                   }
+                                  
+                                  // Supabase 동기화
+                                  if (user && currentSpace) {
+                                    supabase.from('task_logs').upsert([
+                                      { date: currentDate, user_id: user.id, space_id: currentSpace.id, tasks: JSON.stringify(updatedCurrentTasks) },
+                                      { date: targetDate, user_id: user.id, space_id: currentSpace.id, tasks: JSON.stringify(targetIdx >= 0 ? [...newLogs[targetIdx].tasks, taskToMove] : [taskToMove]) }
+                                    ]);
+                                  }
+                                  
                                   return newLogs;
                                 });
                                 setTasks(updatedCurrentTasks);
@@ -1107,6 +1117,7 @@ export default function App() {
                               
                               // 현재 날짜에서 제거
                               const updatedCurrentTasks = tasks.filter(t => t.id !== taskId);
+                              
                               setLogs(prev => {
                                 const newLogs = [...prev];
                                 const currentIdx = newLogs.findIndex(l => l.date === currentDate);
@@ -1119,6 +1130,15 @@ export default function App() {
                                 } else {
                                   newLogs.push({ date: targetDate, tasks: [taskToMove] });
                                 }
+                                
+                                // Supabase 동기화
+                                if (user && currentSpace) {
+                                  supabase.from('task_logs').upsert([
+                                    { date: currentDate, user_id: user.id, space_id: currentSpace.id, tasks: JSON.stringify(updatedCurrentTasks) },
+                                    { date: targetDate, user_id: user.id, space_id: currentSpace.id, tasks: JSON.stringify(targetIdx >= 0 ? [...newLogs[targetIdx].tasks, taskToMove] : [taskToMove]) }
+                                  ]);
+                                }
+                                
                                 return newLogs;
                               });
                               setTasks(updatedCurrentTasks);

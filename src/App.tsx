@@ -533,6 +533,7 @@ export default function App() {
   // 로컬 데이터 로드
   useEffect(() => {
     if (currentSpace) {
+      setLocalLogsLoaded(false);
       const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       if (saved) {
         const parsedLogs = JSON.parse(saved);

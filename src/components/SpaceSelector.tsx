@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useSpace } from '../contexts/SpaceContext';
 
 export function SpaceSelector() {
@@ -8,8 +8,6 @@ export function SpaceSelector() {
   const [newSpaceName, setNewSpaceName] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
-
   const handleAdd = async () => {
     if (!newSpaceName.trim()) return;
     await addSpace(newSpaceName);
@@ -22,15 +20,13 @@ export function SpaceSelector() {
     setEditingName(space.title);
   };
 
-  const handleTouchStart = (space: any) => {
-    const timer = setTimeout(() => startEdit(space), 500);
-    setLongPressTimer(timer);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
+  const handleDelete = async (id: number, title: string) => {
+    if (spaces.length <= 1) {
+      alert('최소 1개의 공간이 필요합니다.');
+      return;
+    }
+    if (window.confirm(`"${title}" 공간을 삭제하시겠습니까?`)) {
+      await deleteSpace(id);
     }
   };
 
@@ -51,34 +47,43 @@ export function SpaceSelector() {
                   setEditingId(null);
                 } else if (e.key === 'Escape') {
                   setEditingId(null);
-                } else if (e.key === 'Backspace' && editingName === '') {
-                  if (spaces.length > 1 && window.confirm(`"${space.title}" 공간을 삭제하시겠습니까?`)) {
-                    deleteSpace(space.id!);
-                  }
-                  setEditingId(null);
                 }
+              }}
+              onBlur={() => {
+                if (editingName.trim()) {
+                  updateSpace(space.id!, editingName.trim());
+                }
+                setEditingId(null);
               }}
               className="w-24 bg-gray-800 border border-white/10 rounded-full px-3 py-1 text-xs text-white outline-none"
               autoFocus
             />
           </div>
         ) : (
-          <button
-            key={space.id}
-            onClick={() => setCurrentSpace(space)}
-            onDoubleClick={() => startEdit(space)}
-            onTouchStart={() => handleTouchStart(space)}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={handleTouchEnd}
-
-            className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
-              currentSpace?.id === space.id
-                ? 'bg-white text-black font-bold'
-                : 'bg-gray-800 text-gray-400 hover:text-white'
-            }`}
-          >
-            {space.title}
-          </button>
+          <div key={space.id} className="flex items-center gap-1 group">
+            <button
+              onClick={() => setCurrentSpace(space)}
+              className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
+                currentSpace?.id === space.id
+                  ? 'bg-white text-black font-bold'
+                  : 'bg-gray-800 text-gray-400 hover:text-white'
+              }`}
+            >
+              {space.title}
+            </button>
+            <button
+              onClick={() => startEdit(space)}
+              className="text-gray-600 hover:text-blue-400 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              ✎
+            </button>
+            <button
+              onClick={() => handleDelete(space.id!, space.title)}
+              className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <X size={12} />
+            </button>
+          </div>
         )
       ))}
       {showAdd ? (
@@ -87,24 +92,25 @@ export function SpaceSelector() {
             type="text"
             value={newSpaceName}
             onChange={(e) => setNewSpaceName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleAdd();
+              else if (e.key === 'Escape') setShowAdd(false);
+            }}
+            onBlur={() => {
+              if (newSpaceName.trim()) handleAdd();
+              else setShowAdd(false);
+            }}
             placeholder="공간 이름"
             className="w-24 bg-gray-800 border border-white/10 rounded-full px-3 py-1 text-xs text-white outline-none"
             autoFocus
           />
-          <button onClick={handleAdd} className="text-green-500 hover:text-green-400">
-            <Plus size={16} />
-          </button>
-          <button onClick={() => setShowAdd(false)} className="text-gray-500 hover:text-white">
-            <X size={16} />
-          </button>
         </div>
       ) : (
         <button
           onClick={() => setShowAdd(true)}
           className="px-3 py-1.5 rounded-full text-xs bg-gray-800 text-gray-400 hover:text-white"
         >
-          + 공간 추가
+          +
         </button>
       )}
     </div>

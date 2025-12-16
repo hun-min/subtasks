@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { db, Space } from '../db';
+import { supabase } from '../supabase';
+import { useAuth } from './AuthContext';
 
 type SpaceContextType = {
   spaces: Space[];
@@ -14,27 +16,49 @@ type SpaceContextType = {
 const SpaceContext = createContext<SpaceContextType | undefined>(undefined);
 
 export function SpaceProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [currentSpace, setCurrentSpace] = useState<Space | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadSpaces();
-  }, []);
+  }, [user]);
 
   const loadSpaces = async () => {
-    const allSpaces = await db.spaces.toArray();
-    if (allSpaces.length === 0) {
-      const id = await db.spaces.add({ title: '기본', createdAt: new Date() }) as number;
-      const defaultSpace = { id, title: '기본', createdAt: new Date() };
-      setSpaces([defaultSpace]);
-      setCurrentSpace(defaultSpace);
+    let allSpaces: Space[] = [];
+    
+    if (user) {
+      // 로그인 시 Supabase에서 로드
+      const { data } = await supabase.from('spaces').select('*').eq('user_id', user.id);
+      if (data && data.length > 0) {
+        allSpaces = data.map(s => ({ id: s.id, title: s.title, createdAt: new Date(s.created_at) }));
+        // IndexedDB에도 동기화
+        await db.spaces.clear();
+        await db.spaces.bulkAdd(allSpaces);
+      } else {
+        // Supabase에 없으면 기본 생성
+        const { data: newSpace } = await supabase.from('spaces').insert({ user_id: user.id, title: '기본' }).select().single();
+        if (newSpace) {
+          const defaultSpace = { id: newSpace.id, title: newSpace.title, createdAt: new Date(newSpace.created_at) };
+          allSpaces = [defaultSpace];
+          await db.spaces.add(defaultSpace);
+        }
+      }
     } else {
-      setSpaces(allSpaces);
-      const savedSpaceId = localStorage.getItem('currentSpaceId');
-      const saved = savedSpaceId ? allSpaces.find(s => s.id === parseInt(savedSpaceId)) : null;
-      setCurrentSpace(saved || allSpaces[0]);
+      // 비로그인 시 IndexedDB에서 로드
+      allSpaces = await db.spaces.toArray();
+      if (allSpaces.length === 0) {
+        const id = await db.spaces.add({ title: '기본', createdAt: new Date() }) as number;
+        const defaultSpace = { id, title: '기본', createdAt: new Date() };
+        allSpaces = [defaultSpace];
+      }
     }
+    
+    setSpaces(allSpaces);
+    const savedSpaceId = localStorage.getItem('currentSpaceId');
+    const saved = savedSpaceId ? allSpaces.find(s => s.id === parseInt(savedSpaceId)) : null;
+    setCurrentSpace(saved || allSpaces[0]);
     setLoading(false);
   };
 
@@ -44,12 +68,20 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addSpace = async (title: string) => {
-    await db.spaces.add({ title, createdAt: new Date() });
+    if (user) {
+      await supabase.from('spaces').insert({ user_id: user.id, title });
+    } else {
+      await db.spaces.add({ title, createdAt: new Date() });
+    }
     await loadSpaces();
   };
 
   const updateSpace = async (id: number, title: string) => {
-    await db.spaces.update(id, { title });
+    if (user) {
+      await supabase.from('spaces').update({ title }).eq('id', id).eq('user_id', user.id);
+    } else {
+      await db.spaces.update(id, { title });
+    }
     await loadSpaces();
   };
 
@@ -58,7 +90,11 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       alert('최소 1개의 공간이 필요합니다.');
       return;
     }
-    await db.spaces.delete(id);
+    if (user) {
+      await supabase.from('spaces').delete().eq('id', id).eq('user_id', user.id);
+    } else {
+      await db.spaces.delete(id);
+    }
     await loadSpaces();
   };
 

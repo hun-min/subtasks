@@ -407,7 +407,7 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 
 // --- [컴포넌트] 할 일 아이템 ---
 function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -456,9 +456,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                         className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                         placeholder="목표 (Time Block)"
                     />
-                     <button {...attributes} {...listeners} className="touch-none p-1 text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing">
-                        <div className="w-8 h-1 bg-gray-800 rounded-full mx-auto mb-0.5" />
-                    </button>
+
                 </div>
 
                 <div className="flex items-center gap-3 mt-1">

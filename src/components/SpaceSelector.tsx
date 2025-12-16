@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSpace } from '../contexts/SpaceContext';
 
 export function SpaceSelector() {
-  const { spaces, currentSpace, setCurrentSpace, addSpace, updateSpace, deleteSpace } = useSpace();
+  const { spaces, currentSpace, setCurrentSpace, addSpace, updateSpace } = useSpace();
   const [showAdd, setShowAdd] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -27,16 +27,7 @@ export function SpaceSelector() {
     setEditingId(null);
   };
 
-  const handleDelete = async (id: number) => {
-    if (spaces.length <= 1) {
-      alert('마지막 공간은 삭제할 수 없습니다.');
-      return;
-    }
-    const input = prompt('"삭제"를 입력하세요:');
-    if (input === '삭제') {
-      await deleteSpace(id);
-    }
-  };
+
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-2">
@@ -78,14 +69,7 @@ export function SpaceSelector() {
               {space.title}
             </button>
           )}
-          {currentSpace?.id === space.id && spaces.length > 1 && space.id && (
-            <button
-              onClick={() => handleDelete(space.id!)}
-              className="text-gray-600 hover:text-red-500 text-xs"
-            >
-              ×
-            </button>
-          )}
+
         </div>
       ))}
       {showAdd ? (

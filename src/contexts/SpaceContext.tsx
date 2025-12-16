@@ -50,27 +50,34 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       try {
         if (user) {
           // Supabase 조회
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('spaces')
             .select('*')
             .eq('user_id', user.id)
             .order('created_at', { ascending: true });
 
-          if (data && data.length > 0) {
+          if (error) {
+            console.warn('Supabase spaces query error:', error);
+            // 에러 시 로컬 캐시 사용
+            const cached = localStorage.getItem('ultra_spaces_cache');
+            if (cached) {
+              finalSpaces = JSON.parse(cached);
+            }
+          } else if (data && data.length > 0) {
             finalSpaces = data.map(s => ({ 
               id: s.id, 
               title: s.title || s.name, 
               createdAt: new Date(s.created_at) 
             }));
           } else {
-            // 서버에 없으면 생성 시도
-            const { data: newSpace } = await supabase
+            // 서버에 없으면 생성
+            const { data: newSpace, error: insertError } = await supabase
               .from('spaces')
               .insert({ user_id: user.id, title: '기본 공간' })
               .select()
               .single();
             
-            if (newSpace) {
+            if (!insertError && newSpace) {
               finalSpaces = [{ id: newSpace.id, title: newSpace.title || newSpace.name, createdAt: new Date(newSpace.created_at) }];
             }
           }
@@ -84,22 +91,25 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (e) {
         console.warn("Sync Error:", e);
+        // 에러 시 로컬 캐시 사용
+        const cached = localStorage.getItem('ultra_spaces_cache');
+        if (cached) {
+          try {
+            finalSpaces = JSON.parse(cached);
+          } catch {}
+        }
       }
 
-      // [절대 방어선 3] 서버/DB 통신 결과가 빈 배열([])이면, 기존 화면을 유지하거나 강제로 만듦
-      // 절대 빈 배열로 업데이트하지 않음.
       if (finalSpaces.length === 0) {
-        // 통신 실패 등으로 데이터가 없으면, 기존에 떠있는거라도 유지 (state 변경 안 함)
-        // 만약 기존 state도 비어있다면(그럴리 없지만), 강제 주입
         if (spaces.length === 0) {
-            const fallback = [{ id: -1, title: '기본 공간 (오프라인)', createdAt: new Date() }];
+            const fallback = [{ id: -1, title: '기본 공간', createdAt: new Date() }];
             setSpaces(fallback);
             setCurrentSpace(fallback[0]);
+            localStorage.setItem('ultra_spaces_cache', JSON.stringify(fallback));
         }
-        return; // 빈 데이터로 덮어쓰기 방지하고 종료
+        return;
       }
 
-      // 데이터가 존재할 때만 업데이트
       setSpaces(finalSpaces);
       localStorage.setItem('ultra_spaces_cache', JSON.stringify(finalSpaces));
       
@@ -112,7 +122,6 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       });
     };
 
-    // user.id가 바뀔 때만 실행
     syncSpaces();
     
   }, [user?.id]);

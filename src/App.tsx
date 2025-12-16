@@ -800,7 +800,7 @@ export default function App() {
                 </div>
                 <div className="flex-1 flex justify-center items-center gap-2">
                   <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="text-gray-400 hover:text-white"><ChevronLeft size={20} /></button>
-                  <span className="font-bold text-lg text-white">{viewDate.toLocaleString('default', { month: 'long' })}</span>
+                  <span className="font-bold text-lg text-white whitespace-nowrap">{viewDate.toLocaleString('default', { month: 'long' })}</span>
                   <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="text-gray-400 hover:text-white"><ChevronRight size={20} /></button>
                 </div>
                 <button onClick={() => setViewDate(new Date())} className="text-xs text-blue-400 hover:text-blue-300 w-24 text-right">●</button>

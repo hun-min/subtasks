@@ -21,10 +21,6 @@ export function SpaceSelector() {
   };
 
   const handleDelete = async (id: number, title: string) => {
-    if (spaces.length <= 1) {
-      alert('최소 1개의 공간이 필요합니다.');
-      return;
-    }
     if (window.confirm(`"${title}" 공간을 삭제하시겠습니까?`)) {
       await deleteSpace(id);
     }
@@ -74,12 +70,14 @@ export function SpaceSelector() {
             >
               ✎
             </button>
-            <button
-              onClick={() => handleDelete(space.id!, space.title)}
-              className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <X size={12} />
-            </button>
+            {spaces.length > 1 && (
+              <button
+                onClick={() => handleDelete(space.id!, space.title)}
+                className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         )
       ))}

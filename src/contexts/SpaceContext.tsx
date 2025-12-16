@@ -26,6 +26,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const loadSpaces = async () => {
+    setLoading(true);
     let allSpaces: Space[] = [];
     
     if (user) {
@@ -33,16 +34,11 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       const { data } = await supabase.from('spaces').select('*').eq('user_id', user.id);
       if (data && data.length > 0) {
         allSpaces = data.map(s => ({ id: s.id, title: s.title, createdAt: new Date(s.created_at) }));
-        // IndexedDB에도 동기화
-        await db.spaces.clear();
-        await db.spaces.bulkAdd(allSpaces);
       } else {
         // Supabase에 없으면 기본 생성
         const { data: newSpace } = await supabase.from('spaces').insert({ user_id: user.id, title: '기본' }).select().single();
         if (newSpace) {
-          const defaultSpace = { id: newSpace.id, title: newSpace.title, createdAt: new Date(newSpace.created_at) };
-          allSpaces = [defaultSpace];
-          await db.spaces.add(defaultSpace);
+          allSpaces = [{ id: newSpace.id, title: newSpace.title, createdAt: new Date(newSpace.created_at) }];
         }
       }
     } else {
@@ -50,8 +46,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       allSpaces = await db.spaces.toArray();
       if (allSpaces.length === 0) {
         const id = await db.spaces.add({ title: '기본', createdAt: new Date() }) as number;
-        const defaultSpace = { id, title: '기본', createdAt: new Date() };
-        allSpaces = [defaultSpace];
+        allSpaces = [{ id, title: '기본', createdAt: new Date() }];
       }
     }
     

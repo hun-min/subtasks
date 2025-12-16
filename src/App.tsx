@@ -766,6 +766,15 @@ export default function App() {
     return <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-white">Loading...</div>;
   }
 
+  if (!currentSpace) {
+    return <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-white p-4">
+      <div className="text-center">
+        <p className="text-gray-400 mb-4">공간이 없습니다. 공간을 먼저 만드세요.</p>
+        <SpaceSelector />
+      </div>
+    </div>;
+  }
+
   return (
     <div className="min-h-screen bg-[#09090b] text-white font-sans overflow-y-auto selection:bg-indigo-500/30">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}

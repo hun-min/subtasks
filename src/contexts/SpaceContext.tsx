@@ -23,7 +23,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadSpaces();
-  }, [user]);
+  }, []);
 
   const loadSpaces = async () => {
     setLoading(true);

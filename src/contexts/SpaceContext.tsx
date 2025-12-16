@@ -22,79 +22,92 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   const [spaces, setSpaces] = useState<Space[]>(() => {
     try {
       const cached = localStorage.getItem('ultra_spaces_cache');
-      return cached ? JSON.parse(cached) : [];
+      return cached ? JSON.parse(cached) : [{ id: 1, title: '기본 공간', createdAt: new Date() }];
     } catch {
-      return [];
+      return [{ id: 1, title: '기본 공간', createdAt: new Date() }];
     }
   });
 
   const [currentSpace, setCurrentSpace] = useState<Space | null>(() => {
     try {
-      const cachedSpaces = localStorage.getItem('ultra_spaces_cache');
+      const cached = localStorage.getItem('ultra_spaces_cache');
       const savedId = localStorage.getItem('currentSpaceId');
-      if (cachedSpaces && savedId) {
-        const parsed = JSON.parse(cachedSpaces);
-        return parsed.find((s: Space) => s.id === parseInt(savedId)) || parsed[0] || null;
-      }
-      if (cachedSpaces) {
-        const parsed = JSON.parse(cachedSpaces);
-        if (parsed.length > 0) return parsed[0];
-      }
-      return { id: 1, title: '기본', createdAt: new Date() };
+      const parsedSpaces = cached ? JSON.parse(cached) : [{ id: 1, title: '기본 공간', createdAt: new Date() }];
+      const found = savedId ? parsedSpaces.find((s: Space) => s.id === parseInt(savedId)) : null;
+      return found || parsedSpaces[0];
     } catch {
-      return { id: 1, title: '기본', createdAt: new Date() };
+      return { id: 1, title: '기본 공간', createdAt: new Date() };
     }
   });
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadSpaces = async () => {
-      let allSpaces: Space[] = [];
+    const syncSpaces = async () => {
+      let finalSpaces: Space[] = [];
 
       try {
         if (user) {
-          const { data } = await supabase.from('spaces').select('*').eq('user_id', user.id).order('created_at', { ascending: true });
+          const { data } = await supabase
+            .from('spaces')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: true });
+
           if (data && data.length > 0) {
-            allSpaces = data.map(s => ({ id: s.id, title: s.title, createdAt: new Date(s.created_at) }));
+            finalSpaces = data.map(s => ({ 
+              id: s.id, 
+              title: s.title || s.name, 
+              createdAt: new Date(s.created_at) 
+            }));
           } else {
-            const { data: newSpace } = await supabase.from('spaces').insert({ user_id: user.id, title: '기본' }).select().single();
+            const { data: newSpace, error: createError } = await supabase
+              .from('spaces')
+              .insert({ user_id: user.id, title: '기본 공간' })
+              .select()
+              .single();
+            
             if (newSpace) {
-              allSpaces = [{ id: newSpace.id, title: newSpace.title, createdAt: new Date(newSpace.created_at) }];
+              finalSpaces = [{ 
+                id: newSpace.id, 
+                title: newSpace.title || newSpace.name, 
+                createdAt: new Date(newSpace.created_at) 
+              }];
+            } else {
+              console.warn("공간 생성 실패, 임시 공간 사용:", createError);
+              finalSpaces = [{ id: -1, title: '오프라인 공간', createdAt: new Date() }];
             }
           }
         } else {
           try {
-            allSpaces = await db.spaces.toArray();
-            if (allSpaces.length === 0) {
-              const id = await db.spaces.add({ title: '기본', createdAt: new Date() }) as number;
-              allSpaces = [{ id, title: '기본', createdAt: new Date() }];
+            finalSpaces = await db.spaces.toArray();
+            if (finalSpaces.length === 0) {
+               const id = await db.spaces.add({ title: '기본 공간', createdAt: new Date() }) as number;
+               finalSpaces = [{ id, title: '기본 공간', createdAt: new Date() }];
             }
-          } catch (e) {
-            if (spaces.length === 0) allSpaces = [{ id: 9999, title: '내 공간', createdAt: new Date() }];
-            else allSpaces = spaces;
+          } catch {
+             finalSpaces = [{ id: 1, title: '기본 공간', createdAt: new Date() }];
           }
         }
 
-        if (isMounted) {
-          setSpaces(allSpaces);
-          localStorage.setItem('ultra_spaces_cache', JSON.stringify(allSpaces));
+        setSpaces(finalSpaces);
+        localStorage.setItem('ultra_spaces_cache', JSON.stringify(finalSpaces));
+        
+        setCurrentSpace(prev => {
+          if (!prev) return finalSpaces[0];
+          const match = finalSpaces.find(s => s.id === prev.id);
+          const next = match || finalSpaces[0];
           
-          const savedSpaceId = localStorage.getItem('currentSpaceId');
-          const saved = savedSpaceId ? allSpaces.find(s => s.id === parseInt(savedSpaceId)) : null;
-          const nextSpace = saved || allSpaces[0];
-          
-          setCurrentSpace(nextSpace);
-          if (nextSpace?.id) localStorage.setItem('currentSpaceId', nextSpace.id.toString());
-        }
-      } catch (error) {
-        console.error('Error loading spaces:', error);
+          if (next.id) localStorage.setItem('currentSpaceId', next.id.toString());
+          return next;
+        });
+
+      } catch (e) {
+        console.warn("Sync Error:", e);
       }
     };
 
-    loadSpaces();
-    return () => { isMounted = false; };
-  }, [user]);
+    syncSpaces();
+    
+  }, [user?.id]);
 
   const handleSetCurrentSpace = (space: Space) => {
     setCurrentSpace(space);
@@ -166,8 +179,10 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     } catch (e) { console.warn('Delete failed'); }
   };
 
+  const safeCurrentSpace = currentSpace || spaces[0] || { id: -1, title: '로딩 중...', createdAt: new Date() };
+
   return (
-    <SpaceContext.Provider value={{ spaces, currentSpace, setCurrentSpace: handleSetCurrentSpace, addSpace, updateSpace, deleteSpace, loading }}>
+    <SpaceContext.Provider value={{ spaces, currentSpace: safeCurrentSpace, setCurrentSpace: handleSetCurrentSpace, addSpace, updateSpace, deleteSpace, loading }}>
       {children}
     </SpaceContext.Provider>
   );

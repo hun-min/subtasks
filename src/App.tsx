@@ -315,15 +315,21 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
           <div className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${paddingLeft + 6}px` }} />
         )}
 
-        <button 
-          onClick={() => {
-             const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, status: cycleStatus(s.status) } : s);
-             updateTask({ ...task, subtasks: newSubs });
-          }}
-          className={`mt-1.5 flex-shrink-0 w-10 h-4 border rounded-[4px] text-[9px] flex items-center justify-center transition-all z-10 select-none ${getStatusColor()}`}
-        >
-          {subtask.status || 'LATER'}
-        </button>
+        <div className="flex items-center gap-1">
+          {subtask.actTime > 0 && (
+            <span className="text-[9px] text-gray-600 font-mono">{Math.floor(subtask.actTime)}m</span>
+          )}
+          <button 
+            onClick={() => {
+               const newStatus = cycleStatus(subtask.status);
+               const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, status: newStatus, isTimerOn: newStatus === 'NOW', timerStartTime: newStatus === 'NOW' ? Date.now() : undefined } : s);
+               updateTask({ ...task, subtasks: newSubs });
+            }}
+            className={`mt-1.5 flex-shrink-0 w-10 h-4 border rounded-[4px] text-[9px] flex items-center justify-center transition-all z-10 select-none ${getStatusColor()}`}
+          >
+            {subtask.status || 'LATER'}
+          </button>
+        </div>
 
         <AutoResizeTextarea
           value={subtask.text}
@@ -614,7 +620,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     <button 
                         onClick={() => {
                           const newStatus: TaskStatus = task.status === 'DONE' ? 'LATER' : 'DONE';
-                          updateTask({ ...task, status: newStatus, isTimerOn: false });
+                          updateTask({ ...task, status: newStatus, done: newStatus === 'DONE', isTimerOn: false });
                         }}
                         className={`p-1 rounded transition-colors ${isDone ? 'text-gray-500' : 'text-blue-400 hover:text-white'}`}
                         title={isDone ? '취소' : '완료'}
@@ -746,17 +752,33 @@ export default function App() {
 
 
 
-  // 타이머 (timestamp 기반)
+  // 타이머 (timestamp 기반 - 상위할일 + 하위할일)
   useEffect(() => {
     const timer = setInterval(() => {
       setTasks(prev => {
         const now = Date.now();
         return prev.map(t => {
+          let updated = { ...t };
+          
+          // 상위할일 타이머
           if (t.isTimerOn && t.timerStartTime) {
             const elapsed = (now - t.timerStartTime) / 1000 / 60;
-            return { ...t, actTime: t.actTime + elapsed, timerStartTime: now };
+            updated.actTime = t.actTime + elapsed;
+            updated.timerStartTime = now;
           }
-          return t;
+          
+          // 하위할일 타이머
+          if (t.subtasks && t.subtasks.length > 0) {
+            updated.subtasks = t.subtasks.map(sub => {
+              if (sub.isTimerOn && sub.timerStartTime) {
+                const elapsed = (now - sub.timerStartTime) / 1000 / 60;
+                return { ...sub, actTime: sub.actTime + elapsed, timerStartTime: now };
+              }
+              return sub;
+            });
+          }
+          
+          return updated;
         });
       });
     }, 1000);

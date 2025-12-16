@@ -41,10 +41,7 @@ export function SpaceSelector() {
               onChange={(e) => setEditingName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  if (editingName.trim()) {
-                    updateSpace(space.id!, editingName.trim());
-                  }
-                  setEditingId(null);
+                  e.currentTarget.blur();
                 } else if (e.key === 'Escape') {
                   setEditingId(null);
                 }
@@ -93,7 +90,7 @@ export function SpaceSelector() {
             value={newSpaceName}
             onChange={(e) => setNewSpaceName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAdd();
+              if (e.key === 'Enter') e.currentTarget.blur();
               else if (e.key === 'Escape') setShowAdd(false);
             }}
             onBlur={() => {

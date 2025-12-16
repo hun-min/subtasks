@@ -124,6 +124,42 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
     syncSpaces();
     
+    // Realtime 구독 (로그인 시에만)
+    if (!user) return;
+    
+    const channel = supabase.channel(`realtime_spaces_${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'spaces',
+        filter: `user_id=eq.${user.id}`
+      }, (payload: any) => {
+        if (payload.eventType === 'INSERT' && payload.new) {
+          const newSpace = { id: payload.new.id, title: payload.new.title, createdAt: new Date(payload.new.createdAt) };
+          setSpaces(prev => {
+            if (prev.find(s => s.id === newSpace.id)) return prev;
+            const updated = [...prev, newSpace];
+            localStorage.setItem('ultra_spaces_cache', JSON.stringify(updated));
+            return updated;
+          });
+        } else if (payload.eventType === 'UPDATE' && payload.new) {
+          const updatedSpace = { id: payload.new.id, title: payload.new.title, createdAt: new Date(payload.new.createdAt) };
+          setSpaces(prev => {
+            const updated = prev.map(s => s.id === updatedSpace.id ? updatedSpace : s);
+            localStorage.setItem('ultra_spaces_cache', JSON.stringify(updated));
+            return updated;
+          });
+        } else if (payload.eventType === 'DELETE' && payload.old) {
+          setSpaces(prev => {
+            const updated = prev.filter(s => s.id !== payload.old.id);
+            localStorage.setItem('ultra_spaces_cache', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      })
+      .subscribe();
+    
+    return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
 
   // --- 상태 변경 함수들 ---

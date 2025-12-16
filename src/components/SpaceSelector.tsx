@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
 import { useSpace } from '../contexts/SpaceContext';
 
 export function SpaceSelector() {
-  const { spaces, currentSpace, setCurrentSpace, addSpace, deleteSpace, updateSpace } = useSpace();
+  const { spaces, currentSpace, setCurrentSpace, addSpace, updateSpace, deleteSpace } = useSpace();
   const [showAdd, setShowAdd] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingName, setEditingName] = useState('');
+  const [editName, setEditName] = useState('');
+  
   const handleAdd = async () => {
     if (!newSpaceName.trim()) return;
     await addSpace(newSpaceName);
@@ -16,12 +16,23 @@ export function SpaceSelector() {
   };
 
   const startEdit = (space: any) => {
-    setEditingId(space.id!);
-    setEditingName(space.title);
+    setEditingId(space.id);
+    setEditName(space.title);
   };
 
-  const handleDelete = async (id: number, title: string) => {
-    if (window.confirm(`"${title}" 공간을 삭제하시겠습니까?`)) {
+  const handleEdit = async () => {
+    if (!editName.trim() || !editingId) return;
+    await updateSpace(editingId, editName);
+    setEditingId(null);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (spaces.length <= 1) {
+      alert('마지막 공간은 삭제할 수 없습니다.');
+      return;
+    }
+    const input = prompt('"삭제"를 입력하세요:');
+    if (input === '삭제') {
       await deleteSpace(id);
     }
   };
@@ -29,33 +40,24 @@ export function SpaceSelector() {
   return (
     <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-2">
       {spaces.map(space => (
-        editingId === space.id ? (
-          <div key={space.id} className="flex items-center gap-1">
+        <div key={space.id} className="flex items-center gap-1">
+          {editingId === space.id ? (
             <input
               type="text"
-              value={editingName}
-              onChange={(e) => setEditingName(e.target.value)}
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.currentTarget.blur();
-                } else if (e.key === 'Escape') {
-                  setEditingId(null);
-                }
+                if (e.key === 'Enter') handleEdit();
+                else if (e.key === 'Escape') setEditingId(null);
               }}
-              onBlur={() => {
-                if (editingName.trim()) {
-                  updateSpace(space.id!, editingName.trim());
-                }
-                setEditingId(null);
-              }}
+              onBlur={handleEdit}
               className="w-24 bg-gray-800 border border-white/10 rounded-full px-3 py-1 text-xs text-white outline-none"
               autoFocus
             />
-          </div>
-        ) : (
-          <div key={space.id} className="flex flex-col items-center gap-0.5 group">
+          ) : (
             <button
               onClick={() => setCurrentSpace(space)}
+              onDoubleClick={() => startEdit(space)}
               className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
                 currentSpace?.id === space.id
                   ? 'bg-white text-black font-bold'
@@ -64,24 +66,16 @@ export function SpaceSelector() {
             >
               {space.title}
             </button>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={() => startEdit(space)}
-                className="text-gray-600 hover:text-blue-400 text-[10px]"
-              >
-                ✎
-              </button>
-              {spaces.length > 1 && (
-                <button
-                  onClick={() => handleDelete(space.id!, space.title)}
-                  className="text-gray-600 hover:text-red-400"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-          </div>
-        )
+          )}
+          {currentSpace?.id === space.id && spaces.length > 1 && space.id && (
+            <button
+              onClick={() => handleDelete(space.id!)}
+              className="text-gray-600 hover:text-red-500 text-xs"
+            >
+              ×
+            </button>
+          )}
+        </div>
       ))}
       {showAdd ? (
         <div className="flex items-center gap-1">

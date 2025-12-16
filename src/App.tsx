@@ -7,7 +7,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, GripVertical, BarChart2, X, Check, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Flame } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type Task = {
@@ -28,15 +28,9 @@ type DailyLog = {
   tasks: Task[];
 };
 
-// --- 유틸 ---
-const formatFullTime = (minutes: number) => {
-  const h = Math.floor(minutes / 60);
-  const m = Math.floor(minutes % 60);
-  const s = Math.floor((minutes * 60) % 60);
-  // 0시간일 때도 분/초 표시, 0분일 때도 초 표시
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  return `${m}m ${s}s`; 
-};
+
+
+
 
 // --- [컴포넌트] 태스크 히스토리 모달 (새로 추가됨) ---
 function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs: DailyLog[], onClose: () => void }) {
@@ -153,67 +147,44 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : 'auto',
     opacity: isDragging ? 0.5 : 1,
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
-      <div className="group flex items-center gap-2 py-1.5 pl-2 pr-1 bg-black/30 hover:bg-black/50 rounded-lg transition-colors border border-transparent hover:border-white/5">
-        <button {...attributes} {...listeners} className="text-gray-600 hover:text-white p-1 touch-none">
-          <GripVertical size={12} />
-        </button>
-        
-        <button 
-          onClick={() => {
-            const updatedSubtask = { ...subtask, done: !subtask.done };
-            const updatedTask = {
-              ...task,
-              subtasks: task.subtasks!.map(st => st.id === updatedSubtask.id ? updatedSubtask : st)
-            };
-            updateTask(updatedTask);
-          }}
-          className={`flex-shrink-0 transition-colors ${subtask.done ? 'text-emerald-500' : 'text-gray-800 hover:text-gray-600'}`}
-        >
-          <Check size={12} strokeWidth={4} />
-        </button>
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 py-1.5 pl-2 group">
+      <button 
+        onClick={() => {
+           const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, done: !s.done } : s);
+           updateTask({ ...task, subtasks: newSubs });
+        }}
+        className={`flex-shrink-0 w-3.5 h-3.5 border rounded-sm flex items-center justify-center transition-colors ${subtask.done ? 'bg-gray-500 border-gray-500' : 'border-gray-600 hover:border-gray-400'}`}
+      >
+        {subtask.done && <Check size={10} className="text-black" />}
+      </button>
+
+      <input 
+        value={subtask.text}
+        onChange={(e) => {
+           const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, text: e.target.value } : s);
+           updateTask({ ...task, subtasks: newSubs });
+        }}
+        onFocus={() => setFocusedSubtaskId(subtask.id)}
+        onBlur={() => setFocusedSubtaskId(null)}
+        className={`bg-transparent text-[13px] outline-none flex-1 font-mono ${subtask.done ? 'text-gray-600 line-through' : 'text-gray-300'}`}
+        placeholder="세부 실행 단계..."
+      />
+
+      <button 
+        onClick={() => {
+           const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
+           updateTask({ ...task, subtasks: newSubs });
+        }}
+        className="text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X size={12} />
+      </button>
       
-        <input 
-          type="text" 
-          value={subtask.text}
-          onChange={(e) => {
-            const updatedSubtask = { ...subtask, text: e.target.value };
-            const updatedTask = {
-              ...task,
-              subtasks: task.subtasks!.map(st => st.id === updatedSubtask.id ? updatedSubtask : st)
-            };
-            updateTask(updatedTask);
-          }}
-          onFocus={() => setFocusedSubtaskId(subtask.id)}
-          onBlur={() => setFocusedSubtaskId(null)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.currentTarget.blur();
-            }
-          }}
-          className={`flex-1 bg-transparent outline-none text-xs ${subtask.done ? 'text-gray-500 line-through' : 'text-gray-300'}`}
-        />
-        
-        <button 
-          onClick={() => {
-            if(window.confirm('삭제하시겠습니까?')) {
-              const updatedTask = {
-                ...task,
-                subtasks: task.subtasks!.filter(st => st.id !== subtask.id)
-              };
-              updateTask(updatedTask);
-            }
-          }}
-          className="text-gray-700 hover:text-rose-500 active:text-rose-500 p-1 transition-colors"
-        >
-          <X size={10} />
-        </button>
-      </div>
+      <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50" />
     </div>
   );
 }
@@ -261,16 +232,13 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 }
 
 // --- [컴포넌트] 할 일 아이템 ---
-function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sensors, onChangeDate }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, isPlanning?: boolean, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void }) {
+function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isSubtasksCollapsed, setIsSubtasksCollapsed] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
-
-  
-  const progressPercent = task.planTime > 0 ? (task.actTime / task.planTime) * 100 : 0;
+  const isOver = task.actTime > task.planTime;
+  const progress = task.planTime > 0 ? (task.actTime / task.planTime) * 100 : 0;
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -279,242 +247,193 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const progressStyle = {
-    background: `linear-gradient(90deg, rgba(59, 130, 246, 0.15) ${Math.min(progressPercent, 100)}%, transparent ${Math.min(progressPercent, 100)}%)`
-  };
+  const activeStyle = task.isTimerOn 
+    ? 'border-blue-500/50 bg-[#1c1c22] shadow-[0_0_15px_rgba(59,130,246,0.1)]' 
+    : 'border-white/5 bg-[#121216]';
+
+  const barColor = 'linear-gradient(90deg, #6366f1, #d946ef)';
 
   return (
     <div>
-      <div ref={setNodeRef} style={style} className={`relative overflow-hidden group flex flex-col gap-1 py-2 px-3 mb-2 rounded-2xl border transition-all ${task.done ? 'bg-black/20 border-white/5 opacity-60' : task.isTimerOn ? 'bg-[#0f0f14] border-indigo-500/50 shadow-[0_0_20px_-5px_rgba(99,102,241,0.4)]' : 'bg-[#0f0f14] border-white/5 hover:border-white/10'} ${task.parentId ? 'ml-6' : ''}`}>
-      <div className="absolute inset-0 z-0 pointer-events-none transition-all duration-500" style={progressStyle} />
-      {/* 상단: 제목 줄 */}
-      <div className="relative z-10 flex items-center gap-1.5">
-        {/* 핸들 */}
-        <button {...attributes} {...listeners} className="text-gray-600 hover:text-white p-0.5 touch-none">
-          <GripVertical size={14} />
-        </button>
-        
-        {/* 체크 (완료) */}
-        <button 
-          onClick={() => updateTask({ ...task, done: !task.done })} 
-          className={`flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center border transition-all ${task.done ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-transparent border-gray-700 text-transparent hover:border-gray-500'}`}
-        >
-          <Check size={10} strokeWidth={4} />
-        </button>
-
-        {/* 제목 (한 줄로 쭉) */}
-        <input 
-          type="text" 
-          value={task.text}
-          onChange={(e) => updateTask({ ...task, text: e.target.value })}
-          className={`flex-1 bg-transparent outline-none text-xs whitespace-nowrap ${task.done ? 'text-gray-500 line-through' : 'text-white'}`}
-        />
-        
-        {/* 삭제 버튼 */}
-        <button 
-          onMouseDown={() => setIsDeleting(true)}
-          onMouseUp={() => setIsDeleting(false)}
-          onTouchStart={() => setIsDeleting(true)}
-          onTouchEnd={() => setIsDeleting(false)}
-          onClick={() => deleteTask(task.id)} 
-          className={`p-0.5 transition-colors ${isDeleting ? 'text-rose-500' : 'text-gray-700'}`}
-        >
-          <X size={12} />
-        </button>
-      </div>
-
-      {/* 하단: 컨트롤들 일렬 배치 (오른쪽 정렬) */}
-      {isPlanning !== true && (
-      <div className="relative z-10 flex items-center justify-end gap-1.5 text-xs">
-        {/* 날짜 변경 버튼 */}
-        {onChangeDate && (
-          <>
-            <button 
-              onClick={() => setShowDatePicker(true)}
-              className="text-gray-700 hover:text-blue-400 p-0.5" 
-              title="날짜 변경"
-            >
-              <Calendar size={12} />
-            </button>
-            {showDatePicker && (
-              <DatePickerModal 
-                onSelectDate={(date) => {
-                  onChangeDate(task.id, date.toDateString());
-                  setShowDatePicker(false);
-                }}
-                onClose={() => setShowDatePicker(false)}
-              />
-            )}
-          </>
-        )}
-        {/* 하위할일 추가 버튼 */}
-        {!task.parentId && (
-          <button 
-            onClick={() => {
-              setIsSubtasksCollapsed(false);
-              const newSubtask: Task = {
-                id: Date.now(),
-                text: '',
-                done: false,
-                percent: 0,
-                planTime: 15,
-                actTime: 0,
-                isTimerOn: false,
-                parentId: task.id
-              };
-              const updatedTask = {
-                ...task,
-                subtasks: [...(task.subtasks || []), newSubtask]
-              };
-              updateTask(updatedTask);
-              setTimeout(() => setFocusedSubtaskId(newSubtask.id), 0);
-            }}
-            className="text-gray-600 hover:text-blue-400"
-          >
-            +
-          </button>
-        )}
-
-        
-        {/* 히스토리 버튼 */}
-        <button onClick={() => onShowHistory(task.text)} className="text-gray-700 hover:text-blue-400 p-0.5" title="기록">
-          <BarChart2 size={12} />
-        </button>
-
-        {/* 퍼센트 */}
-        <div className="flex items-center bg-gray-900 rounded px-1.5 py-0.5 border border-gray-800">
-          <input 
-            type="number" min="0" max="100" step="1"
-            value={task.percent}
-            onChange={(e) => {
-               let val = parseFloat(e.target.value);
-               if(val < 0) val = 0; if(val > 100) val = 100;
-               updateTask({ ...task, percent: val });
-            }}
-            className="w-7 bg-transparent text-right text-blue-400 font-bold outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-          <span className="text-gray-600 text-[10px]">%</span>
-        </div>
-
-        {/* Plan Time */}
-        <div className="flex items-center bg-gray-900 rounded px-1.5 py-0.5 border border-gray-800">
-          <span className="text-[10px] text-gray-500 opacity-50">P</span>
-          <input 
-            type="number" min="0"
-            value={task.planTime}
-            onChange={(e) => updateTask({ ...task, planTime: Math.max(0, parseInt(e.target.value) || 0) })}
-            className="w-7 bg-transparent text-right text-gray-400 outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
-          />
-        </div>
-        
-        {/* Actual Time + Timer */}
-        <div className={`flex items-center gap-0.5 bg-gray-900 rounded px-1.5 py-0.5 border border-gray-800 ${task.isTimerOn ? 'text-green-400' : 'text-gray-400'}`}>
-          <button onClick={() => updateTask({ ...task, isTimerOn: !task.isTimerOn })}>
-            {task.isTimerOn ? <Pause size={9} className="fill-current" /> : <Play size={9} className="fill-current" />}
-          </button>
-          <input 
-            type="number" min="0"
-            value={Math.floor(task.actTime)}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === '') {
-                updateTask({ ...task, actTime: 0 + Math.floor((task.actTime % 1) * 60) / 60 });
-              } else {
-                const newMinutes = Math.max(0, parseInt(val));
-                const keepSeconds = Math.floor((task.actTime % 1) * 60);
-                updateTask({ ...task, actTime: newMinutes + keepSeconds / 60 });
-              }
-            }}
-            className="w-5 bg-transparent text-right outline-none text-[10px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-          <span className="text-[10px]">m</span>
-          <input 
-            type="number" min="0" max="59"
-            value={Math.floor((task.actTime % 1) * 60)}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === '') {
-                updateTask({ ...task, actTime: Math.floor(task.actTime) });
-              } else {
-                const keepMinutes = Math.floor(task.actTime);
-                const newSeconds = Math.max(0, Math.min(59, parseInt(val)));
-                updateTask({ ...task, actTime: keepMinutes + newSeconds / 60 });
-              }
-            }}
-            className="w-5 bg-transparent text-right outline-none text-[10px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none -ml-1.5"
-          />
-          <span className="text-[10px]">s</span>
-        </div>
-      </div>
-      )}
-      </div>
+      <div ref={setNodeRef} style={style} className={`relative mb-3 rounded-xl overflow-hidden border transition-all duration-300 ${activeStyle} ${task.done ? 'opacity-40 grayscale' : ''}`}>
       
-      {/* 하위할일들 (간단한 형태) */}
-      {task.subtasks && task.subtasks.length > 0 && (
-        <div className={`ml-6 space-y-1 ${!isSubtasksCollapsed ? 'pb-3' : ''}`}>
-          <button 
-            onClick={() => setIsSubtasksCollapsed(!isSubtasksCollapsed)}
-            className="w-full h-[12px] bg-gray-1000/30 hover:bg-gray-900/50 transition-colors relative flex items-center justify-center"
-          >
-            <span className="text-[8px] text-gray-500 absolute">{isSubtasksCollapsed ? '▼' : '▲'}</span>
-          </button>
-          
-          {!isSubtasksCollapsed && (
-            <>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => {
-                const { active, over } = event;
-                if (active.id !== over?.id) {
-                  const oldIndex = task.subtasks!.findIndex((st: Task) => st.id === active.id);
-                  const newIndex = task.subtasks!.findIndex((st: Task) => st.id === over?.id);
-                  const reorderedSubtasks = arrayMove(task.subtasks!, oldIndex, newIndex);
-                  const updatedTask = { ...task, subtasks: reorderedSubtasks };
-                  updateTask(updatedTask);
-                }
-              }}>
-                <SortableContext items={task.subtasks!.map((st: Task) => st.id)} strategy={verticalListSortingStrategy}>
-                  {task.subtasks.map((subtask: Task) => (
-                    <SubtaskItem 
-                      key={subtask.id} 
-                      subtask={subtask} 
-                      task={task} 
-                      updateTask={updateTask} 
-                      setFocusedSubtaskId={setFocusedSubtaskId}
+      <div className="absolute top-0 left-0 bottom-0 pointer-events-none opacity-10 transition-all duration-1000 ease-linear"
+        style={{ width: `${Math.min(progress, 100)}%`, background: barColor }}
+      ></div>
+      
+      <div className="relative p-3">
+        <div className="flex gap-3 items-start">
+            <button 
+                onClick={() => updateTask({ ...task, isTimerOn: !task.isTimerOn })}
+                className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-lg ${task.isTimerOn ? 'bg-blue-600 text-white scale-105' : 'bg-[#27272a] text-gray-400 hover:bg-[#3f3f46] hover:text-white'}`}
+            >
+                {task.isTimerOn ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
+            </button>
+
+            <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start relative">
+                    <input 
+                        value={task.text}
+                        onChange={(e) => updateTask({ ...task, text: e.target.value })}
+                        className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${task.done ? 'text-gray-500 line-through' : 'text-white'}`}
+                        placeholder="목표 (Time Block)"
                     />
-                  ))}
-                </SortableContext>
-              </DndContext>
-              
-              {focusedSubtaskId && (
-                <div className="flex justify-center mt-0.5">
-                  <button 
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      const newSubtask: Task = {
-                        id: Date.now(),
-                        text: '',
-                        done: false,
-                        percent: 0,
-                        planTime: 15,
-                        actTime: 0,
-                        isTimerOn: false,
-                        parentId: task.id
-                      };
-                      const updatedTask = {
-                        ...task,
-                        subtasks: [...(task.subtasks || []), newSubtask]
-                      };
-                      updateTask(updatedTask);
-                    }}
-                    className="text-gray-600 hover:text-blue-400 px-1 py-0 text-[10px]"
-                  >
-                    +
-                  </button>
+                     <button {...attributes} {...listeners} className="touch-none p-1 text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing">
+                        <div className="w-8 h-1 bg-gray-800 rounded-full mx-auto mb-0.5" />
+                    </button>
                 </div>
-              )}
-            </>
-          )}
+
+                <div className="flex items-center gap-3 mt-1">
+                    <div className={`flex items-baseline gap-1 font-mono leading-none ${isOver ? 'text-pink-400' : 'text-blue-400'}`}>
+                        <input 
+                            type="number"
+                            value={Math.floor(task.actTime)}
+                            onChange={(e) => {
+                                const m = Math.max(0, parseInt(e.target.value) || 0);
+                                const s = Math.round((task.actTime % 1) * 60);
+                                updateTask({ ...task, actTime: m + s / 60 });
+                            }}
+                            className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
+                        />
+                        <span className="text-xs">m</span>
+                        <input 
+                            type="number"
+                            value={Math.round((task.actTime % 1) * 60)}
+                            onChange={(e) => {
+                                const m = Math.floor(task.actTime);
+                                const s = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
+                                updateTask({ ...task, actTime: m + s / 60 });
+                            }}
+                            className="w-8 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
+                        />
+                        <span className="text-xs">s</span>
+                        <span className="text-[10px] text-gray-500 font-sans font-bold uppercase">/</span>
+                        <input 
+                            type="number"
+                            value={task.planTime}
+                            onChange={(e) => updateTask({ ...task, planTime: Math.max(0, parseInt(e.target.value) || 0) })}
+                            className="w-12 bg-transparent text-[10px] font-bold tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 text-gray-400"
+                        />
+                        <span className="text-[10px] text-gray-500 font-sans font-bold uppercase">m</span>
+                    </div>
+                    
+                    <div className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/5 text-gray-400">
+                        {isOver ? (
+                            <span className="text-pink-400 flex items-center gap-1 animate-pulse">
+                                BONUS <Flame size={8} />
+                            </span>
+                        ) : (
+                            <span>{Math.ceil(task.planTime - task.actTime)}m LEFT</span>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
-      )}
+
+        <div className="mt-3 pl-[3.25rem]">
+            
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => {
+                const {active, over} = e;
+                if (active.id !== over?.id) {
+                    const oldIdx = task.subtasks!.findIndex(t => t.id === active.id);
+                    const newIdx = task.subtasks!.findIndex(t => t.id === over?.id);
+                    updateTask({ ...task, subtasks: arrayMove(task.subtasks!, oldIdx, newIdx) });
+                }
+            }}>
+                <SortableContext items={(task.subtasks || []).map(s => s.id)} strategy={verticalListSortingStrategy}>
+                    <div className="flex flex-col gap-0.5">
+                        {(task.subtasks || []).map(sub => (
+                            <SubtaskItem key={sub.id} subtask={sub} task={task} updateTask={updateTask} setFocusedSubtaskId={setFocusedSubtaskId} />
+                        ))}
+                    </div>
+                </SortableContext>
+            </DndContext>
+            
+            {focusedSubtaskId && (
+              <div className="flex justify-center mt-0.5">
+                <button 
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    const newSubtask: Task = {
+                      id: Date.now(),
+                      text: '',
+                      done: false,
+                      percent: 0,
+                      planTime: 0,
+                      actTime: 0,
+                      isTimerOn: false,
+                      parentId: task.id
+                    };
+                    const updatedTask = {
+                      ...task,
+                      subtasks: [...(task.subtasks || []), newSubtask]
+                    };
+                    updateTask(updatedTask);
+                  }}
+                  className="text-gray-600 hover:text-blue-400 px-1 py-0 text-[10px]"
+                >
+                  +
+                </button>
+              </div>
+            )}
+            
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => onShowHistory(task.text)}
+                        className="text-gray-600 hover:text-blue-400 transition-colors"
+                        title="기록 보기"
+                    >
+                        <BarChart2 size={14} />
+                    </button>
+                    <button 
+                        onClick={() => {
+                            const newSub: Task = { id: Date.now(), text: '', done: false, percent: 0, planTime: 0, actTime: 0, isTimerOn: false };
+                            updateTask({ ...task, subtasks: [...(task.subtasks || []), newSub] });
+                        }}
+                        className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-blue-400 py-1"
+                    >
+                        <Plus size={12} /> Step
+                    </button>
+                </div>
+
+                <div className="flex gap-2">
+                    {onChangeDate && (
+                      <>
+                        <button 
+                          onClick={() => setShowDatePicker(true)}
+                          className="text-[10px] text-gray-700 hover:text-blue-400 px-2"
+                        >
+                          날짜
+                        </button>
+                        {showDatePicker && (
+                          <DatePickerModal 
+                            onSelectDate={(date) => {
+                              onChangeDate(task.id, date.toDateString());
+                              setShowDatePicker(false);
+                            }}
+                            onClose={() => setShowDatePicker(false)}
+                          />
+                        )}
+                      </>
+                    )}
+                    <button 
+                        onClick={() => { if(window.confirm('삭제하시겠습니까?')) deleteTask(task.id); }}
+                        className="text-[10px] text-gray-700 hover:text-red-500 px-2"
+                    >
+                        삭제
+                    </button>
+                    <button 
+                        onClick={() => updateTask({ ...task, done: !task.done, isTimerOn: false })}
+                        className={`text-[10px] font-bold px-3 py-1 rounded transition-colors ${task.done ? 'bg-gray-700 text-gray-400' : 'bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white'}`}
+                    >
+                        {task.done ? '취소' : 'BLOCK 완료'}
+                    </button>
+                </div>
+            </div>
+        </div>
+      </div>
+    </div>
     </div>
   );
 }
@@ -737,7 +656,6 @@ export default function App() {
 
   const totalPlanTime = tasks.reduce((acc, t) => acc + t.planTime, 0);
   const totalActTime = tasks.reduce((acc, t) => acc + t.actTime, 0);
-  const timeProgress = totalPlanTime > 0 ? (totalActTime / totalPlanTime) * 100 : 0;
 
   // 완료율에 따른 평가 메시지 (날짜 기반으로 고정)
   const getEvaluationMessage = (completionRate: number, dateStr: string) => {
@@ -765,7 +683,7 @@ export default function App() {
   // currentSpace는 항상 존재하므로 Loading 화면 불필요
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white font-sans overflow-y-auto selection:bg-indigo-500/30" style={{ fontSize: '110%' }}>
+    <div className="min-h-screen bg-[#09090b] text-white font-sans overflow-y-auto selection:bg-indigo-500/30">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-24">
@@ -832,40 +750,26 @@ export default function App() {
               </div>
             </div>
 
-            {/* 플랜 시간 진행바 */}
+            {/* Plan/Act 총 시간 비교 */}
             {tasks.length > 0 && (
-              <div className="mb-6 bg-[#0f0f14]/50 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] text-gray-500 font-bold uppercase">Time Progress</span>
-                  <span className="text-xs font-mono text-gray-400">
-                    {formatFullTime(totalActTime)} / {totalPlanTime}m
-                  </span>
+              <div className="mb-6 bg-[#0f0f14]/50 backdrop-blur-sm px-4 py-3 rounded-2xl border border-white/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[10px] text-gray-600 uppercase font-bold">Plan</span>
+                    <span className="text-lg font-black font-mono text-gray-400">{totalPlanTime}m</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[10px] text-gray-600 uppercase font-bold">Act</span>
+                    <span className={`text-lg font-black font-mono ${totalActTime > totalPlanTime ? 'text-pink-400' : 'text-blue-400'}`}>
+                      {Math.floor(totalActTime)}m
+                    </span>
+                  </div>
                 </div>
-                <div className="relative h-4 bg-gray-900 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-gray-900 rounded-full overflow-hidden mt-2">
                   <div 
-                    className={`h-full transition-all duration-500 ${totalActTime > totalPlanTime ? 'bg-green-500' : 'bg-blue-500'}`}
-                    style={{ width: `${Math.min(timeProgress, 100)}%` }}
-                  />
-                  {totalActTime > totalPlanTime && (
-                    <div 
-                      className="absolute top-0 left-0 h-full bg-blue-500/30"
-                      style={{ width: '100%' }}
-                    />
-                  )}
-                </div>
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-[10px] text-gray-600">
-                    {totalPlanTime > 0 ? Math.round(timeProgress) : 0}% 진행
-                  </span>
-                  {totalActTime > totalPlanTime ? (
-                    <span className="text-[10px] text-green-400 font-bold">
-                      {formatFullTime(totalActTime - totalPlanTime)} 더 함
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-blue-400">
-                      {formatFullTime(totalPlanTime - totalActTime)} 남음
-                    </span>
-                  )}
+                    className="h-full transition-all duration-500 bg-gradient-to-r from-indigo-500 to-pink-500"
+                    style={{ width: `${Math.min((totalActTime / Math.max(totalPlanTime, 1)) * 100, 100)}%` }}
+                  ></div>
                 </div>
               </div>
             )}

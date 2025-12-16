@@ -64,11 +64,18 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
   const addSpace = async (title: string) => {
     if (user) {
-      await supabase.from('spaces').insert({ user_id: user.id, title });
+      const { data } = await supabase.from('spaces').insert({ user_id: user.id, title }).select().single();
+      if (data) {
+        const newSpace = { id: data.id, title: data.title, createdAt: new Date(data.created_at) };
+        setSpaces(prev => [...prev, newSpace]);
+        setCurrentSpace(newSpace);
+      }
     } else {
-      await db.spaces.add({ title, createdAt: new Date() });
+      const id = await db.spaces.add({ title, createdAt: new Date() }) as number;
+      const newSpace = { id, title, createdAt: new Date() };
+      setSpaces(prev => [...prev, newSpace]);
+      setCurrentSpace(newSpace);
     }
-    await loadSpaces();
   };
 
   const updateSpace = async (id: number, title: string) => {
@@ -77,7 +84,10 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     } else {
       await db.spaces.update(id, { title });
     }
-    await loadSpaces();
+    setSpaces(prev => prev.map(s => s.id === id ? { ...s, title } : s));
+    if (currentSpace?.id === id) {
+      setCurrentSpace(prev => prev ? { ...prev, title } : null);
+    }
   };
 
   const deleteSpace = async (id: number) => {
@@ -90,7 +100,11 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     } else {
       await db.spaces.delete(id);
     }
-    await loadSpaces();
+    const newSpaces = spaces.filter(s => s.id !== id);
+    setSpaces(newSpaces);
+    if (currentSpace?.id === id) {
+      setCurrentSpace(newSpaces[0]);
+    }
   };
 
   return (

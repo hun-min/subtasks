@@ -453,7 +453,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') e.currentTarget.blur();
                         }}
-                        className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
+                        className={`bg-transparent text-base font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                         placeholder="목표 (Time Block)"
                     />
                 </div>
@@ -938,13 +938,13 @@ export default function App() {
                   const total = log ? log.tasks.length : 0;
                   
                   return (
-                    <button key={i} onClick={() => { setViewDate(d); /* 날짜만 변경하고 모드는 HISTORY 유지 */ }} className={`h-12 rounded border transition-all ${isSelected ? 'border-white bg-white/10 text-white' : 'border-gray-900 text-gray-600'}`}>
-                      <span className="text-xs">{d.getDate()}</span>
+                    <button key={i} onClick={() => { setViewDate(d); }} className={`h-14 rounded border transition-all flex flex-col items-center justify-center ${isSelected ? 'border-white bg-white/10 text-white' : 'border-gray-900 text-gray-600'}`}>
+                      <span className="text-sm font-medium">{d.getDate()}</span>
                       {log && total > 0 && (
-                        <>
-                          <span className="block text-[8px] text-blue-500">{completed}/{total}</span>
-                          <span className="block text-[7px] text-green-400">{Math.round((completed / total) * 100)}%</span>
-                        </>
+                        <div className="flex items-center justify-between w-full px-1 mt-0.5">
+                          <span className="text-[9px] text-blue-400">{completed}/{total}</span>
+                          <span className="text-[9px] text-green-400 font-bold">{Math.round((completed / total) * 100)}%</span>
+                        </div>
                       )}
                     </button>
                   )
@@ -997,7 +997,7 @@ export default function App() {
                   
                   {/* 섹션 1: TARGET (원하는 것) - 미완료 태스크만 표시 + 수정 가능 */}
                   <div>
-                    <h2 className="text-blue-500 text-[10px] font-bold tracking-widest mb-3 border-b border-blue-900/30 pb-1">원하는 것들</h2>
+                    <h2 className="text-blue-400 text-sm font-bold tracking-wide mb-3 border-b border-blue-900/30 pb-2">원하는 것들</h2>
                     <div className="space-y-1">
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                         <SortableContext items={tasks.filter((t: Task) => !t.done).map((t: Task) => t.id)} strategy={verticalListSortingStrategy}>
@@ -1042,7 +1042,7 @@ export default function App() {
 
                   {/* 섹션 2: RESULT (실제 한 것) - 완료된 것만 표시 + 수정 가능 */}
                   <div>
-                    <h2 className="text-green-500 text-[10px] font-bold tracking-widest mb-3 border-b border-green-900/30 pb-1">완료한 일들</h2>
+                    <h2 className="text-green-400 text-sm font-bold tracking-wide mb-3 border-b border-green-900/30 pb-2">완료한 일들</h2>
                     <div className="space-y-1">
                       {tasks.filter(t => t.done).length > 0 ? (
                         tasks.filter(t => t.done).map(task => (

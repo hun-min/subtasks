@@ -653,7 +653,6 @@ export default function App() {
   
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
-  const [skipSync, setSkipSync] = useState(false);
 
   // 로컬 데이터 로드 (마이그레이션 포함)
   useEffect(() => {
@@ -701,16 +700,29 @@ export default function App() {
     };
     loadFromSupabase();
 
-    // Realtime 구독
+    // Realtime 구독 - payload 직접 사용
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
         table: 'task_logs',
         filter: `space_id=eq.${currentSpace.id}`
-      }, () => {
-        setSkipSync(true);
-        loadFromSupabase();
+      }, (payload: any) => {
+        if (payload.new) {
+          const newLog = {
+            date: payload.new.date,
+            tasks: migrateTasks(JSON.parse(payload.new.tasks))
+          };
+          setLogs(prev => {
+            const idx = prev.findIndex(l => l.date === newLog.date);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = newLog;
+              return updated;
+            }
+            return [...prev, newLog];
+          });
+        }
       })
       .subscribe();
 
@@ -751,29 +763,11 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // 저장 + Supabase 동기화
+  // 저장 (로컬만)
   useEffect(() => {
     if (!currentSpace || !localLogsLoaded) return;
-    
     localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
-    
-    if (skipSync) {
-      setSkipSync(false);
-      return;
-    }
-    
-    // 로그인 시에만 Supabase 동기화
-    if (user) {
-      supabase.from('task_logs').upsert(logs.map(log => ({
-        date: log.date,
-        user_id: user.id,
-        space_id: currentSpace.id,
-        tasks: JSON.stringify(log.tasks)
-      }))).then(({ error }) => {
-        if (error) console.log('Supabase sync error:', error);
-      });
-    }
-  }, [logs, user, currentSpace, localLogsLoaded]);
+  }, [logs, currentSpace, localLogsLoaded]);
   useEffect(() => {
     const dateStr = viewDate.toDateString();
     const log = logs.find(l => l.date === dateStr);
@@ -784,11 +778,25 @@ export default function App() {
   const updateLogs = (newTasks: Task[]) => {
     setTasks(newTasks);
     const dateStr = viewDate.toDateString();
+    const newLog = { date: dateStr, tasks: newTasks };
+    
     setLogs(prev => {
       const idx = prev.findIndex(l => l.date === dateStr);
-      if (idx >= 0) { const updated = [...prev]; updated[idx] = { date: dateStr, tasks: newTasks }; return updated; }
-      return [...prev, { date: dateStr, tasks: newTasks }];
+      if (idx >= 0) { const updated = [...prev]; updated[idx] = newLog; return updated; }
+      return [...prev, newLog];
     });
+    
+    // Supabase 저장 (로그인 시에만)
+    if (user && currentSpace) {
+      supabase.from('task_logs').upsert({
+        date: dateStr,
+        user_id: user.id,
+        space_id: currentSpace.id,
+        tasks: JSON.stringify(newTasks)
+      }).then(({ error }) => {
+        if (error) console.log('Supabase sync error:', error);
+      });
+    }
   };
 
   const addTask = () => {

@@ -292,53 +292,55 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 </div>
 
                 <div className="flex items-center gap-3 mt-1">
-                    <div className={`flex items-baseline gap-1 font-mono leading-none ${isOver ? 'text-pink-400' : 'text-blue-400'}`}>
-                        <input 
-                            type="number"
-                            value={Math.floor(task.actTime)}
-                            onChange={(e) => {
-                                const m = Math.max(0, parseInt(e.target.value) || 0);
-                                const s = Math.round((task.actTime % 1) * 60);
-                                updateTask({ ...task, actTime: m + s / 60 });
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') e.currentTarget.blur();
-                            }}
-                            className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
-                        />
-                        <span className="text-xs">m</span>
-                        <input 
-                            type="number"
-                            value={Math.round((task.actTime % 1) * 60)}
-                            onChange={(e) => {
-                                const m = Math.floor(task.actTime);
-                                const s = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                                updateTask({ ...task, actTime: m + s / 60 });
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') e.currentTarget.blur();
-                            }}
-                            className="w-8 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
-                        />
-                        <span className="text-xs">s</span>
-                        <span className="text-[10px] text-gray-500 font-sans font-bold uppercase">/</span>
-                        <input 
-                            type="number"
-                            value={task.planTime}
-                            onChange={(e) => updateTask({ ...task, planTime: Math.max(0, parseInt(e.target.value) || 0) })}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') e.currentTarget.blur();
-                            }}
-                            className="w-12 bg-transparent text-[10px] font-bold tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 text-gray-400"
-                        />
-                        <span className="text-[10px] text-gray-500 font-sans font-bold uppercase">m</span>
+                    <div className="flex items-center gap-2">
+                        <div className={`flex items-baseline gap-1 font-mono leading-none ${isOver ? 'text-pink-400' : 'text-blue-400'}`}>
+                            <input 
+                                type="number"
+                                value={Math.floor(task.actTime)}
+                                onChange={(e) => {
+                                    const m = Math.max(0, parseInt(e.target.value) || 0);
+                                    const s = Math.round((task.actTime % 1) * 60);
+                                    updateTask({ ...task, actTime: m + s / 60 });
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                }}
+                                className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
+                            />
+                            <span className="text-xs">m</span>
+                            <input 
+                                type="number"
+                                value={Math.round((task.actTime % 1) * 60)}
+                                onChange={(e) => {
+                                    const m = Math.floor(task.actTime);
+                                    const s = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
+                                    updateTask({ ...task, actTime: m + s / 60 });
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                }}
+                                className="w-8 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
+                            />
+                            <span className="text-xs">s</span>
+                        </div>
+                        
+                        <span className="text-gray-600">/</span>
+                        
+                        <div className="flex items-baseline gap-1">
+                            <input 
+                                type="number"
+                                value={task.planTime}
+                                onChange={(e) => updateTask({ ...task, planTime: Math.max(0, parseInt(e.target.value) || 0) })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                }}
+                                className="w-12 bg-transparent text-sm font-bold tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 text-gray-500"
+                            />
+                            <span className="text-xs text-gray-600">m</span>
+                        </div>
+                        
+                        {isOver && <Flame size={16} className="text-pink-400 animate-pulse" />}
                     </div>
-                    
-                    {isOver ? (
-                        <Flame size={16} className="text-pink-400 animate-pulse" />
-                    ) : (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/5 text-gray-400">{Math.ceil(task.planTime - task.actTime)}m</span>
-                    )}
                 </div>
             </div>
         </div>
@@ -394,19 +396,20 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 <div className="flex gap-3">
                     <button 
                         onClick={() => onShowHistory(task.text)}
-                        className="text-gray-600 hover:text-blue-400 transition-colors"
+                        className="text-gray-500 hover:text-blue-400 transition-colors p-1"
                         title="기록 보기"
                     >
-                        <BarChart2 size={14} />
+                        <BarChart2 size={16} />
                     </button>
                     <button 
                         onClick={() => {
                             const newSub: Task = { id: Date.now(), text: '', done: false, percent: 0, planTime: 0, actTime: 0, isTimerOn: false };
                             updateTask({ ...task, subtasks: [...(task.subtasks || []), newSub] });
                         }}
-                        className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-blue-400 py-1"
+                        className="text-gray-500 hover:text-blue-400 p-1"
+                        title="Step 추가"
                     >
-                        <Plus size={12} /> Step
+                        <Plus size={16} />
                     </button>
                 </div>
 
@@ -415,10 +418,10 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                       <>
                         <button 
                           onClick={() => setShowDatePicker(true)}
-                          className="text-gray-700 hover:text-blue-400 p-1"
+                          className="text-gray-500 hover:text-blue-400 p-1"
                           title="날짜 변경"
                         >
-                          <Calendar size={14} />
+                          <Calendar size={16} />
                         </button>
                         {showDatePicker && (
                           <DatePickerModal 
@@ -433,17 +436,17 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     )}
                     <button 
                         onClick={() => { if(window.confirm('삭제하시겠습니까?')) deleteTask(task.id); }}
-                        className="text-gray-700 hover:text-red-500 p-1"
+                        className="text-gray-500 hover:text-red-400 p-1"
                         title="삭제"
                     >
-                        <Trash2 size={14} />
+                        <Trash2 size={16} />
                     </button>
                     <button 
                         onClick={() => updateTask({ ...task, done: !task.done, isTimerOn: false })}
-                        className={`p-1.5 rounded transition-colors ${task.done ? 'text-gray-400' : 'text-blue-400 hover:text-white'}`}
+                        className={`p-1 rounded transition-colors ${task.done ? 'text-gray-500' : 'text-blue-400 hover:text-white'}`}
                         title={task.done ? '취소' : '완료'}
                     >
-                        <Check size={16} />
+                        <Check size={18} />
                     </button>
                 </div>
             </div>
@@ -709,7 +712,7 @@ export default function App() {
           <SpaceSelector />
           <button
             onClick={() => user ? signOut() : setShowAuthModal(true)}
-            className="text-xs text-gray-500 hover:text-white"
+            className="text-xs text-gray-400 hover:text-white px-3 py-1.5"
           >
             {user ? '로그아웃' : '로그인'}
           </button>

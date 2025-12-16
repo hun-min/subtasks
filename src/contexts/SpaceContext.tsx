@@ -36,9 +36,13 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
         const parsed = JSON.parse(cachedSpaces);
         return parsed.find((s: Space) => s.id === parseInt(savedId)) || parsed[0] || null;
       }
-      return null;
+      if (cachedSpaces) {
+        const parsed = JSON.parse(cachedSpaces);
+        if (parsed.length > 0) return parsed[0];
+      }
+      return { id: 1, title: '기본', createdAt: new Date() };
     } catch {
-      return null;
+      return { id: 1, title: '기본', createdAt: new Date() };
     }
   });
 

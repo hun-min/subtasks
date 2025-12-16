@@ -522,7 +522,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, isPlanning, sen
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
-  const { currentSpace, loading: spaceLoading } = useSpace();
+  const { currentSpace } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const [viewDate, setViewDate] = useState(new Date());
@@ -762,9 +762,7 @@ export default function App() {
     return pool[index];
   };
 
-  if (spaceLoading || !currentSpace) {
-    return <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-white">Loading...</div>;
-  }
+  // currentSpace는 항상 존재하므로 Loading 화면 불필요
 
   return (
     <div className="min-h-screen bg-[#09090b] text-white font-sans overflow-y-auto selection:bg-indigo-500/30">

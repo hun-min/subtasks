@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './contexts/AuthContext';
 import { useSpace } from './contexts/SpaceContext';
@@ -26,6 +26,38 @@ type Task = {
 type DailyLog = {
   date: string;
   tasks: Task[];
+};
+
+// --- [컴포넌트] 자동 높이 조절 Textarea ---
+const AutoResizeTextarea = ({ value, onChange, onKeyDown, placeholder, autoFocus, className }: any) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+    }
+  }, [value]);
+
+  useEffect(() => {
+    if (autoFocus && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length);
+    }
+  }, [autoFocus]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      rows={1}
+      value={value}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      className={`resize-none overflow-hidden bg-transparent outline-none ${className}`}
+      style={{ minHeight: '24px' }}
+    />
+  );
 };
 
 
@@ -141,7 +173,7 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
 }
 
 // --- [컴포넌트] 하위할일 아이템 ---
-function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subtask: Task, task: Task, updateTask: (task: Task) => void, setFocusedSubtaskId: (id: number | null) => void }) {
+function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFocusedSubtaskId }: { subtask: Task, task: Task, index: number, updateTask: (task: Task) => void, focusedSubtaskId: number | null, setFocusedSubtaskId: (id: number | null) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: subtask.id });
   
   const style = {
@@ -150,46 +182,73 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const newId = Date.now();
+      const newSubtasks = [...(task.subtasks || [])];
+      const newSub: Task = {
+        id: newId, text: '', done: false, percent: 0, planTime: 0, actTime: 0, isTimerOn: false, parentId: task.id
+      };
+      newSubtasks.splice(index + 1, 0, newSub);
+      updateTask({ ...task, subtasks: newSubtasks });
+      setFocusedSubtaskId(newId);
+    }
+    
+    if (e.key === 'Backspace' && subtask.text === '') {
+      e.preventDefault();
+      const newSubtasks = task.subtasks!.filter(s => s.id !== subtask.id);
+      updateTask({ ...task, subtasks: newSubtasks });
+      if (index > 0 && task.subtasks) {
+        setFocusedSubtaskId(task.subtasks[index - 1].id);
+      }
+    }
+    
+    if (e.key === 'ArrowUp' && index > 0 && task.subtasks) {
+      e.preventDefault();
+      setFocusedSubtaskId(task.subtasks[index - 1].id);
+    }
+    if (e.key === 'ArrowDown' && task.subtasks && index < task.subtasks.length - 1) {
+      e.preventDefault();
+      setFocusedSubtaskId(task.subtasks[index + 1].id);
+    }
+  };
+
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-2 py-1.5 pl-2 group">
+    <div ref={setNodeRef} style={style} className="flex items-start gap-2 py-1 pl-2 group">
       <button 
         onClick={() => {
            const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, done: !s.done } : s);
            updateTask({ ...task, subtasks: newSubs });
         }}
-        className={`flex-shrink-0 w-3.5 h-3.5 border rounded-sm flex items-center justify-center transition-colors ${subtask.done ? 'bg-gray-500 border-gray-500' : 'border-gray-600 hover:border-gray-400'}`}
+        className={`mt-1.5 flex-shrink-0 w-3.5 h-3.5 border rounded-sm flex items-center justify-center transition-colors ${subtask.done ? 'bg-gray-500 border-gray-500' : 'border-gray-600 hover:border-gray-400'}`}
       >
         {subtask.done && <Check size={10} className="text-black" />}
       </button>
 
-      <input 
+      <AutoResizeTextarea
         value={subtask.text}
-        onChange={(e) => {
+        autoFocus={focusedSubtaskId === subtask.id}
+        onChange={(e: any) => {
            const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, text: e.target.value } : s);
            updateTask({ ...task, subtasks: newSubs });
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-        }}
-        onFocus={() => setFocusedSubtaskId(subtask.id)}
-        onBlur={() => setFocusedSubtaskId(null)}
-        className={`bg-transparent text-sm outline-none flex-1 ${subtask.done ? 'text-gray-600 line-through' : 'text-gray-300'}`}
-        placeholder="세부 실행 단계..."
+        onKeyDown={handleKeyDown}
+        className={`flex-1 text-sm leading-relaxed ${subtask.done ? 'text-gray-600 line-through' : 'text-gray-300'}`}
+        placeholder="세부 실행 단계... (Enter로 추가)"
       />
 
       <button 
         onClick={() => {
-           if (window.confirm('삭제하시겠습니까?')) {
-             const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
-             updateTask({ ...task, subtasks: newSubs });
-           }
+           const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
+           updateTask({ ...task, subtasks: newSubs });
         }}
-        className="text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="mt-1 text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <X size={12} />
       </button>
       
-      <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50" />
+      <div {...attributes} {...listeners} className="mt-1.5 w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50" />
     </div>
   );
 }
@@ -357,8 +416,8 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             }}>
                 <SortableContext items={(task.subtasks || []).map(s => s.id)} strategy={verticalListSortingStrategy}>
                     <div className="flex flex-col gap-0.5">
-                        {(task.subtasks || []).map(sub => (
-                            <SubtaskItem key={sub.id} subtask={sub} task={task} updateTask={updateTask} setFocusedSubtaskId={setFocusedSubtaskId} />
+                        {(task.subtasks || []).map((sub, idx) => (
+                            <SubtaskItem key={sub.id} subtask={sub} task={task} index={idx} updateTask={updateTask} focusedSubtaskId={focusedSubtaskId} setFocusedSubtaskId={setFocusedSubtaskId} />
                         ))}
                     </div>
                 </SortableContext>

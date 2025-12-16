@@ -765,7 +765,7 @@ export default function App() {
   // currentSpace는 항상 존재하므로 Loading 화면 불필요
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white font-sans overflow-y-auto selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-[#09090b] text-white font-sans overflow-y-auto selection:bg-indigo-500/30" style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-24">

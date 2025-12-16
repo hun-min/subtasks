@@ -961,10 +961,10 @@ export default function App() {
                     <button key={i} onClick={() => { setViewDate(d); }} className={`h-14 rounded border transition-all flex flex-col items-center justify-center ${isSelected ? 'border-white bg-white/10 text-white' : 'border-gray-900 text-gray-600'}`}>
                       <span className="text-sm font-medium">{d.getDate()}</span>
                       {log && total > 0 && (
-                        <div className="flex items-center justify-center gap-1 mt-0.5">
+                        <>
                           <span className="text-[9px] text-blue-400">{completed}/{total}</span>
                           <span className="text-[9px] text-green-400 font-bold">{Math.round((completed / total) * 100)}%</span>
-                        </div>
+                        </>
                       )}
                     </button>
                   )

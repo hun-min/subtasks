@@ -94,7 +94,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
     loadSpaces();
     return () => { isMounted = false; };
-  }, [user?.id]);
+  }, [user]);
 
   const handleSetCurrentSpace = (space: Space) => {
     setCurrentSpace(space);

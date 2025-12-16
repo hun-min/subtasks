@@ -407,7 +407,7 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 
 // --- [컴포넌트] 할 일 아이템 ---
 function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void }) {
-  const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -453,9 +453,12 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') e.currentTarget.blur();
                         }}
-                        className={`bg-transparent text-base font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
+                        className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                         placeholder="목표 (Time Block)"
                     />
+                    <div {...attributes} {...listeners} className="touch-none p-1 text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing">
+                      <div className="w-8 h-1 bg-gray-800 rounded-full" />
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-3 mt-1">
@@ -472,7 +475,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') e.currentTarget.blur();
                                 }}
-                                className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
+                                className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                             <span className="text-xs">m</span>
                             <input 
@@ -486,7 +489,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') e.currentTarget.blur();
                                 }}
-                                className="w-8 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
+                                className="w-8 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                             <span className="text-xs">s</span>
                         </div>
@@ -501,7 +504,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') e.currentTarget.blur();
                                 }}
-                                className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
+                                className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                             <span className="text-xs">m</span>
                         </div>
@@ -602,7 +605,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                       </>
                     )}
                     <button 
-                        onClick={() => { if(window.confirm('삭제하시겠습니까?')) deleteTask(task.id); }}
+                        onClick={() => deleteTask(task.id)}
                         className="text-gray-500 hover:text-red-400 p-1"
                         title="삭제"
                     >
@@ -788,7 +791,9 @@ export default function App() {
     
     updateLogs(tasks.map(t => t.id === updated.id ? updated : t));
   };
-  const deleteTask = (id: number) => { if(window.confirm('삭제하시겠습니까?')) updateLogs(tasks.filter(t => t.id !== id)); };
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  
+  const deleteTask = (id: number) => { setDeleteConfirmId(id); };
   
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -836,11 +841,12 @@ export default function App() {
       percent: pastTask.percent || 0,
       planTime: pastTask.planTime || 30,
       subtasks: pastTask.subtasks ? pastTask.subtasks
-        .filter(st => st.status !== 'DONE')
+        .filter(st => st.status !== 'DONE' && !st.done)
         .map(st => ({
           ...st,
           id: Date.now() + Math.random(),
           status: 'LATER' as TaskStatus,
+          done: false,
           isTimerOn: false,
           actTime: 0,
           parentId: Date.now()
@@ -905,6 +911,20 @@ export default function App() {
         {historyTarget && (
           <TaskHistoryModal taskName={historyTarget} logs={logs} onClose={() => setHistoryTarget(null)} />
         )}
+        
+        {/* 모달: 삭제 확인 */}
+        {deleteConfirmId && (
+          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+            <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 w-full max-w-xs shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-white mb-2">삭제 확인</h3>
+              <p className="text-sm text-gray-400 mb-6">이 할일을 삭제하시겠습니까?</p>
+              <div className="flex gap-2">
+                <button onClick={() => setDeleteConfirmId(null)} className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors">취소</button>
+                <button onClick={() => { updateLogs(tasks.filter(t => t.id !== deleteConfirmId)); setDeleteConfirmId(null); }} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors">삭제</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* === 캘린더 페이지 === */}
         {
@@ -941,7 +961,7 @@ export default function App() {
                     <button key={i} onClick={() => { setViewDate(d); }} className={`h-14 rounded border transition-all flex flex-col items-center justify-center ${isSelected ? 'border-white bg-white/10 text-white' : 'border-gray-900 text-gray-600'}`}>
                       <span className="text-sm font-medium">{d.getDate()}</span>
                       {log && total > 0 && (
-                        <div className="flex items-center justify-between w-full px-1 mt-0.5">
+                        <div className="flex items-center justify-center gap-1 mt-0.5">
                           <span className="text-[9px] text-blue-400">{completed}/{total}</span>
                           <span className="text-[9px] text-green-400 font-bold">{Math.round((completed / total) * 100)}%</span>
                         </div>

@@ -8,6 +8,7 @@ export function SpaceSelector() {
   const [newSpaceName, setNewSpaceName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,10 +36,7 @@ export function SpaceSelector() {
       alert('마지막 공간은 삭제할 수 없습니다.');
       return;
     }
-    if (window.confirm('이 공간을 삭제하시겠습니까?')) {
-      await deleteSpace(id);
-      setShowSettings(false);
-    }
+    setDeleteConfirmId(id);
   };
 
   return (
@@ -83,6 +81,19 @@ export function SpaceSelector() {
                 <Plus size={12} /><span>새 공간 만들기</span>
               </button>
             )}
+          </div>
+        </div>
+      )}
+      
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+          <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 w-full max-w-xs shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white mb-2">공간 삭제</h3>
+            <p className="text-sm text-gray-400 mb-6">이 공간을 삭제하시겠습니까?</p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors">취소</button>
+              <button onClick={async () => { await deleteSpace(deleteConfirmId); setDeleteConfirmId(null); setShowSettings(false); }} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors">삭제</button>
+            </div>
           </div>
         </div>
       )}

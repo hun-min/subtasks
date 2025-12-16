@@ -7,6 +7,7 @@ export function SpaceSelector() {
   const [newSpaceName, setNewSpaceName] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   
   const handleAdd = async () => {
     if (!newSpaceName.trim()) return;
@@ -58,6 +59,16 @@ export function SpaceSelector() {
             <button
               onClick={() => setCurrentSpace(space)}
               onDoubleClick={() => startEdit(space)}
+              onTouchStart={() => {
+                const timer = setTimeout(() => startEdit(space), 500);
+                setLongPressTimer(timer);
+              }}
+              onTouchEnd={() => {
+                if (longPressTimer) clearTimeout(longPressTimer);
+              }}
+              onTouchMove={() => {
+                if (longPressTimer) clearTimeout(longPressTimer);
+              }}
               className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
                 currentSpace?.id === space.id
                   ? 'bg-white text-black font-bold'

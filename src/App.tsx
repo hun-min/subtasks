@@ -7,7 +7,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Flame } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Flame, Calendar, Trash2 } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type Task = {
@@ -168,16 +168,21 @@ function SubtaskItem({ subtask, task, updateTask, setFocusedSubtaskId }: { subta
            const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, text: e.target.value } : s);
            updateTask({ ...task, subtasks: newSubs });
         }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
         onFocus={() => setFocusedSubtaskId(subtask.id)}
         onBlur={() => setFocusedSubtaskId(null)}
-        className={`bg-transparent text-[13px] outline-none flex-1 font-mono ${subtask.done ? 'text-gray-600 line-through' : 'text-gray-300'}`}
+        className={`bg-transparent text-sm outline-none flex-1 ${subtask.done ? 'text-gray-600 line-through' : 'text-gray-300'}`}
         placeholder="세부 실행 단계..."
       />
 
       <button 
         onClick={() => {
-           const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
-           updateTask({ ...task, subtasks: newSubs });
+           if (window.confirm('삭제하시겠습니까?')) {
+             const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
+             updateTask({ ...task, subtasks: newSubs });
+           }
         }}
         className="text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
       >
@@ -275,6 +280,9 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     <input 
                         value={task.text}
                         onChange={(e) => updateTask({ ...task, text: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                        }}
                         className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${task.done ? 'text-gray-500 line-through' : 'text-white'}`}
                         placeholder="목표 (Time Block)"
                     />
@@ -293,6 +301,9 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                                 const s = Math.round((task.actTime % 1) * 60);
                                 updateTask({ ...task, actTime: m + s / 60 });
                             }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.currentTarget.blur();
+                            }}
                             className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
                         />
                         <span className="text-xs">m</span>
@@ -304,6 +315,9 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                                 const s = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
                                 updateTask({ ...task, actTime: m + s / 60 });
                             }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.currentTarget.blur();
+                            }}
                             className="w-8 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
                         />
                         <span className="text-xs">s</span>
@@ -312,20 +326,19 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                             type="number"
                             value={task.planTime}
                             onChange={(e) => updateTask({ ...task, planTime: Math.max(0, parseInt(e.target.value) || 0) })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.currentTarget.blur();
+                            }}
                             className="w-12 bg-transparent text-[10px] font-bold tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 text-gray-400"
                         />
                         <span className="text-[10px] text-gray-500 font-sans font-bold uppercase">m</span>
                     </div>
                     
-                    <div className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/5 text-gray-400">
-                        {isOver ? (
-                            <span className="text-pink-400 flex items-center gap-1 animate-pulse">
-                                BONUS <Flame size={8} />
-                            </span>
-                        ) : (
-                            <span>{Math.ceil(task.planTime - task.actTime)}m LEFT</span>
-                        )}
-                    </div>
+                    {isOver ? (
+                        <Flame size={16} className="text-pink-400 animate-pulse" />
+                    ) : (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/5 text-gray-400">{Math.ceil(task.planTime - task.actTime)}m</span>
+                    )}
                 </div>
             </div>
         </div>
@@ -397,14 +410,15 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     </button>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                     {onChangeDate && (
                       <>
                         <button 
                           onClick={() => setShowDatePicker(true)}
-                          className="text-[10px] text-gray-700 hover:text-blue-400 px-2"
+                          className="text-gray-700 hover:text-blue-400 p-1"
+                          title="날짜 변경"
                         >
-                          날짜
+                          <Calendar size={14} />
                         </button>
                         {showDatePicker && (
                           <DatePickerModal 
@@ -419,15 +433,17 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     )}
                     <button 
                         onClick={() => { if(window.confirm('삭제하시겠습니까?')) deleteTask(task.id); }}
-                        className="text-[10px] text-gray-700 hover:text-red-500 px-2"
+                        className="text-gray-700 hover:text-red-500 p-1"
+                        title="삭제"
                     >
-                        삭제
+                        <Trash2 size={14} />
                     </button>
                     <button 
                         onClick={() => updateTask({ ...task, done: !task.done, isTimerOn: false })}
-                        className={`text-[10px] font-bold px-3 py-1 rounded transition-colors ${task.done ? 'bg-gray-700 text-gray-400' : 'bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white'}`}
+                        className={`p-1.5 rounded transition-colors ${task.done ? 'text-gray-400' : 'text-blue-400 hover:text-white'}`}
+                        title={task.done ? '취소' : '완료'}
                     >
-                        {task.done ? '취소' : 'BLOCK 완료'}
+                        <Check size={16} />
                     </button>
                 </div>
             </div>

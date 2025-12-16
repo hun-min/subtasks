@@ -54,7 +54,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
             .from('spaces')
             .select('*')
             .eq('user_id', user.id)
-            .order('created_at', { ascending: true });
+            .order('createdAt', { ascending: true });
 
           if (error) {
             console.warn('Supabase spaces query error:', error);
@@ -67,7 +67,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
             finalSpaces = data.map(s => ({ 
               id: s.id, 
               title: s.title || s.name, 
-              createdAt: new Date(s.created_at) 
+              createdAt: new Date(s.createdAt) 
             }));
           } else {
             // 서버에 없으면 생성
@@ -78,7 +78,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
               .single();
             
             if (!insertError && newSpace) {
-              finalSpaces = [{ id: newSpace.id, title: newSpace.title || newSpace.name, createdAt: new Date(newSpace.created_at) }];
+              finalSpaces = [{ id: newSpace.id, title: newSpace.title || newSpace.name, createdAt: new Date(newSpace.createdAt) }];
             }
           }
         } else {
@@ -150,7 +150,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         const { data } = await supabase.from('spaces').insert({ user_id: user.id, title }).select().single();
         if (data) {
-          const realSpace = { id: data.id, title: data.title || data.name, createdAt: new Date(data.created_at) };
+          const realSpace = { id: data.id, title: data.title || data.name, createdAt: new Date(data.createdAt) };
           // 임시 ID를 진짜 ID로 교체
           const fixedSpaces = nextSpaces.map(s => s.id === tempId ? realSpace : s);
           updateCache(fixedSpaces);

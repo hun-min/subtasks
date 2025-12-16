@@ -326,7 +326,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                         
                         <span className="text-gray-600">/</span>
                         
-                        <div className="flex items-baseline gap-1">
+                        <div className="flex items-baseline gap-1 font-mono leading-none text-gray-400">
                             <input 
                                 type="number"
                                 value={task.planTime}
@@ -334,9 +334,9 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') e.currentTarget.blur();
                                 }}
-                                className="w-12 bg-transparent text-sm font-bold tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 text-gray-500"
+                                className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500"
                             />
-                            <span className="text-xs text-gray-600">m</span>
+                            <span className="text-xs">m</span>
                         </div>
                         
                         {isOver && <Flame size={16} className="text-pink-400 animate-pulse" />}

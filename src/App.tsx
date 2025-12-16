@@ -653,6 +653,7 @@ export default function App() {
   
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
+  const [skipSync, setSkipSync] = useState(false);
 
   // 로컬 데이터 로드 (마이그레이션 포함)
   useEffect(() => {
@@ -707,7 +708,10 @@ export default function App() {
         schema: 'public', 
         table: 'task_logs',
         filter: `space_id=eq.${currentSpace.id}`
-      }, () => loadFromSupabase())
+      }, () => {
+        setSkipSync(true);
+        loadFromSupabase();
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -752,6 +756,11 @@ export default function App() {
     if (!currentSpace || !localLogsLoaded) return;
     
     localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
+    
+    if (skipSync) {
+      setSkipSync(false);
+      return;
+    }
     
     // 로그인 시에만 Supabase 동기화
     if (user) {

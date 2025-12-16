@@ -456,7 +456,6 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                         className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                         placeholder="목표 (Time Block)"
                     />
-
                 </div>
 
                 <div className="flex items-center gap-3 mt-1">

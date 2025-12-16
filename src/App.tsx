@@ -7,21 +7,24 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Flame, Calendar, Trash2 } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Flame, Calendar, Trash2, ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react';
 
 // --- 데이터 타입 ---
+type TaskStatus = 'LATER' | 'NOW' | 'DONE';
+
 type Task = {
   id: number;
   text: string;
-  done: boolean;
+  status: TaskStatus;
+  done?: boolean; // 구버전 호환용
   percent: number;      
   planTime: number;     
   actTime: number;      
   isTimerOn: boolean;
-  timerStartTime?: number; // 타이머 시작 시간 (timestamp)
-  parentId?: number; // 상위할일 ID
-  subtasks?: Task[]; // 하위할일들
-  depth?: number; // 들여쓰기 깊이 (0: 최상위)
+  timerStartTime?: number;
+  parentId?: number;
+  subtasks?: Task[];
+  depth?: number;
 };
 
 type DailyLog = {
@@ -173,90 +176,112 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
   );
 }
 
-// --- [컴포넌트] 하위할일 아이템 ---
+// --- [컴포넌트] 하위할일 아이템 (Logseq 완전판) ---
 function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFocusedSubtaskId }: { subtask: Task, task: Task, index: number, updateTask: (task: Task) => void, focusedSubtaskId: number | null, setFocusedSubtaskId: (id: number | null) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: subtask.id });
   
+  const currentDepth = subtask.depth || 0;
+  const paddingLeft = currentDepth * 24;
+  const isFocused = focusedSubtaskId === subtask.id;
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    paddingLeft: `${paddingLeft}px`
   };
 
-  const currentDepth = subtask.depth || 0;
-  const paddingLeft = currentDepth * 24;
+  const cycleStatus = (current: TaskStatus = 'LATER'): TaskStatus => {
+    if (current === 'LATER') return 'NOW';
+    if (current === 'NOW') return 'DONE';
+    return 'LATER';
+  };
+
+  const handleIndent = () => {
+    const subtasks = task.subtasks || [];
+    const target = { ...subtasks[index] };
+    const prev = index > 0 ? subtasks[index - 1] : null;
+    const prevDepth = prev ? (prev.depth || 0) : 0;
+    if (prev && (target.depth || 0) <= prevDepth) {
+      const newSubtasks = [...subtasks];
+      target.depth = (target.depth || 0) + 1;
+      newSubtasks[index] = target;
+      updateTask({ ...task, subtasks: newSubtasks });
+    }
+  };
+
+  const handleOutdent = () => {
+    const subtasks = task.subtasks || [];
+    const target = { ...subtasks[index] };
+    if ((target.depth || 0) > 0) {
+      const newSubtasks = [...subtasks];
+      target.depth = (target.depth || 0) - 1;
+      newSubtasks[index] = target;
+      updateTask({ ...task, subtasks: newSubtasks });
+    }
+  };
+
+  const handleMoveUp = () => {
+    const subtasks = task.subtasks || [];
+    if (index > 0) {
+      const newSubtasks = [...subtasks];
+      [newSubtasks[index - 1], newSubtasks[index]] = [newSubtasks[index], newSubtasks[index - 1]];
+      updateTask({ ...task, subtasks: newSubtasks });
+    }
+  };
+
+  const handleMoveDown = () => {
+    const subtasks = task.subtasks || [];
+    if (index < subtasks.length - 1) {
+      const newSubtasks = [...subtasks];
+      [newSubtasks[index], newSubtasks[index + 1]] = [newSubtasks[index + 1], newSubtasks[index]];
+      updateTask({ ...task, subtasks: newSubtasks });
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const subtasks = task.subtasks || [];
 
-    // Tab: 들여쓰기 / Shift+Tab: 내어쓰기
-    if (e.key === 'Tab') {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       const newSubtasks = [...subtasks];
-      const target = { ...newSubtasks[index] };
-
-      if (e.shiftKey) {
-        if ((target.depth || 0) > 0) {
-          target.depth = (target.depth || 0) - 1;
-          newSubtasks[index] = target;
-          updateTask({ ...task, subtasks: newSubtasks });
-        }
-      } else {
-        const prev = index > 0 ? newSubtasks[index - 1] : null;
-        const prevDepth = prev ? (prev.depth || 0) : 0;
-        if (prev && (target.depth || 0) <= prevDepth) {
-          target.depth = (target.depth || 0) + 1;
-          newSubtasks[index] = target;
-          updateTask({ ...task, subtasks: newSubtasks });
-        }
-      }
+      newSubtasks[index] = { ...subtasks[index], status: cycleStatus(subtask.status) };
+      updateTask({ ...task, subtasks: newSubtasks });
       return;
     }
 
-    // Alt + 위/아래: 줄 이동
-    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-      e.preventDefault();
-      const newSubtasks = [...subtasks];
-      if (e.key === 'ArrowUp' && index > 0) {
-        [newSubtasks[index - 1], newSubtasks[index]] = [newSubtasks[index], newSubtasks[index - 1]];
-        updateTask({ ...task, subtasks: newSubtasks });
-      } else if (e.key === 'ArrowDown' && index < subtasks.length - 1) {
-        [newSubtasks[index], newSubtasks[index + 1]] = [newSubtasks[index + 1], newSubtasks[index]];
-        updateTask({ ...task, subtasks: newSubtasks });
-      }
-      return;
-    }
-
-    // Enter: 새 줄 생성
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       const newId = Date.now();
       const newSubtasks = [...subtasks];
       const newSub: Task = {
-        id: newId, text: '', done: false, percent: 0, planTime: 0, actTime: 0, isTimerOn: false, parentId: task.id, depth: currentDepth
+        id: newId, text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, parentId: task.id, depth: currentDepth
       };
       newSubtasks.splice(index + 1, 0, newSub);
       updateTask({ ...task, subtasks: newSubtasks });
       setFocusedSubtaskId(newId);
       return;
     }
-    
-    // Backspace: 빈 줄이면 내어쓰기 또는 삭제
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) handleOutdent();
+      else handleIndent();
+      return;
+    }
+
+    if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); handleMoveUp(); return; }
+    if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); handleMoveDown(); return; }
+
     if (e.key === 'Backspace' && subtask.text === '') {
       e.preventDefault();
-      if (currentDepth > 0) {
-        const newSubtasks = [...subtasks];
-        newSubtasks[index] = { ...subtasks[index], depth: currentDepth - 1 };
-        updateTask({ ...task, subtasks: newSubtasks });
-        return;
-      }
+      if (currentDepth > 0) { handleOutdent(); return; }
       const newSubtasks = subtasks.filter(s => s.id !== subtask.id);
       updateTask({ ...task, subtasks: newSubtasks });
       if (index > 0) setFocusedSubtaskId(subtasks[index - 1].id);
       return;
     }
 
-    // 화살표: 커서 이동
     if (!e.altKey && e.key === 'ArrowUp' && index > 0) {
       e.preventDefault();
       setFocusedSubtaskId(subtasks[index - 1].id);
@@ -267,44 +292,73 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
     }
   };
 
+  const getStatusColor = () => {
+    switch (subtask.status) {
+      case 'NOW': return 'bg-blue-600 border-blue-600 text-white font-bold shadow-[0_0_10px_rgba(37,99,235,0.5)]';
+      case 'DONE': return 'bg-gray-700 border-gray-700 text-gray-500';
+      default: return 'bg-transparent border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-400';
+    }
+  };
+
+  const getTextStyle = () => {
+    switch (subtask.status) {
+      case 'NOW': return 'text-blue-400 font-bold';
+      case 'DONE': return 'text-gray-600 line-through';
+      default: return 'text-gray-300';
+    }
+  };
+
   return (
-    <div ref={setNodeRef} style={{...style, paddingLeft: `${paddingLeft + 8}px`}} className="flex items-start gap-2 py-1 group relative">
-      {currentDepth > 0 && (
-        <div className="absolute left-0 top-0 bottom-0 border-l border-gray-800" style={{ left: `${paddingLeft - 4}px` }} />
+    <div className="relative">
+      <div ref={setNodeRef} style={style} className="flex items-start gap-2 py-1 pl-2 group relative z-0">
+        {currentDepth > 0 && (
+          <div className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${paddingLeft + 6}px` }} />
+        )}
+
+        <button 
+          onClick={() => {
+             const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, status: cycleStatus(s.status) } : s);
+             updateTask({ ...task, subtasks: newSubs });
+          }}
+          className={`mt-1.5 flex-shrink-0 w-10 h-4 border rounded-[4px] text-[9px] flex items-center justify-center transition-all z-10 select-none ${getStatusColor()}`}
+        >
+          {subtask.status || 'LATER'}
+        </button>
+
+        <AutoResizeTextarea
+          value={subtask.text}
+          autoFocus={focusedSubtaskId === subtask.id}
+          onChange={(e: any) => {
+             const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, text: e.target.value } : s);
+             updateTask({ ...task, subtasks: newSubs });
+          }}
+          onKeyDown={handleKeyDown}
+          className={`flex-1 text-sm leading-relaxed ${getTextStyle()}`}
+          placeholder="LATER"
+        />
+
+        <button 
+          onClick={() => {
+               const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
+               updateTask({ ...task, subtasks: newSubs });
+          }}
+          className="mt-1 text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <X size={12} />
+        </button>
+        
+        <div {...attributes} {...listeners} className="mt-1.5 w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50 touch-none" />
+      </div>
+
+      {isFocused && (
+        <div className="flex gap-2 items-center justify-end px-3 py-2 bg-[#18181b] border-y border-white/5 animate-in slide-in-from-top-1 mt-1 rounded-lg mx-2 mb-2 shadow-xl">
+           <button onMouseDown={(e) => { e.preventDefault(); handleOutdent(); }} className={`p-2 rounded bg-white/5 ${currentDepth > 0 ? 'text-gray-200' : 'text-gray-600'}`} disabled={currentDepth === 0}><ArrowLeft size={16} /></button>
+           <button onMouseDown={(e) => { e.preventDefault(); handleIndent(); }} className="p-2 rounded bg-white/5 text-gray-200"><ArrowRight size={16} /></button>
+           <div className="w-px h-6 bg-white/10 mx-1"></div>
+           <button onMouseDown={(e) => { e.preventDefault(); handleMoveUp(); }} className="p-2 rounded bg-white/5 text-gray-200"><ArrowUp size={16} /></button>
+           <button onMouseDown={(e) => { e.preventDefault(); handleMoveDown(); }} className="p-2 rounded bg-white/5 text-gray-200"><ArrowDown size={16} /></button>
+        </div>
       )}
-      <button 
-        onClick={() => {
-           const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, done: !s.done } : s);
-           updateTask({ ...task, subtasks: newSubs });
-        }}
-        className={`mt-1.5 flex-shrink-0 w-3.5 h-3.5 border rounded-sm flex items-center justify-center transition-colors ${subtask.done ? 'bg-gray-500 border-gray-500' : 'border-gray-600 hover:border-gray-400'}`}
-      >
-        {subtask.done && <Check size={10} className="text-black" />}
-      </button>
-
-      <AutoResizeTextarea
-        value={subtask.text}
-        autoFocus={focusedSubtaskId === subtask.id}
-        onChange={(e: any) => {
-           const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, text: e.target.value } : s);
-           updateTask({ ...task, subtasks: newSubs });
-        }}
-        onKeyDown={handleKeyDown}
-        className={`flex-1 text-sm leading-relaxed ${subtask.done ? 'text-gray-600 line-through' : 'text-gray-300'}`}
-        placeholder="세부 실행 단계... (Enter로 추가)"
-      />
-
-      <button 
-        onClick={() => {
-           const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
-           updateTask({ ...task, subtasks: newSubs });
-        }}
-        className="mt-1 text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        <X size={12} />
-      </button>
-      
-      <div {...attributes} {...listeners} className="mt-1.5 w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50" />
     </div>
   );
 }
@@ -372,10 +426,11 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
     : 'border-white/5 bg-[#121216]';
 
   const barColor = 'linear-gradient(90deg, #6366f1, #d946ef)';
+  const isDone = task.status === 'DONE';
 
   return (
     <div>
-      <div ref={setNodeRef} style={style} className={`relative mb-3 rounded-xl overflow-hidden border transition-all duration-300 ${activeStyle} ${task.done ? 'opacity-40 grayscale' : ''}`}>
+      <div ref={setNodeRef} style={style} className={`relative mb-3 rounded-xl overflow-hidden border transition-all duration-300 ${activeStyle} ${isDone ? 'opacity-40 grayscale' : ''}`}>
       
       <div className="absolute top-0 left-0 bottom-0 pointer-events-none opacity-10 transition-all duration-1000 ease-linear"
         style={{ width: `${Math.min(progress, 100)}%`, background: barColor }}
@@ -398,7 +453,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') e.currentTarget.blur();
                         }}
-                        className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${task.done ? 'text-gray-500 line-through' : 'text-white'}`}
+                        className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                         placeholder="목표 (Time Block)"
                     />
                      <button {...attributes} {...listeners} className="touch-none p-1 text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing">
@@ -487,7 +542,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     const newSubtask: Task = {
                       id: Date.now(),
                       text: '',
-                      done: false,
+                      status: 'LATER',
                       percent: 0,
                       planTime: 0,
                       actTime: 0,
@@ -518,7 +573,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     </button>
                     <button 
                         onClick={() => {
-                            const newSub: Task = { id: Date.now(), text: '', done: false, percent: 0, planTime: 0, actTime: 0, isTimerOn: false };
+                            const newSub: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false };
                             updateTask({ ...task, subtasks: [...(task.subtasks || []), newSub] });
                         }}
                         className="text-gray-500 hover:text-blue-400 p-1"
@@ -557,9 +612,12 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                         <Trash2 size={16} />
                     </button>
                     <button 
-                        onClick={() => updateTask({ ...task, done: !task.done, isTimerOn: false })}
-                        className={`p-1 rounded transition-colors ${task.done ? 'text-gray-500' : 'text-blue-400 hover:text-white'}`}
-                        title={task.done ? '취소' : '완료'}
+                        onClick={() => {
+                          const newStatus: TaskStatus = task.status === 'DONE' ? 'LATER' : 'DONE';
+                          updateTask({ ...task, status: newStatus, isTimerOn: false });
+                        }}
+                        className={`p-1 rounded transition-colors ${isDone ? 'text-gray-500' : 'text-blue-400 hover:text-white'}`}
+                        title={isDone ? '취소' : '완료'}
                     >
                         <Check size={18} />
                     </button>
@@ -572,6 +630,19 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
   );
 }
 
+// --- 유틸리티: 데이터 마이그레이션 ---
+const migrateTasks = (tasks: any[]): Task[] => {
+  return tasks.map(t => ({
+    ...t,
+    status: t.status || (t.done ? 'DONE' : 'LATER'),
+    subtasks: t.subtasks ? t.subtasks.map((s: any) => ({
+      ...s,
+      status: s.status || (s.done ? 'DONE' : 'LATER'),
+      depth: s.depth || 0
+    })) : []
+  }));
+};
+
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
@@ -583,15 +654,19 @@ export default function App() {
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
 
-  // 로컬 데이터 로드
+  // 로컬 데이터 로드 (마이그레이션 포함)
   useEffect(() => {
     if (currentSpace) {
       setLocalLogsLoaded(false);
       const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       if (saved) {
         const parsedLogs = JSON.parse(saved);
-        setLogs(parsedLogs);
-        console.log('Logs loaded for space', currentSpace.id, ':', parsedLogs);
+        const migratedLogs = parsedLogs.map((log: any) => ({
+          ...log,
+          tasks: migrateTasks(log.tasks)
+        }));
+        setLogs(migratedLogs);
+        console.log('Logs loaded for space', currentSpace.id, ':', migratedLogs);
       } else {
         setLogs([]);
         console.log('No data for space', currentSpace.id);
@@ -600,7 +675,7 @@ export default function App() {
     }
   }, [currentSpace]);
 
-  // Supabase 동기화
+  // Supabase 동기화 (마이그레이션 포함)
   useEffect(() => {
     if (!user || !currentSpace || !localLogsLoaded) return;
     
@@ -614,7 +689,7 @@ export default function App() {
         if (data && data.length > 0) {
           const supabaseLogs = data.map(item => ({
             date: item.date,
-            tasks: JSON.parse(item.tasks)
+            tasks: migrateTasks(JSON.parse(item.tasks))
           }));
           setLogs(supabaseLogs);
           localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(supabaseLogs));
@@ -697,7 +772,7 @@ export default function App() {
 
   const addTask = () => {
     if (!newTask.trim()) return;
-    const newTaskObj: Task = { id: Date.now(), text: newTask, done: false, percent: 0, planTime: 30, actTime: 0, isTimerOn: false, subtasks: [] };
+    const newTaskObj: Task = { id: Date.now(), text: newTask, status: 'LATER', percent: 0, planTime: 30, actTime: 0, isTimerOn: false, subtasks: [] };
     updateLogs([...tasks, newTaskObj]);
     setNewTask(''); setSuggestions([]);
   };
@@ -756,26 +831,22 @@ export default function App() {
 
   const selectSuggestion = (pastTask: Task) => {
     const newTaskObj: Task = {
-      id: Date.now(),          // ID 새로 발급
-      text: pastTask.text,     // 이름 가져옴
-      done: false,             // 완료 여부 리셋
-      isTimerOn: false,        // 타이머 끔
-      actTime: 0,              // 실제 시간 리셋
-      
-      // ▼▼▼ 여기가 핵심입니다. 과거 기록을 강제로 주입합니다. ▼▼▼
-      percent: pastTask.percent || 0,        // 퍼센트 가져옴
-      planTime: pastTask.planTime || 30,     // 계획 시간 가져옴
-      
-      // 하위할일도 복사 (완료된 것은 제외, done=false로 리셋)
+      id: Date.now(),
+      text: pastTask.text,
+      status: 'LATER',
+      isTimerOn: false,
+      actTime: 0,
+      percent: pastTask.percent || 0,
+      planTime: pastTask.planTime || 30,
       subtasks: pastTask.subtasks ? pastTask.subtasks
-        .filter(st => !st.done)  // 완료된 하위할일은 제외
+        .filter(st => st.status !== 'DONE')
         .map(st => ({
           ...st,
-          id: Date.now() + Math.random(), // 새 ID 발급
-          done: false,                     // 완료 여부 리셋
-          isTimerOn: false,                // 타이머 끔
-          actTime: 0,                      // 실제 시간 리셋
-          parentId: Date.now()             // 새 부모 ID
+          id: Date.now() + Math.random(),
+          status: 'LATER' as TaskStatus,
+          isTimerOn: false,
+          actTime: 0,
+          parentId: Date.now()
         })) : []
     };
     

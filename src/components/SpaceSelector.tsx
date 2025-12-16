@@ -53,7 +53,7 @@ export function SpaceSelector() {
             />
           </div>
         ) : (
-          <div key={space.id} className="flex items-center gap-1 group">
+          <div key={space.id} className="flex flex-col items-center gap-0.5 group">
             <button
               onClick={() => setCurrentSpace(space)}
               className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
@@ -64,20 +64,22 @@ export function SpaceSelector() {
             >
               {space.title}
             </button>
-            <button
-              onClick={() => startEdit(space)}
-              className="text-gray-600 hover:text-blue-400 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              ✎
-            </button>
-            {spaces.length > 1 && (
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
-                onClick={() => handleDelete(space.id!, space.title)}
-                className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => startEdit(space)}
+                className="text-gray-600 hover:text-blue-400 text-[10px]"
               >
-                <X size={12} />
+                ✎
               </button>
-            )}
+              {spaces.length > 1 && (
+                <button
+                  onClick={() => handleDelete(space.id!, space.title)}
+                  className="text-gray-600 hover:text-red-400"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
           </div>
         )
       ))}

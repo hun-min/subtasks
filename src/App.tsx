@@ -453,7 +453,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') e.currentTarget.blur();
                         }}
-                        className={`bg-transparent text-lg font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
+                        className={`bg-transparent text-xl font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                         placeholder="목표 (Time Block)"
                     />
                     <div {...attributes} {...listeners} className="touch-none p-1 text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing">

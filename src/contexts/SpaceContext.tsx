@@ -22,40 +22,51 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadSpaces();
-  }, []);
+    let isMounted = true;
 
-  const loadSpaces = async () => {
-    setLoading(true);
-    let allSpaces: Space[] = [];
-    
-    if (user) {
-      // 로그인 시 Supabase에서 로드
-      const { data } = await supabase.from('spaces').select('*').eq('user_id', user.id);
-      if (data && data.length > 0) {
-        allSpaces = data.map(s => ({ id: s.id, title: s.title, createdAt: new Date(s.created_at) }));
-      } else {
-        // Supabase에 없으면 기본 생성
-        const { data: newSpace } = await supabase.from('spaces').insert({ user_id: user.id, title: '기본' }).select().single();
-        if (newSpace) {
-          allSpaces = [{ id: newSpace.id, title: newSpace.title, createdAt: new Date(newSpace.created_at) }];
+    const loadSpaces = async () => {
+      setLoading(true);
+      let allSpaces: Space[] = [];
+
+      try {
+        if (user) {
+          const { data } = await supabase.from('spaces').select('*').eq('user_id', user.id).order('created_at', { ascending: true });
+          if (data && data.length > 0) {
+            allSpaces = data.map(s => ({ id: s.id, title: s.title, createdAt: new Date(s.created_at) }));
+          } else {
+            const { data: newSpace } = await supabase.from('spaces').insert({ user_id: user.id, title: '기본' }).select().single();
+            if (newSpace) {
+              allSpaces = [{ id: newSpace.id, title: newSpace.title, createdAt: new Date(newSpace.created_at) }];
+            }
+          }
+        } else {
+          allSpaces = await db.spaces.toArray();
+          if (allSpaces.length === 0) {
+            const id = await db.spaces.add({ title: '기본', createdAt: new Date() }) as number;
+            allSpaces = [{ id, title: '기본', createdAt: new Date() }];
+          }
         }
+
+        if (isMounted) {
+          setSpaces(allSpaces);
+          const savedSpaceId = localStorage.getItem('currentSpaceId');
+          const saved = savedSpaceId ? allSpaces.find(s => s.id === parseInt(savedSpaceId)) : null;
+          const nextSpace = saved || allSpaces[0];
+          setCurrentSpace(nextSpace);
+          if (nextSpace?.id) {
+            localStorage.setItem('currentSpaceId', nextSpace.id.toString());
+          }
+        }
+      } catch (error) {
+        console.error('Error loading spaces:', error);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-    } else {
-      // 비로그인 시 IndexedDB에서 로드
-      allSpaces = await db.spaces.toArray();
-      if (allSpaces.length === 0) {
-        const id = await db.spaces.add({ title: '기본', createdAt: new Date() }) as number;
-        allSpaces = [{ id, title: '기본', createdAt: new Date() }];
-      }
-    }
-    
-    setSpaces(allSpaces);
-    const savedSpaceId = localStorage.getItem('currentSpaceId');
-    const saved = savedSpaceId ? allSpaces.find(s => s.id === parseInt(savedSpaceId)) : null;
-    setCurrentSpace(saved || allSpaces[0]);
-    setLoading(false);
-  };
+    };
+
+    loadSpaces();
+    return () => { isMounted = false; };
+  }, [user]);
 
   const handleSetCurrentSpace = (space: Space) => {
     setCurrentSpace(space);
@@ -69,12 +80,14 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
         const newSpace = { id: data.id, title: data.title, createdAt: new Date(data.created_at) };
         setSpaces(prev => [...prev, newSpace]);
         setCurrentSpace(newSpace);
+        localStorage.setItem('currentSpaceId', newSpace.id.toString());
       }
     } else {
       const id = await db.spaces.add({ title, createdAt: new Date() }) as number;
       const newSpace = { id, title, createdAt: new Date() };
       setSpaces(prev => [...prev, newSpace]);
       setCurrentSpace(newSpace);
+      localStorage.setItem('currentSpaceId', id.toString());
     }
   };
 

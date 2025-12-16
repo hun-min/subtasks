@@ -675,7 +675,7 @@ export default function App() {
     }
   }, [currentSpace]);
 
-  // Supabase 동기화 (마이그레이션 포함)
+  // Supabase 동기화 + Realtime 구독
   useEffect(() => {
     if (!user || !currentSpace || !localLogsLoaded) return;
     
@@ -699,6 +699,18 @@ export default function App() {
       }
     };
     loadFromSupabase();
+
+    // Realtime 구독
+    const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'task_logs',
+        filter: `space_id=eq.${currentSpace.id}`
+      }, () => loadFromSupabase())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user, currentSpace, localLogsLoaded]);
   const [tasks, setTasks] = useState<Task[]>([]);
   

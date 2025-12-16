@@ -546,23 +546,10 @@ export default function App() {
     }
   }, [currentSpace]);
 
-  // Supabase 동기화 (로그인 시 로직 수정)
+  // Supabase 동기화
   useEffect(() => {
     if (!user || !currentSpace || !localLogsLoaded) return;
     
-    // 로컬 데이터 확인
-    const localData = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
-    
-    // [중요 수정] 로컬 데이터가 존재하면 절대 서버 데이터를 가져오지 않고,
-    // 오히려 로컬 데이터를 서버로 '업로드'하여 동기화합니다.
-    if (localData && JSON.parse(localData).length > 0) {
-      console.log('로컬 데이터 발견. 서버 데이터 덮어쓰기 방지 및 자동 업로드 시작.');
-      // 여기서 별도의 fetch 없이 return 합니다. 
-      // 아래의 '저장 + Supabase 동기화' useEffect가 logs 상태를 감지하여 자동으로 업로드할 것입니다.
-      return;
-    }
-    
-    // 로컬에 데이터가 정말로 '없을 때만' Supabase에서 다운로드
     const loadFromSupabase = async () => {
       try {
         const { data } = await supabase
@@ -626,7 +613,7 @@ export default function App() {
     localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
     
     // 로그인 시에만 Supabase 동기화
-    if (user && logs.length > 0) {
+    if (user) {
       supabase.from('task_logs').upsert(logs.map(log => ({
         date: log.date,
         user_id: user.id,

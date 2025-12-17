@@ -502,13 +502,15 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 }
 
 // --- [컴포넌트] 할 일 아이템 ---
-function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate, history, historyIndex, setHistoryIndex, setLogs, onMoveUp, onMoveDown }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void, onMoveUp?: () => void, onMoveDown?: () => void }) {
+function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate, history, historyIndex, setHistoryIndex, setLogs, onMoveUp, onMoveDown, logs }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void, onMoveUp?: () => void, onMoveDown?: () => void, logs: DailyLog[] }) {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [isParentFocused, setIsParentFocused] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showPlanEdit, setShowPlanEdit] = useState(false);
+  const [taskSuggestions, setTaskSuggestions] = useState<Task[]>([]);
+  const [selectedTaskSuggestionIndex, setSelectedTaskSuggestionIndex] = useState(-1);
 
   const progress = task.planTime > 0 ? (task.actTime / task.planTime) * 100 : 0;
 
@@ -563,10 +565,50 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             {/* 텍스트 */}
             <input 
                 value={task.text}
-                onChange={(e) => updateTask({ ...task, text: e.target.value })}
+                onChange={(e) => {
+                  const newText = e.target.value;
+                  updateTask({ ...task, text: newText });
+                  
+                  // 자동완성 로직 (3개월 이내)
+                  if (newText.trim()) {
+                    const threeMonthsAgo = new Date();
+                    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+                    
+                    const matches: Task[] = [];
+                    const seen = new Set();
+                    
+                    [...logs].reverse().forEach(log => {
+                      const logDate = new Date(log.date);
+                      if (logDate >= threeMonthsAgo) {
+                        log.tasks.forEach(t => {
+                          if (t.text.toLowerCase().includes(newText.toLowerCase()) && !seen.has(t.text)) {
+                            matches.push(t);
+                            seen.add(t.text);
+                          }
+                        });
+                      }
+                    });
+                    
+                    setTaskSuggestions(matches.slice(0, 5));
+                    setSelectedTaskSuggestionIndex(-1);
+                  } else {
+                    setTaskSuggestions([]);
+                    setSelectedTaskSuggestionIndex(-1);
+                  }
+                }}
                 onFocus={() => { setIsParentFocused(true); setFocusedSubtaskId(null); }}
-                onBlur={() => setTimeout(() => { if (!showMenu) setIsParentFocused(false); }, 300)}
+                onBlur={() => setTimeout(() => { if (!showMenu) { setIsParentFocused(false); setTaskSuggestions([]); } }, 300)}
                 onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown' && taskSuggestions.length > 0) {
+                    e.preventDefault();
+                    setSelectedTaskSuggestionIndex(prev => prev < taskSuggestions.length - 1 ? prev + 1 : prev);
+                    return;
+                  }
+                  if (e.key === 'ArrowUp' && taskSuggestions.length > 0) {
+                    e.preventDefault();
+                    setSelectedTaskSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+                    return;
+                  }
                   if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
                     e.preventDefault();
                     updateTask({ ...task, isTimerOn: !task.isTimerOn });
@@ -580,6 +622,13 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     return;
                   }
                   if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (selectedTaskSuggestionIndex >= 0 && taskSuggestions[selectedTaskSuggestionIndex]) {
+                      const pastTask = taskSuggestions[selectedTaskSuggestionIndex];
+                      updateTask({ ...task, text: pastTask.text, planTime: pastTask.planTime || 30, percent: pastTask.percent || 0 });
+                      setTaskSuggestions([]);
+                      return;
+                    }
                     e.preventDefault();
                     const newId = Date.now();
                     const newSub: Task = { id: newId, text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, parentId: task.id, depth: 0 };
@@ -598,6 +647,26 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 placeholder=""
             />
         </div>
+        
+        {/* 자동완성 칩 */}
+        {taskSuggestions.length > 0 && isParentFocused && (
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mt-1">
+            {taskSuggestions.map((s, idx) => (
+              <button 
+                key={s.id} 
+                onMouseDown={(e) => { e.preventDefault(); }}
+                onClick={() => {
+                  updateTask({ ...task, text: s.text, planTime: s.planTime || 30, percent: s.percent || 0 });
+                  setTaskSuggestions([]);
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-xs ${selectedTaskSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
+              >
+                <span className="font-bold text-white text-xs">{s.text}</span>
+                <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {showDatePicker && (
           <DatePickerModal 
@@ -658,13 +727,18 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                        <div className="px-4 py-2 flex items-center gap-2" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
                          <span className="text-xs text-gray-500">Plan</span>
                          <input 
-                           type="number"
-                           value={task.planTime}
+                           type="text"
+                           value={task.planTime === 0 ? '' : task.planTime}
                            onChange={(e) => {
-                             const m = Math.max(0, parseInt(e.target.value) || 0);
-                             updateTask({ ...task, planTime: m });
+                             const val = e.target.value;
+                             if (val === '' || /^\d+$/.test(val)) {
+                               const m = val === '' ? 0 : Math.max(0, parseInt(val));
+                               updateTask({ ...task, planTime: m });
+                             }
                            }}
-                           className="w-16 bg-[#27272a] text-white text-sm px-2 py-1 rounded outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                           onFocus={(e) => e.target.select()}
+                           placeholder="0"
+                           className="w-16 bg-[#27272a] text-white text-sm px-2 py-1 rounded outline-none text-center"
                          />
                          <span className="text-xs text-gray-500">m</span>
                        </div>
@@ -680,14 +754,17 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                            <Calendar size={14} /> 날짜 변경
                          </button>
                        )}
-                       <div className="border-t border-white/5 my-1"></div>
-                       <button onClick={() => { deleteTask(task.id); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2">
-                         <Trash2 size={14} /> 삭제
-                       </button>
                      </div>
                    </>
                  )}
                </div>
+               <button 
+                 onMouseDown={(e) => { e.preventDefault(); }}
+                 onClick={() => deleteTask(task.id)}
+                 className="p-1.5 rounded bg-white/5 text-red-400 hover:bg-red-500/10"
+               >
+                 <Trash2 size={14} />
+               </button>
                <div className="w-px h-6 bg-white/10 mx-0.5"></div>
                <button 
                  onMouseDown={(e) => { e.preventDefault(); }}
@@ -1099,7 +1176,7 @@ export default function App() {
     }
   };
 
-  // 1. 자동완성 감지 (입력할 때마다 실행)
+  // 1. 자동완성 감지 (입력할 때마다 실행) - 3개월 이내만
   useEffect(() => {
     if (!newTask.trim()) { 
       setSuggestions([]);
@@ -1107,22 +1184,25 @@ export default function App() {
       return; 
     }
     
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    
     const matches: Task[] = [];
     const seen = new Set();
     
-    // logs(과거기록) 전체를 뒤져서 검색어와 일치하는 걸 찾음
-    // reverse()를 써서 '최신 기록'부터 가져오게 함 (최신 설정을 불러오기 위해)
     [...logs].reverse().forEach(log => {
-      log.tasks.forEach(t => {
-        // 검색어가 포함되어 있고, 아직 리스트에 안 넣은 이름이면 추가
-        if (t.text.toLowerCase().includes(newTask.toLowerCase()) && !seen.has(t.text)) {
-          matches.push(t); 
-          seen.add(t.text);
-        }
-      });
+      const logDate = new Date(log.date);
+      if (logDate >= threeMonthsAgo) {
+        log.tasks.forEach(t => {
+          if (t.text.toLowerCase().includes(newTask.toLowerCase()) && !seen.has(t.text)) {
+            matches.push(t); 
+            seen.add(t.text);
+          }
+        });
+      }
     });
     
-    setSuggestions(matches.slice(0, 5)); // 최대 5개까지 추천
+    setSuggestions(matches.slice(0, 5));
     setSelectedSuggestionIndex(-1);
   }, [newTask, logs]);
 
@@ -1256,13 +1336,22 @@ export default function App() {
         
         {/* 모달: 삭제 확인 */}
         {deleteConfirmId && (
-          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)} onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              updateLogs(tasks.filter(t => t.id !== deleteConfirmId));
+              setDeleteConfirmId(null);
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              setDeleteConfirmId(null);
+            }
+          }}>
             <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 w-full max-w-xs shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-white mb-2">삭제 확인</h3>
               <p className="text-sm text-gray-400 mb-6">이 할일을 삭제하시겠습니까?</p>
               <div className="flex gap-2">
                 <button onClick={() => setDeleteConfirmId(null)} className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors">취소</button>
-                <button onClick={() => { updateLogs(tasks.filter(t => t.id !== deleteConfirmId)); setDeleteConfirmId(null); }} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors">삭제</button>
+                <button onClick={() => { updateLogs(tasks.filter(t => t.id !== deleteConfirmId)); setDeleteConfirmId(null); }} autoFocus className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors">삭제</button>
               </div>
             </div>
           </div>
@@ -1372,6 +1461,7 @@ export default function App() {
                               historyIndex={historyIndex}
                               setHistoryIndex={setHistoryIndex}
                               setLogs={setLogs}
+                              logs={logs}
                               onMoveUp={idx > 0 ? () => {
                                 const allTasks = tasks.filter((t: Task) => !t.done);
                                 const oldIdx = allTasks.findIndex(t => t.id === task.id);
@@ -1448,6 +1538,7 @@ export default function App() {
                             historyIndex={historyIndex}
                             setHistoryIndex={setHistoryIndex}
                             setLogs={setLogs}
+                            logs={logs}
                             onMoveUp={idx > 0 ? () => {
                               const allTasks = tasks.filter((t: Task) => t.done);
                               const oldIdx = allTasks.findIndex(t => t.id === task.id);
@@ -1515,21 +1606,6 @@ export default function App() {
               
               {/* 과거 날짜에도 추가 가능하게 입력창 유지 */}
               <div className="mt-8 pt-4 border-t border-gray-900">
-                {/* 자동완성 칩 (입력창 위에) */}
-                {suggestions.length > 0 && (
-                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mb-2">
-                    {suggestions.map((s, idx) => (
-                      <button 
-                        key={s.id} 
-                        onClick={() => selectSuggestion(s)} 
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-xs ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
-                      >
-                        <span className="font-bold text-white text-xs">{s.text}</span>
-                        <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
                 <input
                   type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { 
                     if (e.key === 'Enter') {
@@ -1550,6 +1626,21 @@ export default function App() {
                   placeholder="+ Make something new"
                   className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 transition-colors placeholder:text-gray-600"
                 />
+                {/* 자동완성 칩 (입력창 아래) */}
+                {suggestions.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mt-2">
+                    {suggestions.map((s, idx) => (
+                      <button 
+                        key={s.id} 
+                        onClick={() => selectSuggestion(s)} 
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-blue-300 border whitespace-nowrap hover:bg-gray-700 flex-shrink-0 text-xs ${selectedSuggestionIndex === idx ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-blue-900/30'}`}
+                      >
+                        <span className="font-bold text-white text-xs">{s.text}</span>
+                        <span className="text-gray-500 text-[10px]">({s.planTime}m / {s.percent}%)</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
 

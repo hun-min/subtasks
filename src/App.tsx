@@ -182,7 +182,7 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: subtask.id });
   
   const currentDepth = subtask.depth || 0;
-  const paddingLeft = currentDepth * 24;
+  const paddingLeft = 21 + (currentDepth * 12);
   const isFocused = focusedSubtaskId === subtask.id;
 
   const style = {
@@ -352,7 +352,7 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
 
   return (
     <div className="relative">
-      <div ref={setNodeRef} style={style} className="flex items-start gap-2 py-1 pl-2 group relative z-0">
+      <div ref={setNodeRef} style={style} className="flex items-start gap-2 py-1 pl-6 group relative z-0">
         {currentDepth > 0 && (
           <div className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${paddingLeft + 6}px` }} />
         )}
@@ -536,20 +536,22 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
         style={{ width: `${Math.min(progress, 100)}%`, background: barColor }}
       ></div>
       
-      <div className="relative p-2">
+      <div className="relative px-2 py-2">
         <div className="flex gap-2 items-center">
             {/* 왼쪽: actTime */}
-            <input 
-              type="number"
-              value={Math.floor(task.actTime)}
-              onChange={(e) => {
-                const m = Math.max(0, parseInt(e.target.value) || 0);
-                updateTask({ ...task, actTime: m });
-              }}
-              placeholder="0"
-              className="w-7 bg-transparent text-[10px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
-            <span className="text-[10px] text-gray-600">m</span>
+            <div className="flex items-center gap-1">
+              <input 
+                type="number"
+                value={Math.floor(task.actTime)}
+                onChange={(e) => {
+                  const m = Math.max(0, parseInt(e.target.value) || 0);
+                  updateTask({ ...task, actTime: m });
+                }}
+                placeholder="0"
+                className="w-7 bg-transparent text-[10px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <span className="text-[10px] text-gray-600">m</span>
+            </div>
 
             {/* 체크박스 */}
             <button 
@@ -728,7 +730,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
           </div>
         )}
 
-        <div className="mt-3">
+        <div className="mt-1">
             
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => {
                 const {active, over} = e;
@@ -739,7 +741,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 }
             }}>
                 <SortableContext items={(task.subtasks || []).map(s => s.id)} strategy={verticalListSortingStrategy}>
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex flex-col gap-0">
                         {(task.subtasks || []).map((sub, idx) => (
                             <SubtaskItem key={sub.id} subtask={sub} task={task} index={idx} updateTask={updateTask} focusedSubtaskId={focusedSubtaskId} setFocusedSubtaskId={setFocusedSubtaskId} history={history} historyIndex={historyIndex} setHistoryIndex={setHistoryIndex} setLogs={setLogs} />
                         ))}

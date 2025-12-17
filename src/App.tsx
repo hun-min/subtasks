@@ -986,6 +986,7 @@ export default function App() {
   const { currentSpace, spaces, setCurrentSpace } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showMemoList, setShowMemoList] = useState(false);
 
   const [viewDate, setViewDate] = useState(new Date());
   
@@ -1017,7 +1018,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [history, historyIndex]);
 
-  // Alt+1~9 공간 전환, ? 단축키 안내
+  // Alt+1~9 공간 전환, ? 단축키 안내, Shift+M 메모 모아보기
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -1032,6 +1033,9 @@ export default function App() {
       } else if (e.key === '?' && !isInput) {
         e.preventDefault();
         setShowShortcuts(true);
+      } else if (e.shiftKey && e.key === 'M' && !isInput) {
+        e.preventDefault();
+        setShowMemoList(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1430,9 +1434,39 @@ export default function App() {
                   <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + 1~9</kbd>
                 </div>
                 <div className="flex justify-between items-center">
+                  <span className="text-gray-400">메모 모아보기</span>
+                  <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Shift + M</kbd>
+                </div>
+                <div className="flex justify-between items-center">
                   <span className="text-gray-400">단축키 보기</span>
                   <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">?</kbd>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* 메모 모아보기 모달 */}
+        {showMemoList && (
+          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowMemoList(false)}>
+            <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-2xl max-h-[80vh] shadow-2xl overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-start mb-6">
+                <h2 className="text-xl font-bold text-white">Memo Collection</h2>
+                <button onClick={() => setShowMemoList(false)} className="text-gray-500 hover:text-white"><X /></button>
+              </div>
+              <div className="overflow-y-auto scrollbar-hide flex-1">
+                {logs.filter(log => log.memo && log.memo.trim()).length > 0 ? (
+                  <div className="space-y-4">
+                    {[...logs].filter(log => log.memo && log.memo.trim()).reverse().map(log => (
+                      <div key={log.date} className="border-b border-gray-800 pb-4 last:border-0">
+                        <div className="text-xs text-gray-500 mb-2">{new Date(log.date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}</div>
+                        <div className="text-sm text-gray-300">{log.memo}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-600 py-10">작성된 메모가 없습니다.</div>
+                )}
               </div>
             </div>
           </div>

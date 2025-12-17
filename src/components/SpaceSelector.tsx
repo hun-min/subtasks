@@ -3,12 +3,14 @@ import { useSpace } from '../contexts/SpaceContext';
 import { Plus, ChevronDown, Check, Layout, Settings, Trash2 } from 'lucide-react';
 
 export function SpaceSelector() {
-  const { spaces, currentSpace, setCurrentSpace, addSpace, deleteSpace } = useSpace();
+  const { spaces, currentSpace, setCurrentSpace, addSpace, deleteSpace, updateSpace } = useSpace();
   const [isOpen, setIsOpen] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,14 +60,28 @@ export function SpaceSelector() {
           <div className="max-h-60 overflow-y-auto scrollbar-hide py-1">
             {spaces.map(space => (
               <div key={space.id} className="flex items-center gap-1">
-                <button onClick={() => { setCurrentSpace(space); setIsOpen(false); }} className={`flex-1 text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors ${currentSpace?.id === space.id ? 'bg-blue-600/10 text-blue-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}>
-                  <span className="truncate">{space.title}</span>
-                  {currentSpace?.id === space.id && <Check size={14} />}
-                </button>
-                {showSettings && (
-                  <button onClick={() => handleDeleteSpace(space.id!)} className="p-2 text-gray-600 hover:text-red-500 transition-colors">
-                    <Trash2 size={14} />
-                  </button>
+                {editingId === space.id ? (
+                  <form onSubmit={(e) => { e.preventDefault(); updateSpace(space.id!, editingName); setEditingId(null); }} className="flex-1 flex items-center gap-1 px-1">
+                    <input autoFocus type="text" value={editingName} onChange={(e) => setEditingName(e.target.value)} className="flex-1 bg-black/30 text-xs text-white px-2 py-1.5 rounded border border-white/10 outline-none focus:border-blue-500" />
+                    <button type="submit" className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-500"><Check size={12} /></button>
+                  </form>
+                ) : (
+                  <>
+                    <button onClick={() => { setCurrentSpace(space); setIsOpen(false); }} className={`flex-1 text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors ${currentSpace?.id === space.id ? 'bg-blue-600/10 text-blue-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}>
+                      <span className="truncate">{space.title}</span>
+                      {currentSpace?.id === space.id && <Check size={14} />}
+                    </button>
+                    {showSettings && (
+                      <>
+                        <button onClick={() => { setEditingId(space.id!); setEditingName(space.title); }} className="p-2 text-gray-600 hover:text-blue-500 transition-colors">
+                          <Settings size={14} />
+                        </button>
+                        <button onClick={() => handleDeleteSpace(space.id!)} className="p-2 text-gray-600 hover:text-red-500 transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             ))}

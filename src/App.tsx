@@ -7,7 +7,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, Trash2, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, MoreVertical } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, Trash2, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, MoreVertical, RotateCcw, RotateCw } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -178,7 +178,7 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
 }
 
 // --- [컴포넌트] 하위할일 아이템 (Logseq 완전판) ---
-function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFocusedSubtaskId }: { subtask: Task, task: Task, index: number, updateTask: (task: Task) => void, focusedSubtaskId: number | null, setFocusedSubtaskId: (id: number | null) => void }) {
+function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFocusedSubtaskId, history, historyIndex, setHistoryIndex, setLogs }: { subtask: Task, task: Task, index: number, updateTask: (task: Task) => void, focusedSubtaskId: number | null, setFocusedSubtaskId: (id: number | null) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: subtask.id });
   
   const currentDepth = subtask.depth || 0;
@@ -254,6 +254,31 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      
+      // 여러 줄 감지
+      const lines = subtask.text.split('\n').map(line => line.trim()).filter(line => line);
+      if (lines.length > 1) {
+        if (confirm(`${lines.length}줄이 입력되었습니다. 각 줄을 별도의 하위할일로 만드시겠습니까?`)) {
+          const newSubtasks = [...subtasks];
+          newSubtasks.splice(index, 1); // 현재 항목 제거
+          const newSubs = lines.map((line, idx) => ({
+            id: Date.now() + idx,
+            text: line,
+            status: 'LATER' as TaskStatus,
+            percent: 0,
+            planTime: 0,
+            actTime: 0,
+            isTimerOn: false,
+            parentId: task.id,
+            depth: currentDepth
+          }));
+          newSubtasks.splice(index, 0, ...newSubs);
+          updateTask({ ...task, subtasks: newSubtasks });
+          setFocusedSubtaskId(newSubs[newSubs.length - 1].id);
+          return;
+        }
+      }
+      
       const newId = Date.now();
       const newSubtasks = [...subtasks];
       const newSub: Task = {
@@ -330,9 +355,11 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
             type="number"
             value={Math.floor(subtask.actTime)}
             onChange={(e) => {
-              const m = Math.max(0, parseInt(e.target.value) || 0);
-              const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, actTime: m } : s);
-              updateTask({ ...task, subtasks: newSubs });
+              const newTime = Math.max(0, parseInt(e.target.value) || 0);
+              const oldTime = subtask.actTime;
+              const diff = newTime - oldTime;
+              const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, actTime: newTime } : s);
+              updateTask({ ...task, subtasks: newSubs, actTime: task.actTime + diff });
             }}
             className="w-6 bg-transparent text-[9px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
@@ -394,6 +421,33 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
              <div className="w-px h-5 bg-white/10 mx-0.5"></div>
              <button onMouseDown={(e) => { e.preventDefault(); handleMoveUp(); }} className="p-1.5 rounded bg-white/5 text-gray-200"><ArrowUp size={14} /></button>
              <button onMouseDown={(e) => { e.preventDefault(); handleMoveDown(); }} className="p-1.5 rounded bg-white/5 text-gray-200"><ArrowDown size={14} /></button>
+             <div className="w-px h-5 bg-white/10 mx-0.5"></div>
+             <button 
+               onMouseDown={(e) => { e.preventDefault(); }}
+               onClick={() => {
+                 if (historyIndex > 0) {
+                   setHistoryIndex(historyIndex - 1);
+                   setLogs(history[historyIndex - 1]);
+                 }
+               }}
+               disabled={historyIndex <= 0}
+               className={`p-1.5 rounded ${historyIndex > 0 ? 'bg-white/5 text-gray-200' : 'bg-white/5 text-gray-600'}`}
+             >
+               <RotateCcw size={12} />
+             </button>
+             <button 
+               onMouseDown={(e) => { e.preventDefault(); }}
+               onClick={() => {
+                 if (historyIndex < history.length - 1) {
+                   setHistoryIndex(historyIndex + 1);
+                   setLogs(history[historyIndex + 1]);
+                 }
+               }}
+               disabled={historyIndex >= history.length - 1}
+               className={`p-1.5 rounded ${historyIndex < history.length - 1 ? 'bg-white/5 text-gray-200' : 'bg-white/5 text-gray-600'}`}
+             >
+               <RotateCw size={12} />
+             </button>
            </div>
         </div>
       )}
@@ -444,12 +498,13 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 }
 
 // --- [컴포넌트] 할 일 아이템 ---
-function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void }) {
+function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate, history, historyIndex, setHistoryIndex, setLogs }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [isParentFocused, setIsParentFocused] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showPlanEdit, setShowPlanEdit] = useState(false);
 
   const progress = task.planTime > 0 ? (task.actTime / task.planTime) * 100 : 0;
 
@@ -506,7 +561,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 value={task.text}
                 onChange={(e) => updateTask({ ...task, text: e.target.value })}
                 onFocus={() => { setIsParentFocused(true); setFocusedSubtaskId(null); }}
-                onBlur={() => setTimeout(() => setIsParentFocused(false), 100)}
+                onBlur={() => setTimeout(() => setIsParentFocused(false), 300)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -521,8 +576,6 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                       setFocusedSubtaskId(task.subtasks[0].id);
                       setIsParentFocused(false);
                     }
-                  } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
                   }
                 }}
                 className={`flex-1 bg-transparent text-lg font-bold outline-none placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
@@ -542,6 +595,21 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)}></div>
                   <div className="absolute right-0 top-8 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
+                  <div className="px-4 py-2 flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Plan</span>
+                    <input 
+                      type="number"
+                      value={task.planTime}
+                      onChange={(e) => {
+                        const m = Math.max(0, parseInt(e.target.value) || 0);
+                        updateTask({ ...task, planTime: m });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-16 bg-[#27272a] text-white text-sm px-2 py-1 rounded outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className="text-xs text-gray-500">m</span>
+                  </div>
+                  <div className="border-t border-white/5 my-1"></div>
                   <button onClick={() => { onShowHistory(task.text); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
                     <BarChart2 size={14} /> 기록 보기
                   </button>
@@ -578,6 +646,29 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
           />
         )}
 
+        {showPlanEdit && (
+          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowPlanEdit(false)}>
+            <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 w-full max-w-xs shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-white mb-4">Plan</h3>
+              <div className="flex items-center justify-center gap-3 mb-6">
+                <input 
+                  type="number"
+                  value={task.planTime}
+                  onChange={(e) => {
+                    const m = Math.max(0, parseInt(e.target.value) || 0);
+                    updateTask({ ...task, planTime: m });
+                  }}
+                  onFocus={(e) => e.target.select()}
+                  className="w-24 bg-[#27272a] text-white text-3xl font-bold px-4 py-3 rounded-lg outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  autoFocus
+                />
+                <span className="text-2xl text-gray-400 font-bold">m</span>
+              </div>
+              <button onClick={() => setShowPlanEdit(false)} className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">확인</button>
+            </div>
+          </div>
+        )}
+
         {/* 상위할일 컨트롤러 */}
         {isParentFocused && !focusedSubtaskId && (
           <div className="flex gap-1.5 items-center justify-between px-2 py-1.5 bg-[#18181b] border-y border-white/5 animate-in slide-in-from-top-1 mt-2 rounded-lg shadow-xl">
@@ -588,19 +679,33 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
              >
                {task.isTimerOn ? <Pause size={12} /> : <Play size={12} />}
              </button>
-             <div className="flex gap-1.5 items-center">
-               <div className="text-xs text-gray-500">Plan</div>
-               <input 
-                 type="number"
-                 value={task.planTime}
-                 onMouseDown={(e) => e.preventDefault()}
-                 onChange={(e) => {
-                   const m = Math.max(0, parseInt(e.target.value) || 0);
-                   updateTask({ ...task, planTime: m });
+             <div className="flex gap-1">
+               <button 
+                 onMouseDown={(e) => { e.preventDefault(); }}
+                 onClick={() => {
+                   if (historyIndex > 0) {
+                     setHistoryIndex(historyIndex - 1);
+                     setLogs(history[historyIndex - 1]);
+                   }
                  }}
-                 className="w-12 bg-[#27272a] text-white text-xs px-1.5 py-1 rounded outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-               />
-               <div className="text-xs text-gray-500">m</div>
+                 disabled={historyIndex <= 0}
+                 className={`p-1.5 rounded ${historyIndex > 0 ? 'bg-white/5 text-gray-200' : 'bg-white/5 text-gray-600'}`}
+               >
+                 <RotateCcw size={12} />
+               </button>
+               <button 
+                 onMouseDown={(e) => { e.preventDefault(); }}
+                 onClick={() => {
+                   if (historyIndex < history.length - 1) {
+                     setHistoryIndex(historyIndex + 1);
+                     setLogs(history[historyIndex + 1]);
+                   }
+                 }}
+                 disabled={historyIndex >= history.length - 1}
+                 className={`p-1.5 rounded ${historyIndex < history.length - 1 ? 'bg-white/5 text-gray-200' : 'bg-white/5 text-gray-600'}`}
+               >
+                 <RotateCw size={12} />
+               </button>
              </div>
           </div>
         )}
@@ -618,7 +723,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 <SortableContext items={(task.subtasks || []).map(s => s.id)} strategy={verticalListSortingStrategy}>
                     <div className="flex flex-col gap-0.5">
                         {(task.subtasks || []).map((sub, idx) => (
-                            <SubtaskItem key={sub.id} subtask={sub} task={task} index={idx} updateTask={updateTask} focusedSubtaskId={focusedSubtaskId} setFocusedSubtaskId={setFocusedSubtaskId} />
+                            <SubtaskItem key={sub.id} subtask={sub} task={task} index={idx} updateTask={updateTask} focusedSubtaskId={focusedSubtaskId} setFocusedSubtaskId={setFocusedSubtaskId} history={history} historyIndex={historyIndex} setHistoryIndex={setHistoryIndex} setLogs={setLogs} />
                         ))}
                     </div>
                 </SortableContext>
@@ -806,29 +911,30 @@ export default function App() {
         const now = Date.now();
         return prev.map(t => {
           let updated = { ...t };
-          let hasRunningSubtask = false;
+          let subtaskElapsedTotal = 0;
           
           // 하위할일 타이머 먼저 체크
           if (t.subtasks && t.subtasks.length > 0) {
             updated.subtasks = t.subtasks.map(sub => {
               if (sub.isTimerOn && sub.timerStartTime) {
-                hasRunningSubtask = true;
                 const elapsed = (now - sub.timerStartTime) / 1000 / 60;
+                subtaskElapsedTotal += elapsed;
                 return { ...sub, actTime: sub.actTime + elapsed, timerStartTime: now };
               }
               return sub;
             });
           }
           
-          // 상위할일 타이머 (하위할일이 실행 중이면 상위할일도 시간 증가)
+          // 상위할일 타이머
           if (t.isTimerOn && t.timerStartTime) {
             const elapsed = (now - t.timerStartTime) / 1000 / 60;
             updated.actTime = t.actTime + elapsed;
             updated.timerStartTime = now;
-          } else if (hasRunningSubtask) {
-            // 하위할일만 실행 중일 때도 상위할일 시간 증가
-            const elapsed = 1 / 60; // 1초
-            updated.actTime = t.actTime + elapsed;
+          }
+          
+          // 하위할일 타이머가 실행 중이면 상위할일에도 합산
+          if (subtaskElapsedTotal > 0) {
+            updated.actTime = t.actTime + subtaskElapsedTotal;
           }
           
           return updated;
@@ -891,8 +997,31 @@ export default function App() {
 
   const addTask = () => {
     if (!newTask.trim()) return;
-    const newTaskObj: Task = { id: Date.now(), text: newTask, status: 'LATER', percent: 0, planTime: 30, actTime: 0, isTimerOn: false, subtasks: [] };
-    updateLogs([...tasks, newTaskObj]);
+    
+    const lines = newTask.split('\n').map(line => line.trim()).filter(line => line);
+    console.log('Lines detected:', lines.length, lines);
+    
+    if (lines.length > 1) {
+      if (confirm(`${lines.length}줄이 입력되었습니다. 각 줄을 별도의 할일로 만드시겠습니까?`)) {
+        const newTasks = lines.map(line => ({
+          id: Math.floor(Math.random() * 1000000000),
+          text: line,
+          status: 'LATER' as TaskStatus,
+          percent: 0,
+          planTime: 30,
+          actTime: 0,
+          isTimerOn: false,
+          subtasks: []
+        }));
+        updateLogs([...tasks, ...newTasks]);
+      } else {
+        const newTaskObj: Task = { id: Math.floor(Math.random() * 1000000000), text: newTask, status: 'LATER', percent: 0, planTime: 30, actTime: 0, isTimerOn: false, subtasks: [] };
+        updateLogs([...tasks, newTaskObj]);
+      }
+    } else {
+      const newTaskObj: Task = { id: Math.floor(Math.random() * 1000000000), text: newTask, status: 'LATER', percent: 0, planTime: 30, actTime: 0, isTimerOn: false, subtasks: [] };
+      updateLogs([...tasks, newTaskObj]);
+    }
     setNewTask(''); setSuggestions([]);
   };
 
@@ -906,12 +1035,6 @@ export default function App() {
       const elapsed = (now - oldTask.timerStartTime) / 1000 / 60;
       updated.actTime = oldTask.actTime + elapsed;
       updated.timerStartTime = undefined;
-    }
-    
-    // 하위할일 시간 합계를 상위할일 시간으로 설정
-    if (updated.subtasks && updated.subtasks.length > 0) {
-      const subtaskTotal = updated.subtasks.reduce((sum, sub) => sum + sub.actTime, 0);
-      updated.actTime = subtaskTotal;
     }
     
     updateLogs(tasks.map(t => t.id === updated.id ? updated : t));
@@ -1151,6 +1274,10 @@ export default function App() {
                               key={task.id} task={task} updateTask={updateTask} deleteTask={deleteTask} 
                               onShowHistory={(name: string) => setHistoryTarget(name)}
                               sensors={sensors}
+                              history={history}
+                              historyIndex={historyIndex}
+                              setHistoryIndex={setHistoryIndex}
+                              setLogs={setLogs}
                               onChangeDate={(taskId, newDate) => {
                                 const taskToMove = tasks.find(t => t.id === taskId);
                                 if (!taskToMove) return;
@@ -1205,6 +1332,10 @@ export default function App() {
                             key={`done-${task.id}`} task={task} updateTask={updateTask} deleteTask={deleteTask} 
                             onShowHistory={(name: string) => setHistoryTarget(name)}
                             sensors={sensors}
+                            history={history}
+                            historyIndex={historyIndex}
+                            setHistoryIndex={setHistoryIndex}
+                            setLogs={setLogs}
                             onChangeDate={(taskId, newDate) => {
                               const taskToMove = tasks.find(t => t.id === taskId);
                               if (!taskToMove) return;
@@ -1272,6 +1403,7 @@ export default function App() {
                 <input
                   type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { 
                     if (e.key === 'Enter') {
+                      e.preventDefault();
                       if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
                         selectSuggestion(suggestions[selectedSuggestionIndex]);
                       } else {

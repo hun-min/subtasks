@@ -110,14 +110,18 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      setSpaces(finalSpaces);
-      localStorage.setItem('ultra_spaces_cache', JSON.stringify(finalSpaces));
+      // 음수 ID 공간 제거 (임시 ID 정리)
+      const cleanedSpaces = finalSpaces.filter(s => s.id && s.id > 0);
+      const spacesToUse = cleanedSpaces.length > 0 ? cleanedSpaces : finalSpaces;
+      
+      setSpaces(spacesToUse);
+      localStorage.setItem('ultra_spaces_cache', JSON.stringify(spacesToUse));
       
       setCurrentSpace(prev => {
-        if (!prev) return finalSpaces[0];
-        const match = finalSpaces.find(s => s.id === prev.id);
-        const next = match || finalSpaces[0];
-        if (next.id) localStorage.setItem('currentSpaceId', next.id.toString());
+        if (!prev || !prev.id || prev.id < 0) return spacesToUse[0];
+        const match = spacesToUse.find(s => s.id === prev.id);
+        const next = match || spacesToUse[0];
+        if (next?.id) localStorage.setItem('currentSpaceId', next.id.toString());
         return next;
       });
     };

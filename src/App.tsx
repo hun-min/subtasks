@@ -7,7 +7,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Flame, Calendar, Trash2, ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, Trash2, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, MoreVertical } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -33,7 +33,7 @@ type DailyLog = {
 };
 
 // --- [컴포넌트] 자동 높이 조절 Textarea ---
-const AutoResizeTextarea = ({ value, onChange, onKeyDown, placeholder, autoFocus, className }: any) => {
+const AutoResizeTextarea = ({ value, onChange, onKeyDown, onFocus, placeholder, autoFocus, className }: any) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -57,6 +57,7 @@ const AutoResizeTextarea = ({ value, onChange, onKeyDown, placeholder, autoFocus
       value={value}
       onChange={onChange}
       onKeyDown={onKeyDown}
+      onFocus={onFocus}
       placeholder={placeholder}
       className={`resize-none overflow-hidden bg-transparent outline-none ${className}`}
       style={{ minHeight: '24px' }}
@@ -191,8 +192,9 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
     paddingLeft: `${paddingLeft}px`
   };
 
-  const cycleStatus = (current: TaskStatus = 'LATER'): TaskStatus => {
-    if (current === 'LATER') return 'NOW';
+  const cycleStatus = (current: TaskStatus = 'LATER', isTimerOn: boolean = false): TaskStatus => {
+    if (isTimerOn) return 'NOW';
+    if (current === 'LATER') return 'DONE';
     if (current === 'NOW') return 'DONE';
     return 'LATER';
   };
@@ -282,9 +284,16 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
       return;
     }
 
-    if (!e.altKey && e.key === 'ArrowUp' && index > 0) {
+    if (!e.altKey && e.key === 'ArrowUp') {
       e.preventDefault();
-      setFocusedSubtaskId(subtasks[index - 1].id);
+      if (index > 0) {
+        setFocusedSubtaskId(subtasks[index - 1].id);
+      } else {
+        // 첫 번째 하위할일에서 위 화살표 누르면 상위할일로
+        setFocusedSubtaskId(null);
+        const parentInput = document.querySelector(`input[value="${task.text}"]`) as HTMLInputElement;
+        if (parentInput) parentInput.focus();
+      }
     }
     if (!e.altKey && e.key === 'ArrowDown' && index < subtasks.length - 1) {
       e.preventDefault();
@@ -293,10 +302,11 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
   };
 
   const getStatusColor = () => {
+    if (subtask.isTimerOn) return 'bg-blue-600 border-blue-600';
     switch (subtask.status) {
-      case 'NOW': return 'bg-blue-600 border-blue-600 text-white font-bold shadow-[0_0_10px_rgba(37,99,235,0.5)]';
-      case 'DONE': return 'bg-gray-700 border-gray-700 text-gray-500';
-      default: return 'bg-transparent border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-400';
+      case 'NOW': return 'bg-blue-600 border-blue-600';
+      case 'DONE': return 'bg-green-600 border-green-600';
+      default: return 'bg-transparent border-gray-700 hover:border-gray-500';
     }
   };
 
@@ -316,29 +326,39 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
         )}
 
         <div className="flex items-center gap-1">
-          {subtask.actTime > 0 && (
-            <span className="text-[9px] text-gray-600 font-mono">{Math.floor(subtask.actTime)}m</span>
-          )}
+          <input 
+            type="number"
+            value={Math.floor(subtask.actTime)}
+            onChange={(e) => {
+              const m = Math.max(0, parseInt(e.target.value) || 0);
+              const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, actTime: m } : s);
+              updateTask({ ...task, subtasks: newSubs });
+            }}
+            className="w-6 bg-transparent text-[9px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          <span className="text-[9px] text-gray-600">m</span>
           <button 
             onClick={() => {
-               const newStatus = cycleStatus(subtask.status);
-               const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, status: newStatus, isTimerOn: newStatus === 'NOW', timerStartTime: newStatus === 'NOW' ? Date.now() : undefined } : s);
+               const newStatus = cycleStatus(subtask.status, subtask.isTimerOn);
+               const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, status: newStatus, isTimerOn: false, timerStartTime: undefined } : s);
                updateTask({ ...task, subtasks: newSubs });
             }}
-            className={`mt-1.5 flex-shrink-0 w-10 h-4 border rounded-[4px] text-[9px] flex items-center justify-center transition-all z-10 select-none ${getStatusColor()}`}
+            className={`mt-1.5 flex-shrink-0 w-4 h-4 border rounded flex items-center justify-center transition-all z-10 select-none ${getStatusColor()}`}
           >
-            {subtask.status || 'LATER'}
+            {subtask.status === 'NOW' && <div className="w-2 h-2 bg-white rounded-full" />}
+            {subtask.status === 'DONE' && <Check size={10} className="text-white" />}
           </button>
         </div>
 
         <AutoResizeTextarea
           value={subtask.text}
-          autoFocus={focusedSubtaskId === subtask.id}
+          autoFocus={isFocused}
           onChange={(e: any) => {
              const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, text: e.target.value } : s);
              updateTask({ ...task, subtasks: newSubs });
           }}
           onKeyDown={handleKeyDown}
+          onFocus={() => setFocusedSubtaskId(subtask.id)}
           className={`flex-1 text-sm leading-relaxed ${getTextStyle()}`}
           placeholder="LATER"
         />
@@ -356,13 +376,25 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
         <div {...attributes} {...listeners} className="mt-1.5 w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50 touch-none" />
       </div>
 
-      {isFocused && (
-        <div className="flex gap-2 items-center justify-end px-3 py-2 bg-[#18181b] border-y border-white/5 animate-in slide-in-from-top-1 mt-1 rounded-lg mx-2 mb-2 shadow-xl">
-           <button onMouseDown={(e) => { e.preventDefault(); handleOutdent(); }} className={`p-2 rounded bg-white/5 ${currentDepth > 0 ? 'text-gray-200' : 'text-gray-600'}`} disabled={currentDepth === 0}><ArrowLeft size={16} /></button>
-           <button onMouseDown={(e) => { e.preventDefault(); handleIndent(); }} className="p-2 rounded bg-white/5 text-gray-200"><ArrowRight size={16} /></button>
-           <div className="w-px h-6 bg-white/10 mx-1"></div>
-           <button onMouseDown={(e) => { e.preventDefault(); handleMoveUp(); }} className="p-2 rounded bg-white/5 text-gray-200"><ArrowUp size={16} /></button>
-           <button onMouseDown={(e) => { e.preventDefault(); handleMoveDown(); }} className="p-2 rounded bg-white/5 text-gray-200"><ArrowDown size={16} /></button>
+      {focusedSubtaskId === subtask.id && (
+        <div className="flex gap-1.5 items-center justify-between px-2 py-1.5 bg-[#18181b] border-y border-white/5 animate-in slide-in-from-top-1 mt-1 rounded-lg mx-2 mb-2 shadow-xl">
+           <button 
+             onMouseDown={(e) => { e.preventDefault(); }}
+             onClick={() => {
+               const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, isTimerOn: !s.isTimerOn, timerStartTime: !s.isTimerOn ? Date.now() : undefined } : s);
+               updateTask({ ...task, subtasks: newSubs });
+             }}
+             className={`p-1.5 rounded ${subtask.isTimerOn ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-200'}`}
+           >
+             {subtask.isTimerOn ? <Pause size={12} /> : <Play size={12} />}
+           </button>
+           <div className="flex gap-1.5">
+             <button onMouseDown={(e) => { e.preventDefault(); handleOutdent(); }} className={`p-1.5 rounded bg-white/5 ${currentDepth > 0 ? 'text-gray-200' : 'text-gray-600'}`} disabled={currentDepth === 0}><ArrowLeft size={14} /></button>
+             <button onMouseDown={(e) => { e.preventDefault(); handleIndent(); }} className="p-1.5 rounded bg-white/5 text-gray-200"><ArrowRight size={14} /></button>
+             <div className="w-px h-5 bg-white/10 mx-0.5"></div>
+             <button onMouseDown={(e) => { e.preventDefault(); handleMoveUp(); }} className="p-1.5 rounded bg-white/5 text-gray-200"><ArrowUp size={14} /></button>
+             <button onMouseDown={(e) => { e.preventDefault(); handleMoveDown(); }} className="p-1.5 rounded bg-white/5 text-gray-200"><ArrowDown size={14} /></button>
+           </div>
         </div>
       )}
     </div>
@@ -415,9 +447,10 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
+  const [isParentFocused, setIsParentFocused] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
-  const isOver = task.actTime > task.planTime;
   const progress = task.planTime > 0 ? (task.actTime / task.planTime) * 100 : 0;
 
   const style = {
@@ -435,93 +468,143 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
   const isDone = task.status === 'DONE';
 
   return (
-    <div>
-      <div ref={setNodeRef} style={style} className={`relative mb-3 rounded-xl overflow-hidden border transition-all duration-300 ${activeStyle} ${isDone ? 'opacity-40 grayscale' : ''}`}>
+    <div className="relative">
+      <div ref={setNodeRef} style={style} className={`mb-3 rounded-xl overflow-visible border transition-all duration-300 ${activeStyle} ${isDone ? 'opacity-40 grayscale' : ''}`}>
       
       <div className="absolute top-0 left-0 bottom-0 pointer-events-none opacity-10 transition-all duration-1000 ease-linear"
         style={{ width: `${Math.min(progress, 100)}%`, background: barColor }}
       ></div>
       
-      <div className="relative p-3">
-        <div className="flex gap-3 items-start">
+      <div className="relative p-2">
+        <div className="flex gap-2 items-center">
+            {/* 왼쪽: actTime */}
+            <input 
+              type="number"
+              value={task.actTime > 0 ? Math.floor(task.actTime) : ''}
+              onChange={(e) => {
+                const m = Math.max(0, parseInt(e.target.value) || 0);
+                updateTask({ ...task, actTime: m });
+              }}
+              placeholder="0"
+              className="w-7 bg-transparent text-[10px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            {task.actTime > 0 && <span className="text-[10px] text-gray-600">m</span>}
+
+            {/* 체크박스 */}
             <button 
-                onClick={() => updateTask({ ...task, isTimerOn: !task.isTimerOn })}
-                className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-lg ${task.isTimerOn ? 'bg-blue-600 text-white scale-105' : 'bg-[#27272a] text-gray-400 hover:bg-[#3f3f46] hover:text-white'}`}
+                onClick={() => {
+                  const newStatus: TaskStatus = task.status === 'DONE' ? 'LATER' : 'DONE';
+                  updateTask({ ...task, status: newStatus, done: newStatus === 'DONE', isTimerOn: false });
+                }}
+                className={`flex-shrink-0 w-5 h-5 border rounded flex items-center justify-center transition-all ${task.status === 'DONE' ? 'bg-green-600 border-green-600' : 'bg-transparent border-gray-700 hover:border-gray-500'}`}
             >
-                {task.isTimerOn ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
+                {task.status === 'DONE' && <Check size={12} className="text-white" />}
             </button>
 
-            <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start relative">
-                    <input 
-                        value={task.text}
-                        onChange={(e) => updateTask({ ...task, text: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') e.currentTarget.blur();
-                        }}
-                        className={`bg-transparent text-xl font-bold outline-none w-full placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
-                        placeholder="목표 (Time Block)"
-                    />
-                    <div {...attributes} {...listeners} className="touch-none p-1 text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing">
-                      <div className="w-8 h-1 bg-gray-800 rounded-full" />
-                    </div>
-                </div>
+            {/* 텍스트 */}
+            <input 
+                value={task.text}
+                onChange={(e) => updateTask({ ...task, text: e.target.value })}
+                onFocus={() => { setIsParentFocused(true); setFocusedSubtaskId(null); }}
+                onBlur={() => setTimeout(() => setIsParentFocused(false), 100)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const newId = Date.now();
+                    const newSub: Task = { id: newId, text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, parentId: task.id, depth: 0 };
+                    updateTask({ ...task, subtasks: [newSub, ...(task.subtasks || [])] });
+                    setFocusedSubtaskId(newId);
+                    setIsParentFocused(false);
+                  } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (task.subtasks && task.subtasks.length > 0) {
+                      setFocusedSubtaskId(task.subtasks[0].id);
+                      setIsParentFocused(false);
+                    }
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                  }
+                }}
+                className={`flex-1 bg-transparent text-lg font-bold outline-none placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
+                placeholder="목표"
+            />
 
-                <div className="flex items-center gap-3 mt-1">
-                    <div className="flex items-center gap-2">
-                        <div className={`flex items-baseline gap-1 font-mono leading-none ${isOver ? 'text-pink-400' : 'text-blue-400'}`}>
-                            <input 
-                                type="number"
-                                value={Math.floor(task.actTime)}
-                                onChange={(e) => {
-                                    const m = Math.max(0, parseInt(e.target.value) || 0);
-                                    const s = Math.round((task.actTime % 1) * 60);
-                                    updateTask({ ...task, actTime: m + s / 60 });
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') e.currentTarget.blur();
-                                }}
-                                className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                            <span className="text-xs">m</span>
-                            <input 
-                                type="number"
-                                value={Math.round((task.actTime % 1) * 60)}
-                                onChange={(e) => {
-                                    const m = Math.floor(task.actTime);
-                                    const s = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                                    updateTask({ ...task, actTime: m + s / 60 });
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') e.currentTarget.blur();
-                                }}
-                                className="w-8 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                            <span className="text-xs">s</span>
-                        </div>
-                        
-                        <span className="text-gray-600">/</span>
-                        
-                        <div className="flex items-baseline gap-1 font-mono leading-none text-gray-400">
-                            <input 
-                                type="number"
-                                value={task.planTime}
-                                onChange={(e) => updateTask({ ...task, planTime: Math.max(0, parseInt(e.target.value) || 0) })}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') e.currentTarget.blur();
-                                }}
-                                className="w-12 bg-transparent text-xl font-black tracking-tighter text-right outline-none border-b border-transparent hover:border-gray-600 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                            <span className="text-xs">m</span>
-                        </div>
-                        
-                        {isOver && <Flame size={16} className="text-pink-400 animate-pulse" />}
-                    </div>
+            {/* 오른쪽: ... 메뉴 */}
+            <div className="relative z-50">
+              <button 
+                onClick={() => setShowMenu(!showMenu)}
+                className="text-gray-500 hover:text-white p-0.5"
+              >
+                <MoreVertical size={18} />
+              </button>
+              
+              {showMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)}></div>
+                  <div className="absolute right-0 top-8 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
+                  <button onClick={() => { onShowHistory(task.text); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
+                    <BarChart2 size={14} /> 기록 보기
+                  </button>
+                  <button onClick={() => { const newSub: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false }; updateTask({ ...task, subtasks: [...(task.subtasks || []), newSub] }); setShowMenu(false); setFocusedSubtaskId(Date.now()); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
+                    <Plus size={14} /> 하위할일 추가
+                  </button>
+                  {onChangeDate && (
+                    <button onClick={() => { setShowDatePicker(true); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
+                      <Calendar size={14} /> 날짜 변경
+                    </button>
+                  )}
+                  <div className="border-t border-white/5 my-1"></div>
+                  <button onClick={() => { deleteTask(task.id); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2">
+                    <Trash2 size={14} /> 삭제
+                  </button>
                 </div>
+                </>
+              )}
+            </div>
+
+            {/* 드래그 핸들 */}
+            <div {...attributes} {...listeners} className="touch-none text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing">
+              <div className="w-6 h-1 bg-gray-800 rounded-full" />
             </div>
         </div>
 
-        <div className="mt-3 pl-[3.25rem]">
+        {showDatePicker && (
+          <DatePickerModal 
+            onSelectDate={(date) => {
+              onChangeDate && onChangeDate(task.id, date.toDateString());
+              setShowDatePicker(false);
+            }}
+            onClose={() => setShowDatePicker(false)}
+          />
+        )}
+
+        {/* 상위할일 컨트롤러 */}
+        {isParentFocused && !focusedSubtaskId && (
+          <div className="flex gap-1.5 items-center justify-between px-2 py-1.5 bg-[#18181b] border-y border-white/5 animate-in slide-in-from-top-1 mt-2 rounded-lg shadow-xl">
+             <button 
+               onMouseDown={(e) => { e.preventDefault(); }}
+               onClick={() => updateTask({ ...task, isTimerOn: !task.isTimerOn })}
+               className={`p-1.5 rounded ${task.isTimerOn ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-200'}`}
+             >
+               {task.isTimerOn ? <Pause size={12} /> : <Play size={12} />}
+             </button>
+             <div className="flex gap-1.5 items-center">
+               <div className="text-xs text-gray-500">Plan</div>
+               <input 
+                 type="number"
+                 value={task.planTime}
+                 onChange={(e) => {
+                   const m = Math.max(0, parseInt(e.target.value) || 0);
+                   updateTask({ ...task, planTime: m });
+                 }}
+                 className="w-12 bg-[#27272a] text-white text-xs px-1.5 py-1 rounded outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+               />
+               <div className="text-xs text-gray-500">m</div>
+             </div>
+          </div>
+        )}
+
+        <div className="mt-3">
             
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => {
                 const {active, over} = e;
@@ -540,7 +623,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 </SortableContext>
             </DndContext>
             
-            {focusedSubtaskId && (
+            {focusedSubtaskId && focusedSubtaskId !== -1 && (
               <div className="flex justify-center mt-0.5">
                 <button 
                   onMouseDown={(e) => e.preventDefault()}
@@ -567,68 +650,6 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 </button>
               </div>
             )}
-            
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
-                <div className="flex gap-3">
-                    <button 
-                        onClick={() => onShowHistory(task.text)}
-                        className="text-gray-500 hover:text-blue-400 transition-colors p-1"
-                        title="기록 보기"
-                    >
-                        <BarChart2 size={16} />
-                    </button>
-                    <button 
-                        onClick={() => {
-                            const newSub: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false };
-                            updateTask({ ...task, subtasks: [...(task.subtasks || []), newSub] });
-                        }}
-                        className="text-gray-500 hover:text-blue-400 p-1"
-                        title="Step 추가"
-                    >
-                        <Plus size={16} />
-                    </button>
-                </div>
-
-                <div className="flex gap-2 items-center">
-                    {onChangeDate && (
-                      <>
-                        <button 
-                          onClick={() => setShowDatePicker(true)}
-                          className="text-gray-500 hover:text-blue-400 p-1"
-                          title="날짜 변경"
-                        >
-                          <Calendar size={16} />
-                        </button>
-                        {showDatePicker && (
-                          <DatePickerModal 
-                            onSelectDate={(date) => {
-                              onChangeDate(task.id, date.toDateString());
-                              setShowDatePicker(false);
-                            }}
-                            onClose={() => setShowDatePicker(false)}
-                          />
-                        )}
-                      </>
-                    )}
-                    <button 
-                        onClick={() => deleteTask(task.id)}
-                        className="text-gray-500 hover:text-red-400 p-1"
-                        title="삭제"
-                    >
-                        <Trash2 size={16} />
-                    </button>
-                    <button 
-                        onClick={() => {
-                          const newStatus: TaskStatus = task.status === 'DONE' ? 'LATER' : 'DONE';
-                          updateTask({ ...task, status: newStatus, done: newStatus === 'DONE', isTimerOn: false });
-                        }}
-                        className={`p-1 rounded transition-colors ${isDone ? 'text-gray-500' : 'text-blue-400 hover:text-white'}`}
-                        title={isDone ? '취소' : '완료'}
-                    >
-                        <Check size={18} />
-                    </button>
-                </div>
-            </div>
         </div>
       </div>
     </div>
@@ -659,6 +680,31 @@ export default function App() {
   
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
+
+  // Undo/Redo 상태
+  const [history, setHistory] = useState<DailyLog[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Ctrl+Z / Ctrl+Shift+Z
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (historyIndex > 0) {
+          setHistoryIndex(historyIndex - 1);
+          setLogs(history[historyIndex - 1]);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        if (historyIndex < history.length - 1) {
+          setHistoryIndex(historyIndex + 1);
+          setLogs(history[historyIndex + 1]);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [history, historyIndex]);
 
   // 로컬 데이터 로드 (마이그레이션 포함)
   useEffect(() => {
@@ -759,23 +805,29 @@ export default function App() {
         const now = Date.now();
         return prev.map(t => {
           let updated = { ...t };
+          let hasRunningSubtask = false;
           
-          // 상위할일 타이머
-          if (t.isTimerOn && t.timerStartTime) {
-            const elapsed = (now - t.timerStartTime) / 1000 / 60;
-            updated.actTime = t.actTime + elapsed;
-            updated.timerStartTime = now;
-          }
-          
-          // 하위할일 타이머
+          // 하위할일 타이머 먼저 체크
           if (t.subtasks && t.subtasks.length > 0) {
             updated.subtasks = t.subtasks.map(sub => {
               if (sub.isTimerOn && sub.timerStartTime) {
+                hasRunningSubtask = true;
                 const elapsed = (now - sub.timerStartTime) / 1000 / 60;
                 return { ...sub, actTime: sub.actTime + elapsed, timerStartTime: now };
               }
               return sub;
             });
+          }
+          
+          // 상위할일 타이머 (하위할일이 실행 중이면 상위할일도 시간 증가)
+          if (t.isTimerOn && t.timerStartTime) {
+            const elapsed = (now - t.timerStartTime) / 1000 / 60;
+            updated.actTime = t.actTime + elapsed;
+            updated.timerStartTime = now;
+          } else if (hasRunningSubtask) {
+            // 하위할일만 실행 중일 때도 상위할일 시간 증가
+            const elapsed = 1 / 60; // 1초
+            updated.actTime = t.actTime + elapsed;
           }
           
           return updated;
@@ -806,8 +858,14 @@ export default function App() {
     
     setLogs(prev => {
       const idx = prev.findIndex(l => l.date === dateStr);
-      if (idx >= 0) { const updated = [...prev]; updated[idx] = newLog; return updated; }
-      return [...prev, newLog];
+      const updated = idx >= 0 ? [...prev] : [...prev, newLog];
+      if (idx >= 0) updated[idx] = newLog;
+      
+      // History 저장
+      setHistory(h => [...h.slice(0, historyIndex + 1), updated]);
+      setHistoryIndex(i => i + 1);
+      
+      return updated;
     });
     
     // Debounce: 500ms 후에 Supabase 저장
@@ -843,6 +901,12 @@ export default function App() {
       const elapsed = (now - oldTask.timerStartTime) / 1000 / 60;
       updated.actTime = oldTask.actTime + elapsed;
       updated.timerStartTime = undefined;
+    }
+    
+    // 하위할일 시간 합계를 상위할일 시간으로 설정
+    if (updated.subtasks && updated.subtasks.length > 0) {
+      const subtaskTotal = updated.subtasks.reduce((sum, sub) => sum + sub.actTime, 0);
+      updated.actTime = subtaskTotal;
     }
     
     updateLogs(tasks.map(t => t.id === updated.id ? updated : t));

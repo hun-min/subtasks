@@ -182,7 +182,7 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: subtask.id });
   
   const currentDepth = subtask.depth || 0;
-  const paddingLeft = 21 + (currentDepth * 12);
+  const paddingLeft = currentDepth * 24;
   const isFocused = focusedSubtaskId === subtask.id;
 
   const style = {
@@ -352,7 +352,7 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
 
   return (
     <div className="relative">
-      <div ref={setNodeRef} style={style} className="flex items-start gap-2 py-1 pl-6 group relative z-0">
+      <div ref={setNodeRef} style={style} className="flex items-start gap-2 py-1 pl-4 group relative z-0">
         {currentDepth > 0 && (
           <div className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${paddingLeft + 6}px` }} />
         )}
@@ -536,7 +536,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
         style={{ width: `${Math.min(progress, 100)}%`, background: barColor }}
       ></div>
       
-      <div className="relative px-2 py-2">
+      <div className="relative p-2">
         <div className="flex gap-2 items-center">
             {/* 왼쪽: actTime */}
             <div className="flex items-center gap-1">

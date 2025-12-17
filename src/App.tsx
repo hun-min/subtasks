@@ -420,12 +420,12 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
              {subtask.isTimerOn ? <Pause size={12} /> : <Play size={12} />}
            </button>
            <div className="flex gap-1.5">
-             <button onMouseDown={(e) => { e.preventDefault(); handleOutdent(); }} className={`p-1.5 rounded bg-white/5 ${currentDepth > 0 ? 'text-gray-200' : 'text-gray-600'}`} disabled={currentDepth === 0}><ArrowLeft size={14} /></button>
-             <button onMouseDown={(e) => { e.preventDefault(); handleIndent(); }} className="p-1.5 rounded bg-white/5 text-gray-200"><ArrowRight size={14} /></button>
-             <div className="w-px h-5 bg-white/10 mx-0.5"></div>
-             <button onMouseDown={(e) => { e.preventDefault(); handleMoveUp(); }} className="p-1.5 rounded bg-white/5 text-gray-200"><ArrowUp size={14} /></button>
-             <button onMouseDown={(e) => { e.preventDefault(); handleMoveDown(); }} className="p-1.5 rounded bg-white/5 text-gray-200"><ArrowDown size={14} /></button>
-             <div className="w-px h-5 bg-white/10 mx-0.5"></div>
+             <button onMouseDown={(e) => { e.preventDefault(); if (currentDepth > 0) handleOutdent(); }} className={`p-1.5 rounded ${currentDepth > 0 ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-600'}`} disabled={currentDepth === 0}><ArrowLeft size={14} /></button>
+             <button onMouseDown={(e) => { e.preventDefault(); const subtasks = task.subtasks || []; const prev = index > 0 ? subtasks[index - 1] : null; const prevDepth = prev ? (prev.depth || 0) : 0; if (prev && (subtask.depth || 0) <= prevDepth) handleIndent(); }} className={`p-1.5 rounded ${index > 0 && (subtask.depth || 0) <= ((task.subtasks || [])[index - 1]?.depth || 0) ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-600'}`}><ArrowRight size={14} /></button>
+             <div className="w-px h-6 bg-white/10 mx-0.5"></div>
+             <button onMouseDown={(e) => { e.preventDefault(); if (index > 0) handleMoveUp(); }} disabled={index === 0} className={`p-1.5 rounded ${index > 0 ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-600'}`}><ArrowUp size={14} /></button>
+             <button onMouseDown={(e) => { e.preventDefault(); const subtasks = task.subtasks || []; if (index < subtasks.length - 1) handleMoveDown(); }} disabled={index >= (task.subtasks || []).length - 1} className={`p-1.5 rounded ${index < (task.subtasks || []).length - 1 ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-600'}`}><ArrowDown size={14} /></button>
+             <div className="w-px h-6 bg-white/10 mx-0.5"></div>
              <button 
                onMouseDown={(e) => { e.preventDefault(); }}
                onClick={() => {
@@ -502,8 +502,8 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 }
 
 // --- [컴포넌트] 할 일 아이템 ---
-function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate, history, historyIndex, setHistoryIndex, setLogs }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate, history, historyIndex, setHistoryIndex, setLogs, onMoveUp, onMoveDown }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void, onMoveUp?: () => void, onMoveDown?: () => void }) {
+  const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [isParentFocused, setIsParentFocused] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -565,7 +565,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 value={task.text}
                 onChange={(e) => updateTask({ ...task, text: e.target.value })}
                 onFocus={() => { setIsParentFocused(true); setFocusedSubtaskId(null); }}
-                onBlur={() => setTimeout(() => setIsParentFocused(false), 300)}
+                onBlur={() => setTimeout(() => { if (!showMenu) setIsParentFocused(false); }, 300)}
                 onKeyDown={(e) => {
                   if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
                     e.preventDefault();
@@ -597,59 +597,6 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 className={`flex-1 bg-transparent text-lg font-bold outline-none placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                 placeholder=""
             />
-
-            {/* 오른쪽: ... 메뉴 */}
-            <div className="relative z-50 flex-shrink-0">
-              <button 
-                onClick={() => setShowMenu(!showMenu)}
-                className="text-gray-500 hover:text-white active:text-white p-0.5"
-              >
-                <MoreVertical size={18} />
-              </button>
-              
-              {showMenu && (
-                <>
-                  <div className="fixed inset-0 z-[60]" onClick={() => setShowMenu(false)}></div>
-                  <div className="absolute right-0 top-8 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl z-[70] min-w-[160px] py-1">
-                  <div className="px-4 py-2 flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Plan</span>
-                    <input 
-                      type="number"
-                      value={task.planTime}
-                      onChange={(e) => {
-                        const m = Math.max(0, parseInt(e.target.value) || 0);
-                        updateTask({ ...task, planTime: m });
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-16 bg-[#27272a] text-white text-sm px-2 py-1 rounded outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <span className="text-xs text-gray-500">m</span>
-                  </div>
-                  <div className="border-t border-white/5 my-1"></div>
-                  <button onClick={() => { onShowHistory(task.text); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
-                    <BarChart2 size={14} /> 기록 보기
-                  </button>
-                  <button onClick={() => { const newSub: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false }; updateTask({ ...task, subtasks: [...(task.subtasks || []), newSub] }); setShowMenu(false); setFocusedSubtaskId(Date.now()); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
-                    <Plus size={14} /> 하위할일 추가
-                  </button>
-                  {onChangeDate && (
-                    <button onClick={() => { setShowDatePicker(true); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
-                      <Calendar size={14} /> 날짜 변경
-                    </button>
-                  )}
-                  <div className="border-t border-white/5 my-1"></div>
-                  <button onClick={() => { deleteTask(task.id); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2">
-                    <Trash2 size={14} /> 삭제
-                  </button>
-                </div>
-                </>
-              )}
-            </div>
-
-            {/* 드래그 핸들 */}
-            <div {...attributes} {...listeners} className="touch-none text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0">
-              <div className="w-6 h-1 bg-gray-800 rounded-full" />
-            </div>
         </div>
 
         {showDatePicker && (
@@ -687,7 +634,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
 
         {/* 상위할일 컨트롤러 */}
         {isParentFocused && !focusedSubtaskId && (
-          <div className="flex gap-1.5 items-center justify-between px-2 py-1.5 bg-[#18181b] border-y border-white/5 animate-in slide-in-from-top-1 mt-2 rounded-lg shadow-xl">
+          <div className="flex gap-1 items-center justify-between px-2 py-1.5 bg-[#18181b] border-y border-white/5 animate-in slide-in-from-top-1 mt-2 rounded-lg shadow-xl">
              <button 
                onMouseDown={(e) => { e.preventDefault(); }}
                onClick={() => updateTask({ ...task, isTimerOn: !task.isTimerOn })}
@@ -695,7 +642,70 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
              >
                {task.isTimerOn ? <Pause size={12} /> : <Play size={12} />}
              </button>
-             <div className="flex gap-1">
+             <div className="flex gap-1.5">
+               <div className="relative">
+                 <button 
+                   onMouseDown={(e) => { e.preventDefault(); }}
+                   onClick={() => setShowMenu(!showMenu)}
+                   className="p-1.5 rounded bg-white/10 text-white"
+                 >
+                   <MoreVertical size={14} />
+                 </button>
+                 {showMenu && (
+                   <>
+                     <div className="fixed inset-0 z-[60]" onClick={() => setShowMenu(false)}></div>
+                     <div className="absolute right-0 top-8 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl z-[70] min-w-[160px] py-1" onClick={(e) => e.stopPropagation()}>
+                       <div className="px-4 py-2 flex items-center gap-2" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                         <span className="text-xs text-gray-500">Plan</span>
+                         <input 
+                           type="number"
+                           value={task.planTime}
+                           onChange={(e) => {
+                             const m = Math.max(0, parseInt(e.target.value) || 0);
+                             updateTask({ ...task, planTime: m });
+                           }}
+                           className="w-16 bg-[#27272a] text-white text-sm px-2 py-1 rounded outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                         />
+                         <span className="text-xs text-gray-500">m</span>
+                       </div>
+                       <div className="border-t border-white/5 my-1"></div>
+                       <button onClick={() => { onShowHistory(task.text); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
+                         <BarChart2 size={14} /> 기록 보기
+                       </button>
+                       <button onClick={() => { const newSub: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false }; updateTask({ ...task, subtasks: [...(task.subtasks || []), newSub] }); setShowMenu(false); setFocusedSubtaskId(Date.now()); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
+                         <Plus size={14} /> 하위할일 추가
+                       </button>
+                       {onChangeDate && (
+                         <button onClick={() => { setShowDatePicker(true); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
+                           <Calendar size={14} /> 날짜 변경
+                         </button>
+                       )}
+                       <div className="border-t border-white/5 my-1"></div>
+                       <button onClick={() => { deleteTask(task.id); setShowMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2">
+                         <Trash2 size={14} /> 삭제
+                       </button>
+                     </div>
+                   </>
+                 )}
+               </div>
+               <div className="w-px h-6 bg-white/10 mx-0.5"></div>
+               <button 
+                 onMouseDown={(e) => { e.preventDefault(); }}
+                 onClick={onMoveUp}
+                 disabled={!onMoveUp}
+                 className={`p-1.5 rounded ${onMoveUp ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-600'}`}
+               >
+                 <ArrowUp size={14} />
+               </button>
+               <button 
+                 onMouseDown={(e) => { e.preventDefault(); }}
+                 onClick={onMoveDown}
+                 disabled={!onMoveDown}
+                 className={`p-1.5 rounded ${onMoveDown ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-600'}`}
+               >
+                 <ArrowDown size={14} />
+               </button>
+               <div className="w-px h-6 bg-white/10 mx-0.5"></div>
                <button 
                  onMouseDown={(e) => { e.preventDefault(); }}
                  onClick={() => {
@@ -1353,7 +1363,7 @@ export default function App() {
                     <div className="space-y-1">
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                         <SortableContext items={tasks.filter((t: Task) => !t.done).map((t: Task) => t.id)} strategy={verticalListSortingStrategy}>
-                          {tasks.filter((t: Task) => !t.done).map((task: Task) => (
+                          {tasks.filter((t: Task) => !t.done).map((task: Task, idx: number, arr: Task[]) => (
                               <TaskItem 
                               key={task.id} task={task} updateTask={updateTask} deleteTask={deleteTask} 
                               onShowHistory={(name: string) => setHistoryTarget(name)}
@@ -1362,6 +1372,24 @@ export default function App() {
                               historyIndex={historyIndex}
                               setHistoryIndex={setHistoryIndex}
                               setLogs={setLogs}
+                              onMoveUp={idx > 0 ? () => {
+                                const allTasks = tasks.filter((t: Task) => !t.done);
+                                const oldIdx = allTasks.findIndex(t => t.id === task.id);
+                                if (oldIdx > 0) {
+                                  const newArr = [...allTasks];
+                                  [newArr[oldIdx - 1], newArr[oldIdx]] = [newArr[oldIdx], newArr[oldIdx - 1]];
+                                  updateLogs([...newArr, ...tasks.filter((t: Task) => t.done)]);
+                                }
+                              } : undefined}
+                              onMoveDown={idx < arr.length - 1 ? () => {
+                                const allTasks = tasks.filter((t: Task) => !t.done);
+                                const oldIdx = allTasks.findIndex(t => t.id === task.id);
+                                if (oldIdx < allTasks.length - 1) {
+                                  const newArr = [...allTasks];
+                                  [newArr[oldIdx], newArr[oldIdx + 1]] = [newArr[oldIdx + 1], newArr[oldIdx]];
+                                  updateLogs([...newArr, ...tasks.filter((t: Task) => t.done)]);
+                                }
+                              } : undefined}
                               onChangeDate={(taskId, newDate) => {
                                 const taskToMove = tasks.find(t => t.id === taskId);
                                 if (!taskToMove) return;
@@ -1411,7 +1439,7 @@ export default function App() {
                     <h2 className="text-green-400 text-sm font-bold tracking-wide mb-3 border-b border-green-900/30 pb-2">ACT</h2>
                     <div className="space-y-1">
                       {tasks.filter(t => t.done).length > 0 ? (
-                        tasks.filter(t => t.done).map(task => (
+                        tasks.filter(t => t.done).map((task, idx, arr) => (
                           <TaskItem 
                             key={`done-${task.id}`} task={task} updateTask={updateTask} deleteTask={deleteTask} 
                             onShowHistory={(name: string) => setHistoryTarget(name)}
@@ -1420,6 +1448,24 @@ export default function App() {
                             historyIndex={historyIndex}
                             setHistoryIndex={setHistoryIndex}
                             setLogs={setLogs}
+                            onMoveUp={idx > 0 ? () => {
+                              const allTasks = tasks.filter((t: Task) => t.done);
+                              const oldIdx = allTasks.findIndex(t => t.id === task.id);
+                              if (oldIdx > 0) {
+                                const newArr = [...allTasks];
+                                [newArr[oldIdx - 1], newArr[oldIdx]] = [newArr[oldIdx], newArr[oldIdx - 1]];
+                                updateLogs([...tasks.filter((t: Task) => !t.done), ...newArr]);
+                              }
+                            } : undefined}
+                            onMoveDown={idx < arr.length - 1 ? () => {
+                              const allTasks = tasks.filter((t: Task) => t.done);
+                              const oldIdx = allTasks.findIndex(t => t.id === task.id);
+                              if (oldIdx < allTasks.length - 1) {
+                                const newArr = [...allTasks];
+                                [newArr[oldIdx], newArr[oldIdx + 1]] = [newArr[oldIdx + 1], newArr[oldIdx]];
+                                updateLogs([...tasks.filter((t: Task) => !t.done), ...newArr]);
+                              }
+                            } : undefined}
                             onChangeDate={(taskId, newDate) => {
                               const taskToMove = tasks.find(t => t.id === taskId);
                               if (!taskToMove) return;

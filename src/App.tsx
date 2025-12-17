@@ -30,6 +30,7 @@ type Task = {
 type DailyLog = {
   date: string;
   tasks: Task[];
+  memo?: string;
 };
 
 // --- [컴포넌트] 자동 높이 조절 Textarea ---
@@ -972,7 +973,8 @@ export default function App() {
         if (data && data.length > 0) {
           const supabaseLogs = data.map(item => ({
             date: item.date,
-            tasks: migrateTasks(JSON.parse(item.tasks))
+            tasks: migrateTasks(JSON.parse(item.tasks)),
+            memo: item.memo || ''
           }));
           setLogs(supabaseLogs);
           localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(supabaseLogs));
@@ -997,7 +999,8 @@ export default function App() {
         if (payload.new) {
           const newLog = {
             date: payload.new.date,
-            tasks: migrateTasks(JSON.parse(payload.new.tasks))
+            tasks: migrateTasks(JSON.parse(payload.new.tasks)),
+            memo: payload.new.memo || ''
           };
           setLogs(prev => {
             const idx = prev.findIndex(l => l.date === newLog.date);
@@ -1109,11 +1112,13 @@ export default function App() {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         lastSaveTimeRef.current = Date.now();
+        const currentLog = logs.find(l => l.date === dateStr);
         supabase.from('task_logs').upsert({
           date: dateStr,
           user_id: user.id,
           space_id: currentSpace.id,
-          tasks: JSON.stringify(newTasks)
+          tasks: JSON.stringify(newTasks),
+          memo: currentLog?.memo || ''
         });
       }, 1000);
     }
@@ -1240,8 +1245,8 @@ export default function App() {
   const totalPlanTime = tasks.reduce((acc, t) => acc + t.planTime, 0);
   const totalActTime = tasks.reduce((acc, t) => acc + t.actTime, 0);
 
-  // 완료율에 따른 평가 메시지 (날짜 기반으로 고정)
-  const getEvaluationMessage = (completionRate: number, dateStr: string) => {
+  /* 완료율에 따른 평가 메시지 (날짜 기반으로 고정) - 임시 보관
+  const _getEvaluationMessage = (completionRate: number, dateStr: string) => {
     const messages = {
       veryLow: ["시작이 반은 무슨, 시작은 그냥 0이다.", "시작이 반이라던데 아직 0임", "숨 쉬는 거 빼고 다 귀찮네", "내일의 내가 욕하고 있을 듯", "딴짓할 시간은 있고 이거 할 시간은 없지", "일단 눕고 생각할까", "로딩 중... 뇌가 연결되지 않음", "의욕 0, 귀찮음 100", "이거 꼭 해야 됨? (ㅇㅇ 해야 됨)", "시작 버튼 누르는 게 제일 힘듦", "도망치고 싶다 격렬하게", "청소 핑계 그만 대라", "멍 때리다 10분 순삭", "하기 싫어서 몸 비트는 중", "딱 5분만 더... 하다가 망함", "누구 머리 대신 써줄 사람", "영감님은 안 오신다 그냥 해라", "침대랑 접착제로 붙은 듯", "오늘따라 벽지가 재밌네", "숨 참고 다이브 말고 그냥 다이브 하고 싶다", "계획은 완벽했지, 실행이 문제지", "뇌세포 파업 선언", "미루기의 신 강림", "지금 안 하면 이따가 피눈물", "손가락 하나 움직이기 싫음", "0에서 1 만드는 게 제일 빡셈", "유튜브 알고리즘이 날 놔주질 않네", "슬슬 발등 뜨거워질 시간", "아 몰라 배째", "생각만 하다가 하루 다 감", "일단 앱 켠 게 어디냐"],
       low: ["하긴 하는데, 티가 안 나네 티가.", "진도가 안 나감. 고장 났나?", "딴짓하느라 바쁨", "집중력 5분을 못 넘김", "영혼 없이 손만 움직이는 중", "이 속도면 내년에 끝남", "좀비 모드 ON", "뇌는 멈췄고 손만 일함", "아 당 떨어진다", "딴짓 좀 그만해 제발", "내가 뭘 하고 있는지 까먹음", "노동요 고르다 시간 다 감", "진척도 1도 안 오르는 마법", "슬슬 엉덩이 아픔", "고지가 안 보여", "배고픈데 밥부터 먹을까? (안 됨)", "머리는 거부하고 몸은 억지로 함", "화면 뚫어지겠다", "아직도 초반인 게 레전드", "누가 시간 좀 멈춰봐", "멍하니 있다가 침 흘릴 뻔", "카페인으로 버티는 중", "격하게 아무것도 안 하고 싶다", "지금 포기하면 쓰레기겠지", "산 넘어 산이네", "지우기를 더 많이 함", "눈이 침침해짐", "그냥 잘까? (악마의 속삭임)", "늪에 빠진 기분", "물음표 살인마 빙의 중"],
@@ -1262,6 +1267,7 @@ export default function App() {
     const index = seed % pool.length;
     return pool[index];
   };
+  */
 
   // currentSpace는 항상 존재하므로 Loading 화면 불필요
 
@@ -1433,9 +1439,40 @@ export default function App() {
                 <div className="text-4xl font-thin text-white mb-2">
                   {tasks.filter(t => t.done).length}<span className="text-xl text-gray-700 font-thin mx-1"> / </span>{tasks.length}<span className="text-lg text-gray-500 font-thin"> ({tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0}%)</span>
                 </div>
-                <div className="text-sm text-blue-400 font-medium">
-                  {getEvaluationMessage(tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0, viewDate.toDateString())}
-                </div>
+                <input
+                  type="text"
+                  value={logs.find(l => l.date === viewDate.toDateString())?.memo || ''}
+                  onChange={(e) => {
+                    const dateStr = viewDate.toDateString();
+                    setLogs(prev => {
+                      const idx = prev.findIndex(l => l.date === dateStr);
+                      const updated = [...prev];
+                      if (idx >= 0) {
+                        updated[idx] = { ...updated[idx], memo: e.target.value };
+                      } else {
+                        updated.push({ date: dateStr, tasks: [], memo: e.target.value });
+                      }
+                      
+                      // Supabase 동기화
+                      if (user && currentSpace) {
+                        const log = updated.find(l => l.date === dateStr);
+                        if (log) {
+                          supabase.from('task_logs').upsert({
+                            date: dateStr,
+                            user_id: user.id,
+                            space_id: currentSpace.id,
+                            tasks: JSON.stringify(log.tasks),
+                            memo: e.target.value
+                          });
+                        }
+                      }
+                      
+                      return updated;
+                    });
+                  }}
+                  placeholder="+"
+                  className="w-full max-w-md mx-auto bg-transparent border-b border-gray-800 text-sm text-blue-400 font-medium text-center outline-none focus:border-blue-500 transition-colors placeholder:text-gray-700 py-2"
+                />
               </div>
             )}
 

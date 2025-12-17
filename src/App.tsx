@@ -575,6 +575,39 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
   const [showPlanEdit, setShowPlanEdit] = useState(false);
   const [taskSuggestions, setTaskSuggestions] = useState<Task[]>([]);
   const [selectedTaskSuggestionIndex, setSelectedTaskSuggestionIndex] = useState(-1);
+  
+  useEffect(() => {
+    if (!task.text.trim()) {
+      setTaskSuggestions([]);
+      setSelectedTaskSuggestionIndex(-1);
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      
+      const matches: Task[] = [];
+      const seen = new Set();
+      
+      [...logs].reverse().forEach(log => {
+        const logDate = new Date(log.date);
+        if (logDate >= threeMonthsAgo) {
+          log.tasks.forEach(t => {
+            if (t.id !== task.id && t.text.toLowerCase().includes(task.text.toLowerCase()) && !seen.has(t.text)) {
+              matches.push(t);
+              seen.add(t.text);
+            }
+          });
+        }
+      });
+      
+      setTaskSuggestions(matches.slice(0, 5));
+      setSelectedTaskSuggestionIndex(-1);
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [task.text, logs, task.id]);
 
   const progress = task.planTime > 0 ? (task.actTime / task.planTime) * 100 : 0;
 
@@ -632,33 +665,6 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 onChange={(e) => {
                   const newText = e.target.value;
                   updateTask({ ...task, text: newText });
-                  
-                  // 자동완성 로직 (3개월 이내)
-                  if (newText.trim()) {
-                    const threeMonthsAgo = new Date();
-                    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-                    
-                    const matches: Task[] = [];
-                    const seen = new Set();
-                    
-                    [...logs].reverse().forEach(log => {
-                      const logDate = new Date(log.date);
-                      if (logDate >= threeMonthsAgo) {
-                        log.tasks.forEach(t => {
-                          if (t.id !== task.id && t.text.toLowerCase().includes(newText.toLowerCase()) && !seen.has(t.text)) {
-                            matches.push(t);
-                            seen.add(t.text);
-                          }
-                        });
-                      }
-                    });
-                    
-                    setTaskSuggestions(matches.slice(0, 5));
-                    setSelectedTaskSuggestionIndex(-1);
-                  } else {
-                    setTaskSuggestions([]);
-                    setSelectedTaskSuggestionIndex(-1);
-                  }
                 }}
                 onFocus={() => { setIsParentFocused(true); setFocusedSubtaskId(null); }}
                 onBlur={() => setTimeout(() => { if (!showMenu) { setIsParentFocused(false); setTaskSuggestions([]); } }, 300)}
@@ -1306,7 +1312,7 @@ export default function App() {
     }
   };
 
-  // 1. 자동완성 감지 (입력할 때마다 실행) - 3개월 이내만
+  // 1. 자동완성 감지 (debounce 적용) - 3개월 이내만
   useEffect(() => {
     if (!newTask.trim()) { 
       setSuggestions([]);
@@ -1314,26 +1320,30 @@ export default function App() {
       return; 
     }
     
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const timer = setTimeout(() => {
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      
+      const matches: Task[] = [];
+      const seen = new Set();
+      
+      [...logs].reverse().forEach(log => {
+        const logDate = new Date(log.date);
+        if (logDate >= threeMonthsAgo) {
+          log.tasks.forEach(t => {
+            if (t.text.toLowerCase().includes(newTask.toLowerCase()) && !seen.has(t.text)) {
+              matches.push(t); 
+              seen.add(t.text);
+            }
+          });
+        }
+      });
+      
+      setSuggestions(matches.slice(0, 5));
+      setSelectedSuggestionIndex(-1);
+    }, 300);
     
-    const matches: Task[] = [];
-    const seen = new Set();
-    
-    [...logs].reverse().forEach(log => {
-      const logDate = new Date(log.date);
-      if (logDate >= threeMonthsAgo) {
-        log.tasks.forEach(t => {
-          if (t.text.toLowerCase().includes(newTask.toLowerCase()) && !seen.has(t.text)) {
-            matches.push(t); 
-            seen.add(t.text);
-          }
-        });
-      }
-    });
-    
-    setSuggestions(matches.slice(0, 5));
-    setSelectedSuggestionIndex(-1);
+    return () => clearTimeout(timer);
   }, [newTask, logs]);
 
   const selectSuggestion = (pastTask: Task) => {

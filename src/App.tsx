@@ -654,7 +654,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                  {showMenu && (
                    <>
                      <div className="fixed inset-0 z-[60]" onClick={() => setShowMenu(false)}></div>
-                     <div className="absolute right-0 top-8 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl z-[70] min-w-[160px] py-1" onClick={(e) => e.stopPropagation()}>
+                     <div className="absolute left-0 top-8 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl z-[70] min-w-[160px] py-1" onClick={(e) => e.stopPropagation()}>
                        <div className="px-4 py-2 flex items-center gap-2" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
                          <span className="text-xs text-gray-500">Plan</span>
                          <input 
@@ -914,6 +914,9 @@ export default function App() {
         table: 'task_logs',
         filter: `space_id=eq.${currentSpace.id}`
       }, (payload: any) => {
+        // 자신의 저장 직후(2초 이내)에는 무시
+        if (Date.now() - lastSaveTimeRef.current < 2000) return;
+        
         if (payload.new) {
           const newLog = {
             date: payload.new.date,
@@ -1005,6 +1008,7 @@ export default function App() {
   }, [viewDate, logs]); 
 
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const lastSaveTimeRef = useRef<number>(0);
   
   const updateLogs = (newTasks: Task[]) => {
     setTasks(newTasks);
@@ -1023,22 +1027,18 @@ export default function App() {
       return updated;
     });
     
-    // Debounce: 500ms 후에 Supabase 저장
+    // Debounce: 1000ms 후에 Supabase 저장
     if (user && currentSpace) {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
-        console.log('Syncing to Supabase:', { date: dateStr, space_id: currentSpace.id, tasks: newTasks.length });
+        lastSaveTimeRef.current = Date.now();
         supabase.from('task_logs').upsert({
           date: dateStr,
           user_id: user.id,
           space_id: currentSpace.id,
           tasks: JSON.stringify(newTasks)
-        }).then(({ error }) => {
-          if (error) console.log('Supabase sync error:', error);
-          else console.log('Supabase sync success');
         });
-      }, 500);
-    } else {
+      }, 1000);
     }
   };
 

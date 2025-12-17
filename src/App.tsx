@@ -660,15 +660,15 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             </button>
 
             {/* 텍스트 */}
-            <input 
+            <AutoResizeTextarea
                 value={task.text}
-                onChange={(e) => {
+                onChange={(e: any) => {
                   const newText = e.target.value;
                   updateTask({ ...task, text: newText });
                 }}
                 onFocus={() => { setIsParentFocused(true); setFocusedSubtaskId(null); }}
                 onBlur={() => setTimeout(() => { if (!showMenu) { setIsParentFocused(false); setTaskSuggestions([]); } }, 300)}
-                onKeyDown={(e) => {
+                onKeyDown={(e: any) => {
                   if (e.key === 'ArrowDown' && taskSuggestions.length > 0) {
                     e.preventDefault();
                     setSelectedTaskSuggestionIndex(prev => prev < taskSuggestions.length - 1 ? prev + 1 : prev);
@@ -688,7 +688,6 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     e.preventDefault();
                     const newStatus: TaskStatus = task.status === 'DONE' ? 'LATER' : 'DONE';
                     updateTask({ ...task, status: newStatus, done: newStatus === 'DONE', isTimerOn: false });
-                    e.currentTarget.focus();
                     return;
                   }
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -699,7 +698,6 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                       setTaskSuggestions([]);
                       return;
                     }
-                    e.preventDefault();
                     const newId = Date.now();
                     const newSub: Task = { id: newId, text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, parentId: task.id, depth: 0 };
                     updateTask({ ...task, subtasks: [newSub, ...(task.subtasks || [])] });
@@ -713,12 +711,12 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                     }
                   }
                 }}
-                className={`flex-1 bg-transparent text-lg font-bold outline-none placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
+                className={`flex-1 bg-transparent text-lg font-bold outline-none placeholder:text-gray-600 leading-relaxed ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                 placeholder=""
             />
             
             {/* 삭제 버튼 & 드래그 핸들 */}
-            <div className={`flex items-center gap-1 transition-opacity ${isParentFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+            <div className={`flex items-center gap-1 flex-shrink-0 transition-opacity ${isParentFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
               <button 
                 onClick={() => deleteTask(task.id)}
                 className="text-gray-700 hover:text-red-500 p-1"

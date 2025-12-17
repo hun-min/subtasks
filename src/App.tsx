@@ -244,6 +244,13 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const subtasks = task.subtasks || [];
 
+    if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
+      e.preventDefault();
+      const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, isTimerOn: !s.isTimerOn, timerStartTime: !s.isTimerOn ? Date.now() : undefined } : s);
+      updateTask({ ...task, subtasks: newSubs });
+      return;
+    }
+
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       const newSubtasks = [...subtasks];
@@ -387,7 +394,6 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
           onKeyDown={handleKeyDown}
           onFocus={() => setFocusedSubtaskId(subtask.id)}
           className={`flex-1 text-sm leading-relaxed ${getTextStyle()}`}
-          placeholder="LATER"
         />
 
         <button 
@@ -535,7 +541,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             {/* 왼쪽: actTime */}
             <input 
               type="number"
-              value={task.actTime > 0 ? Math.floor(task.actTime) : ''}
+              value={Math.floor(task.actTime)}
               onChange={(e) => {
                 const m = Math.max(0, parseInt(e.target.value) || 0);
                 updateTask({ ...task, actTime: m });
@@ -543,7 +549,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
               placeholder="0"
               className="w-7 bg-transparent text-[10px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
-            {task.actTime > 0 && <span className="text-[10px] text-gray-600">m</span>}
+            <span className="text-[10px] text-gray-600">m</span>
 
             {/* 체크박스 */}
             <button 
@@ -563,6 +569,18 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 onFocus={() => { setIsParentFocused(true); setFocusedSubtaskId(null); }}
                 onBlur={() => setTimeout(() => setIsParentFocused(false), 300)}
                 onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
+                    e.preventDefault();
+                    updateTask({ ...task, isTimerOn: !task.isTimerOn });
+                    return;
+                  }
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    const newStatus: TaskStatus = task.status === 'DONE' ? 'LATER' : 'DONE';
+                    updateTask({ ...task, status: newStatus, done: newStatus === 'DONE', isTimerOn: false });
+                    e.currentTarget.focus();
+                    return;
+                  }
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     const newId = Date.now();
@@ -729,7 +747,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 </SortableContext>
             </DndContext>
             
-            {focusedSubtaskId && focusedSubtaskId !== -1 && (
+            {(focusedSubtaskId || isParentFocused) && (
               <div className="flex justify-center mt-0.5">
                 <button 
                   onMouseDown={(e) => e.preventDefault()}
@@ -742,13 +760,15 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                       planTime: 0,
                       actTime: 0,
                       isTimerOn: false,
-                      parentId: task.id
+                      parentId: task.id,
+                      depth: 0
                     };
                     const updatedTask = {
                       ...task,
                       subtasks: [...(task.subtasks || []), newSubtask]
                     };
                     updateTask(updatedTask);
+                    setFocusedSubtaskId(newSubtask.id);
                   }}
                   className="text-gray-600 hover:text-blue-400 px-1 py-0 text-[10px]"
                 >
@@ -779,7 +799,7 @@ const migrateTasks = (tasks: any[]): Task[] => {
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
-  const { currentSpace } = useSpace();
+  const { currentSpace, spaces, setCurrentSpace } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const [viewDate, setViewDate] = useState(new Date());
@@ -811,6 +831,21 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [history, historyIndex]);
+
+  // Alt+1~9 공간 전환
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const index = parseInt(e.key) - 1;
+        if (spaces[index]) {
+          setCurrentSpace(spaces[index]);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [spaces, setCurrentSpace]);
 
   // 로컬 데이터 로드 (마이그레이션 포함)
   useEffect(() => {
@@ -1265,7 +1300,7 @@ export default function App() {
                   
                   {/* 섹션 1: TARGET (원하는 것) - 미완료 태스크만 표시 + 수정 가능 */}
                   <div>
-                    <h2 className="text-blue-400 text-sm font-bold tracking-wide mb-3 border-b border-blue-900/30 pb-2">원하는 것들</h2>
+                    <h2 className="text-blue-400 text-sm font-bold tracking-wide mb-3 border-b border-blue-900/30 pb-2">PLAN</h2>
                     <div className="space-y-1">
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                         <SortableContext items={tasks.filter((t: Task) => !t.done).map((t: Task) => t.id)} strategy={verticalListSortingStrategy}>
@@ -1324,7 +1359,7 @@ export default function App() {
 
                   {/* 섹션 2: RESULT (실제 한 것) - 완료된 것만 표시 + 수정 가능 */}
                   <div>
-                    <h2 className="text-green-400 text-sm font-bold tracking-wide mb-3 border-b border-green-900/30 pb-2">완료한 일들</h2>
+                    <h2 className="text-green-400 text-sm font-bold tracking-wide mb-3 border-b border-green-900/30 pb-2">ACT</h2>
                     <div className="space-y-1">
                       {tasks.filter(t => t.done).length > 0 ? (
                         tasks.filter(t => t.done).map(task => (
@@ -1373,7 +1408,7 @@ export default function App() {
                           />
                         ))
                       ) : (
-                        <div className="text-gray-800 text-xs py-2">No completed tasks yet.</div>
+                        <div className="text-gray-700 text-sm py-2">No completed tasks yet.</div>
                       )}
                     </div>
                   </div>
@@ -1417,7 +1452,7 @@ export default function App() {
                       setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
                     }
                   }}
-                  placeholder="+ Add task to history"
+                  placeholder=""
                   className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>

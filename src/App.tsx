@@ -352,37 +352,35 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
 
   return (
     <div className="relative">
-      <div ref={setNodeRef} style={style} className="flex items-start gap-2 py-1 pl-4 group relative z-0">
+      <div ref={setNodeRef} style={style} className="flex items-center gap-2 py-1 pl-4 group relative z-0">
         {currentDepth > 0 && (
           <div className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${paddingLeft + 6}px` }} />
         )}
 
-        <div className="flex items-center gap-1">
-          <input 
-            type="number"
-            value={Math.floor(subtask.actTime)}
-            onChange={(e) => {
-              const newTime = Math.max(0, parseInt(e.target.value) || 0);
-              const oldTime = subtask.actTime;
-              const diff = newTime - oldTime;
-              const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, actTime: newTime } : s);
-              updateTask({ ...task, subtasks: newSubs, actTime: task.actTime + diff });
-            }}
-            className="w-6 bg-transparent text-[9px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-          <span className="text-[9px] text-gray-600">m</span>
-          <button 
-            onClick={() => {
-               const newStatus = cycleStatus(subtask.status, subtask.isTimerOn);
-               const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, status: newStatus, isTimerOn: false, timerStartTime: undefined } : s);
-               updateTask({ ...task, subtasks: newSubs });
-            }}
-            className={`mt-1.5 flex-shrink-0 w-4 h-4 border rounded flex items-center justify-center transition-all z-10 select-none ${getStatusColor()}`}
-          >
-            {subtask.status === 'NOW' && <div className="w-2 h-2 bg-white rounded-full" />}
-            {subtask.status === 'DONE' && <Check size={10} className="text-white" />}
-          </button>
-        </div>
+        <input 
+          type="number"
+          value={Math.floor(subtask.actTime)}
+          onChange={(e) => {
+            const newTime = Math.max(0, parseInt(e.target.value) || 0);
+            const oldTime = subtask.actTime;
+            const diff = newTime - oldTime;
+            const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, actTime: newTime } : s);
+            updateTask({ ...task, subtasks: newSubs, actTime: task.actTime + diff });
+          }}
+          className="w-6 bg-transparent text-[9px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <span className="text-[9px] text-gray-600">m</span>
+        <button 
+          onClick={() => {
+             const newStatus = cycleStatus(subtask.status, subtask.isTimerOn);
+             const newSubs = task.subtasks!.map(s => s.id === subtask.id ? { ...s, status: newStatus, isTimerOn: false, timerStartTime: undefined } : s);
+             updateTask({ ...task, subtasks: newSubs });
+          }}
+          className={`flex-shrink-0 w-4 h-4 border rounded flex items-center justify-center transition-all z-10 select-none ${getStatusColor()}`}
+        >
+          {subtask.status === 'NOW' && <div className="w-2 h-2 bg-white rounded-full" />}
+          {subtask.status === 'DONE' && <Check size={10} className="text-white" />}
+        </button>
 
         <AutoResizeTextarea
           value={subtask.text}
@@ -401,12 +399,12 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
                const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
                updateTask({ ...task, subtasks: newSubs });
           }}
-          className="mt-1 text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
         >
           <X size={12} />
         </button>
         
-        <div {...attributes} {...listeners} className="mt-1.5 w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50 touch-none" />
+        <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50 touch-none" />
       </div>
 
       {focusedSubtaskId === subtask.id && (
@@ -539,19 +537,17 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
       <div className="relative p-2">
         <div className="flex gap-2 items-center">
             {/* 왼쪽: actTime */}
-            <div className="flex items-center gap-1">
-              <input 
-                type="number"
-                value={Math.floor(task.actTime)}
-                onChange={(e) => {
-                  const m = Math.max(0, parseInt(e.target.value) || 0);
-                  updateTask({ ...task, actTime: m });
-                }}
-                placeholder="0"
-                className="w-7 bg-transparent text-[10px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              <span className="text-[10px] text-gray-600">m</span>
-            </div>
+            <input 
+              type="number"
+              value={Math.floor(task.actTime)}
+              onChange={(e) => {
+                const m = Math.max(0, parseInt(e.target.value) || 0);
+                updateTask({ ...task, actTime: m });
+              }}
+              placeholder="0"
+              className="w-7 bg-transparent text-[10px] text-gray-600 font-mono text-right outline-none border-b border-transparent hover:border-gray-700 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <span className="text-[10px] text-gray-600">m</span>
 
             {/* 체크박스 */}
             <button 
@@ -599,7 +595,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                   }
                 }}
                 className={`flex-1 bg-transparent text-lg font-bold outline-none placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
-                placeholder="목표"
+                placeholder=""
             />
 
             {/* 오른쪽: ... 메뉴 */}
@@ -651,7 +647,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             </div>
 
             {/* 드래그 핸들 */}
-            <div {...attributes} {...listeners} className="touch-none text-gray-700 hover:text-gray-400 active:text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0 self-start mt-2.5">
+            <div {...attributes} {...listeners} className="touch-none text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0">
               <div className="w-6 h-1 bg-gray-800 rounded-full" />
             </div>
         </div>

@@ -797,6 +797,8 @@ export default function App() {
     else setTasks([]);
   }, [viewDate, logs]); 
 
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  
   const updateLogs = (newTasks: Task[]) => {
     setTasks(newTasks);
     const dateStr = viewDate.toDateString();
@@ -808,16 +810,19 @@ export default function App() {
       return [...prev, newLog];
     });
     
-    // Supabase 저장 (로그인 시에만)
+    // Debounce: 500ms 후에 Supabase 저장
     if (user && currentSpace) {
-      supabase.from('task_logs').upsert({
-        date: dateStr,
-        user_id: user.id,
-        space_id: currentSpace.id,
-        tasks: JSON.stringify(newTasks)
-      }).then(({ error }) => {
-        if (error) console.log('Supabase sync error:', error);
-      });
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        supabase.from('task_logs').upsert({
+          date: dateStr,
+          user_id: user.id,
+          space_id: currentSpace.id,
+          tasks: JSON.stringify(newTasks)
+        }).then(({ error }) => {
+          if (error) console.log('Supabase sync error:', error);
+        });
+      }, 500);
     }
   };
 

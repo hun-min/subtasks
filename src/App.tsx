@@ -179,12 +179,13 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
 }
 
 // --- [컴포넌트] 하위할일 아이템 (Logseq 완전판) ---
-function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFocusedSubtaskId, history, historyIndex, setHistoryIndex, setLogs }: { subtask: Task, task: Task, index: number, updateTask: (task: Task) => void, focusedSubtaskId: number | null, setFocusedSubtaskId: (id: number | null) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void }) {
+function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFocusedSubtaskId, history, historyIndex, setHistoryIndex, setLogs, selectedSubtasks, setSelectedSubtasks, lastClickedIndex, setLastClickedIndex }: { subtask: Task, task: Task, index: number, updateTask: (task: Task) => void, focusedSubtaskId: number | null, setFocusedSubtaskId: (id: number | null) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void, selectedSubtasks: Set<number>, setSelectedSubtasks: (fn: (prev: Set<number>) => Set<number>) => void, lastClickedIndex: number | null, setLastClickedIndex: (index: number | null) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: subtask.id });
   
   const currentDepth = subtask.depth || 0;
   const paddingLeft = currentDepth * 24;
   const isFocused = focusedSubtaskId === subtask.id;
+  const isSelected = selectedSubtasks.has(subtask.id);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -244,6 +245,31 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const subtasks = task.subtasks || [];
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedSubtasks.size > 0) {
+      e.preventDefault();
+      const selectedTexts = subtasks.filter(s => selectedSubtasks.has(s.id)).map(s => s.text).join('\n');
+      navigator.clipboard.writeText(selectedTexts);
+      return;
+    }
+
+    if (e.key === 'Tab' && selectedSubtasks.size > 0) {
+      e.preventDefault();
+      const newSubtasks = [...subtasks];
+      subtasks.forEach((s, idx) => {
+        if (selectedSubtasks.has(s.id)) {
+          if (e.shiftKey) {
+            if ((s.depth || 0) > 0) newSubtasks[idx] = { ...s, depth: (s.depth || 0) - 1 };
+          } else {
+            const prev = idx > 0 ? subtasks[idx - 1] : null;
+            const prevDepth = prev ? (prev.depth || 0) : 0;
+            if (prev && (s.depth || 0) <= prevDepth) newSubtasks[idx] = { ...s, depth: (s.depth || 0) + 1 };
+          }
+        }
+      });
+      updateTask({ ...task, subtasks: newSubtasks });
+      return;
+    }
 
     if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
       e.preventDefault();
@@ -353,7 +379,38 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
 
   return (
     <div className="relative">
-      <div ref={setNodeRef} style={style} className="flex items-center gap-2 py-1 pl-4 group relative z-0">
+      <div 
+        ref={setNodeRef} 
+        style={style} 
+        className={`flex items-center gap-2 py-1 pl-4 group relative z-0 ${isSelected ? 'bg-blue-900/20 border-l-2 border-blue-500' : ''}`}
+        onClick={(e) => {
+          const subtasks = task.subtasks || [];
+          if (e.shiftKey && lastClickedIndex !== null) {
+            e.preventDefault();
+            const start = Math.min(lastClickedIndex, index);
+            const end = Math.max(lastClickedIndex, index);
+            setSelectedSubtasks(prev => {
+              const newSet = new Set(prev);
+              for (let i = start; i <= end; i++) {
+                if (subtasks[i]) newSet.add(subtasks[i].id);
+              }
+              return newSet;
+            });
+          } else if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            setSelectedSubtasks(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(subtask.id)) newSet.delete(subtask.id);
+              else newSet.add(subtask.id);
+              return newSet;
+            });
+            setLastClickedIndex(index);
+          } else {
+            setSelectedSubtasks(() => new Set());
+            setLastClickedIndex(index);
+          }
+        }}
+      >
         {currentDepth > 0 && (
           <div className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${paddingLeft + 6}px` }} />
         )}
@@ -395,17 +452,21 @@ function SubtaskItem({ subtask, task, index, updateTask, focusedSubtaskId, setFo
           className={`flex-1 text-sm leading-relaxed ${getTextStyle()}`}
         />
 
-        <button 
-          onClick={() => {
-               const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
-               updateTask({ ...task, subtasks: newSubs });
-          }}
-          className="text-gray-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <X size={12} />
-        </button>
-        
-        <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50 touch-none" />
+        <div className={`flex items-center gap-1 transition-opacity ${isFocused || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <button 
+            onClick={() => {
+                 const newSubs = task.subtasks!.filter(s => s.id !== subtask.id);
+                 updateTask({ ...task, subtasks: newSubs });
+            }}
+            className="text-gray-700 hover:text-red-500 p-1"
+          >
+            <X size={12} />
+          </button>
+          
+          <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab active:cursor-grabbing touch-none flex items-center justify-center text-gray-600 hover:text-gray-400">
+            <span className="text-xs">⋮⋮</span>
+          </div>
+        </div>
       </div>
 
       {focusedSubtaskId === subtask.id && (
@@ -506,6 +567,8 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate, history, historyIndex, setHistoryIndex, setLogs, onMoveUp, onMoveDown, logs }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void, onMoveUp?: () => void, onMoveDown?: () => void, logs: DailyLog[] }) {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
+  const [selectedSubtasks, setSelectedSubtasks] = useState<Set<number>>(new Set());
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const [isParentFocused, setIsParentFocused] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -582,7 +645,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                       const logDate = new Date(log.date);
                       if (logDate >= threeMonthsAgo) {
                         log.tasks.forEach(t => {
-                          if (t.text.toLowerCase().includes(newText.toLowerCase()) && !seen.has(t.text)) {
+                          if (t.id !== task.id && t.text.toLowerCase().includes(newText.toLowerCase()) && !seen.has(t.text)) {
                             matches.push(t);
                             seen.add(t.text);
                           }
@@ -816,18 +879,53 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
 
         <div className="mt-1">
             
+            {selectedSubtasks.size > 0 && (
+              <div className="flex gap-2 mb-2 px-2">
+                <button
+                  onClick={() => {
+                    const newSubtasks = (task.subtasks || []).filter(s => !selectedSubtasks.has(s.id));
+                    updateTask({ ...task, subtasks: newSubtasks });
+                    setSelectedSubtasks(new Set());
+                  }}
+                  className="text-xs px-3 py-1 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30"
+                >
+                  삭제 ({selectedSubtasks.size})
+                </button>
+                <button
+                  onClick={() => {
+                    const selectedTexts = (task.subtasks || []).filter(s => selectedSubtasks.has(s.id)).map(s => s.text).join('\n');
+                    navigator.clipboard.writeText(selectedTexts);
+                  }}
+                  className="text-xs px-3 py-1 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/30"
+                >
+                  복사 ({selectedSubtasks.size})
+                </button>
+              </div>
+            )}
+            
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => {
                 const {active, over} = e;
                 if (active.id !== over?.id) {
-                    const oldIdx = task.subtasks!.findIndex(t => t.id === active.id);
-                    const newIdx = task.subtasks!.findIndex(t => t.id === over?.id);
-                    updateTask({ ...task, subtasks: arrayMove(task.subtasks!, oldIdx, newIdx) });
+                    const subtasks = task.subtasks || [];
+                    const oldIdx = subtasks.findIndex(t => t.id === active.id);
+                    const newIdx = subtasks.findIndex(t => t.id === over?.id);
+                    
+                    if (selectedSubtasks.has(active.id as number) && selectedSubtasks.size > 1) {
+                      const selected = subtasks.filter(s => selectedSubtasks.has(s.id));
+                      const notSelected = subtasks.filter(s => !selectedSubtasks.has(s.id));
+                      const result = [...notSelected];
+                      result.splice(newIdx, 0, ...selected);
+                      updateTask({ ...task, subtasks: result });
+                      setSelectedSubtasks(new Set());
+                    } else {
+                      updateTask({ ...task, subtasks: arrayMove(subtasks, oldIdx, newIdx) });
+                    }
                 }
             }}>
                 <SortableContext items={(task.subtasks || []).map(s => s.id)} strategy={verticalListSortingStrategy}>
                     <div className="flex flex-col gap-0">
                         {(task.subtasks || []).map((sub, idx) => (
-                            <SubtaskItem key={sub.id} subtask={sub} task={task} index={idx} updateTask={updateTask} focusedSubtaskId={focusedSubtaskId} setFocusedSubtaskId={setFocusedSubtaskId} history={history} historyIndex={historyIndex} setHistoryIndex={setHistoryIndex} setLogs={setLogs} />
+                            <SubtaskItem key={sub.id} subtask={sub} task={task} index={idx} updateTask={updateTask} focusedSubtaskId={focusedSubtaskId} setFocusedSubtaskId={setFocusedSubtaskId} history={history} historyIndex={historyIndex} setHistoryIndex={setHistoryIndex} setLogs={setLogs} selectedSubtasks={selectedSubtasks} setSelectedSubtasks={setSelectedSubtasks} lastClickedIndex={lastClickedIndex} setLastClickedIndex={setLastClickedIndex} />
                         ))}
                     </div>
                 </SortableContext>

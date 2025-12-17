@@ -651,7 +651,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             </div>
 
             {/* 드래그 핸들 */}
-            <div {...attributes} {...listeners} className="touch-none text-gray-600 hover:text-gray-400 active:text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0 self-center">
+            <div {...attributes} {...listeners} className="touch-none text-gray-600 hover:text-gray-400 active:text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0 self-start mt-2.5">
               <div className="w-6 h-1 bg-gray-700 rounded-full" />
             </div>
         </div>

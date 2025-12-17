@@ -175,7 +175,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addSpace = async (title: string) => {
-    const tempId = Date.now();
+    const tempId = -Date.now(); // 음수로 변경하여 integer 범위 내로
     const tempSpace = { id: tempId, title, createdAt: new Date() };
     const nextSpaces = [...spaces, tempSpace];
     

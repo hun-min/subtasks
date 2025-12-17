@@ -872,6 +872,7 @@ export default function App() {
     if (user && currentSpace) {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
+        console.log('Syncing to Supabase:', { date: dateStr, space_id: currentSpace.id, tasks: newTasks.length });
         supabase.from('task_logs').upsert({
           date: dateStr,
           user_id: user.id,
@@ -879,8 +880,11 @@ export default function App() {
           tasks: JSON.stringify(newTasks)
         }).then(({ error }) => {
           if (error) console.log('Supabase sync error:', error);
+          else console.log('Supabase sync success');
         });
       }, 500);
+    } else {
+      console.log('Not syncing - user:', !!user, 'space:', !!currentSpace);
     }
   };
 

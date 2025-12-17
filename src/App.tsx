@@ -7,7 +7,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, Trash2, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, MoreVertical, RotateCcw, RotateCw, HelpCircle } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, MoreVertical, RotateCcw, RotateCw, HelpCircle } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -565,7 +565,7 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 
 // --- [컴포넌트] 할 일 아이템 ---
 function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChangeDate, history, historyIndex, setHistoryIndex, setLogs, onMoveUp, onMoveDown, logs }: { task: Task, updateTask: (task: Task) => void, deleteTask: (id: number) => void, onShowHistory: (name: string) => void, sensors: any, onChangeDate?: (taskId: number, newDate: string) => void, history: DailyLog[][], historyIndex: number, setHistoryIndex: (index: number) => void, setLogs: (logs: DailyLog[]) => void, onMoveUp?: () => void, onMoveDown?: () => void, logs: DailyLog[] }) {
-  const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: task.id });
   const [focusedSubtaskId, setFocusedSubtaskId] = useState<number | null>(null);
   const [selectedSubtasks, setSelectedSubtasks] = useState<Set<number>>(new Set());
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
@@ -710,6 +710,19 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                 className={`flex-1 bg-transparent text-lg font-bold outline-none placeholder:text-gray-600 ${isDone ? 'text-gray-500 line-through' : 'text-white'}`}
                 placeholder=""
             />
+            
+            {/* 삭제 버튼 & 드래그 핸들 */}
+            <div className={`flex items-center gap-1 transition-opacity ${isParentFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+              <button 
+                onClick={() => deleteTask(task.id)}
+                className="text-gray-700 hover:text-red-500 p-1"
+              >
+                <X size={12} />
+              </button>
+              <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab active:cursor-grabbing touch-none flex items-center justify-center text-gray-600 hover:text-gray-400">
+                <span className="text-xs">⋮⋮</span>
+              </div>
+            </div>
         </div>
         
         {/* 자동완성 칩 */}
@@ -822,13 +835,6 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                    </>
                  )}
                </div>
-               <button 
-                 onMouseDown={(e) => { e.preventDefault(); }}
-                 onClick={() => deleteTask(task.id)}
-                 className="p-1.5 rounded bg-white/5 text-red-400 hover:bg-red-500/10"
-               >
-                 <Trash2 size={14} />
-               </button>
                <div className="w-px h-6 bg-white/10 mx-0.5"></div>
                <button 
                  onMouseDown={(e) => { e.preventDefault(); }}
@@ -881,6 +887,18 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             
             {selectedSubtasks.size > 0 && (
               <div className="flex gap-2 mb-2 px-2">
+                <button
+                  onClick={() => {
+                    const newSubtasks = (task.subtasks || []).map(s => 
+                      selectedSubtasks.has(s.id) ? { ...s, status: 'DONE' as TaskStatus } : s
+                    );
+                    updateTask({ ...task, subtasks: newSubtasks });
+                    setSelectedSubtasks(new Set());
+                  }}
+                  className="text-xs px-3 py-1 bg-green-600/20 text-green-400 rounded-lg hover:bg-green-600/30"
+                >
+                  완료 ({selectedSubtasks.size})
+                </button>
                 <button
                   onClick={() => {
                     const newSubtasks = (task.subtasks || []).filter(s => !selectedSubtasks.has(s.id));

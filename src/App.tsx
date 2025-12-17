@@ -7,7 +7,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, Trash2, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, MoreVertical, RotateCcw, RotateCw } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, Trash2, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, MoreVertical, RotateCcw, RotateCw, HelpCircle } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -801,6 +801,7 @@ export default function App() {
   const { user, signOut } = useAuth();
   const { currentSpace, spaces, setCurrentSpace } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const [viewDate, setViewDate] = useState(new Date());
   
@@ -832,15 +833,21 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [history, historyIndex]);
 
-  // Alt+1~9 공간 전환
+  // Alt+1~9 공간 전환, ? 단축키 안내
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+      
       if (e.altKey && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         const index = parseInt(e.key) - 1;
         if (spaces[index]) {
           setCurrentSpace(spaces[index]);
         }
+      } else if (e.key === '?' && !isInput) {
+        e.preventDefault();
+        setShowShortcuts(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -859,10 +866,8 @@ export default function App() {
           tasks: migrateTasks(log.tasks)
         }));
         setLogs(migratedLogs);
-        console.log('Logs loaded for space', currentSpace.id, ':', migratedLogs);
       } else {
         setLogs([]);
-        console.log('No data for space', currentSpace.id);
       }
       setLocalLogsLoaded(true);
     }
@@ -1026,7 +1031,6 @@ export default function App() {
         });
       }, 500);
     } else {
-      console.log('Not syncing - user:', !!user, 'space:', !!currentSpace);
     }
   };
 
@@ -1179,16 +1183,63 @@ export default function App() {
       
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-24">
         
-        {/* 상단 헤더: Space 선택 + 로그인 */}
+        {/* 상단 헤더: Space 선택 + 단축키 + 로그인 */}
         <div className="mb-4 flex justify-between items-center">
           <SpaceSelector />
-          <button
-            onClick={() => user ? signOut() : setShowAuthModal(true)}
-            className="text-xs text-gray-400 hover:text-white px-3 py-1.5"
-          >
-            {user ? '로그아웃' : '로그인'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="text-gray-400 hover:text-white p-1.5"
+              title="Shortcuts (?)"
+            >
+              <HelpCircle size={18} />
+            </button>
+            <button
+              onClick={() => user ? signOut() : setShowAuthModal(true)}
+              className="text-xs text-gray-400 hover:text-white px-3 py-1.5"
+            >
+              {user ? '로그아웃' : '로그인'}
+            </button>
+          </div>
         </div>
+        
+        {/* 단축키 안내 모달 */}
+        {showShortcuts && (
+          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
+            <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-start mb-6">
+                <h2 className="text-xl font-bold text-white">Shortcuts</h2>
+                <button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">타이머 시작/정지</span>
+                  <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Space</kbd>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">완료 토글</span>
+                  <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">실행 취소</span>
+                  <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Z</kbd>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">다시 실행</span>
+                  <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Shift + Z</kbd>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">공간 전환</span>
+                  <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + 1~9</kbd>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">단축키 보기</span>
+                  <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">?</kbd>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* 모달: 태스크 히스토리 */}
         {historyTarget && (
@@ -1452,8 +1503,8 @@ export default function App() {
                       setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
                     }
                   }}
-                  placeholder=""
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  placeholder="+ Make something new"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 transition-colors placeholder:text-gray-600"
                 />
               </div>
 

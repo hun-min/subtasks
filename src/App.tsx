@@ -593,6 +593,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
                <input 
                  type="number"
                  value={task.planTime}
+                 onMouseDown={(e) => e.preventDefault()}
                  onChange={(e) => {
                    const m = Math.max(0, parseInt(e.target.value) || 0);
                    updateTask({ ...task, planTime: m });

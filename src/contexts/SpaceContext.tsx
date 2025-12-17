@@ -175,33 +175,25 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addSpace = async (title: string) => {
-    const tempId = -Date.now(); // 음수로 변경하여 integer 범위 내로
-    const tempSpace = { id: tempId, title, createdAt: new Date() };
-    const nextSpaces = [...spaces, tempSpace];
-    
-    updateCache(nextSpaces);
-    setCurrentSpace(tempSpace);
-
     try {
       if (user) {
         const { data } = await supabase.from('spaces').insert({ user_id: user.id, title }).select().single();
         if (data) {
           const realSpace = { id: data.id, title: data.title || data.name, createdAt: new Date(data.createdAt) };
-          // 임시 ID를 진짜 ID로 교체
-          const fixedSpaces = nextSpaces.map(s => s.id === tempId ? realSpace : s);
-          updateCache(fixedSpaces);
+          const nextSpaces = [...spaces, realSpace];
+          updateCache(nextSpaces);
           setCurrentSpace(realSpace);
           localStorage.setItem('currentSpaceId', realSpace.id.toString());
         }
       } else {
         const id = await db.spaces.add({ title, createdAt: new Date() }) as number;
         const realSpace = { id, title, createdAt: new Date() };
-        const fixedSpaces = nextSpaces.map(s => s.id === tempId ? realSpace : s);
-        updateCache(fixedSpaces);
+        const nextSpaces = [...spaces, realSpace];
+        updateCache(nextSpaces);
         setCurrentSpace(realSpace);
         localStorage.setItem('currentSpaceId', id.toString());
       }
-    } catch (e) { console.warn("저장 실패"); }
+    } catch (e) { console.warn("저장 실패", e); }
   };
 
   const updateSpace = async (id: number, title: string) => {

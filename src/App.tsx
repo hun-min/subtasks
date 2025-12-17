@@ -529,7 +529,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
   const isDone = task.status === 'DONE';
 
   return (
-    <div className="relative">
+    <div className="relative" style={{ zIndex: showMenu ? 100 : 'auto' }}>
       <div ref={setNodeRef} style={style} className={`mb-3 rounded-xl overflow-visible border transition-all duration-300 ${activeStyle} ${isDone ? 'opacity-40 grayscale' : ''}`}>
       
       <div className="absolute top-0 left-0 bottom-0 pointer-events-none opacity-10 transition-all duration-1000 ease-linear"
@@ -603,18 +603,18 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             />
 
             {/* 오른쪽: ... 메뉴 */}
-            <div className="relative z-50">
+            <div className="relative z-50 flex-shrink-0">
               <button 
                 onClick={() => setShowMenu(!showMenu)}
-                className="text-gray-500 hover:text-white p-0.5"
+                className="text-gray-500 hover:text-white active:text-white p-0.5"
               >
                 <MoreVertical size={18} />
               </button>
               
               {showMenu && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)}></div>
-                  <div className="absolute right-0 top-8 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
+                  <div className="fixed inset-0 z-[60]" onClick={() => setShowMenu(false)}></div>
+                  <div className="absolute right-0 top-8 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl z-[70] min-w-[160px] py-1">
                   <div className="px-4 py-2 flex items-center gap-2">
                     <span className="text-xs text-gray-500">Plan</span>
                     <input 
@@ -651,7 +651,7 @@ function TaskItem({ task, updateTask, deleteTask, onShowHistory, sensors, onChan
             </div>
 
             {/* 드래그 핸들 */}
-            <div {...attributes} {...listeners} className="touch-none text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing">
+            <div {...attributes} {...listeners} className="touch-none text-gray-700 hover:text-gray-400 active:text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0 self-start mt-2.5">
               <div className="w-6 h-1 bg-gray-800 rounded-full" />
             </div>
         </div>

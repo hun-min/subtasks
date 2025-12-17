@@ -1110,16 +1110,21 @@ export default function App() {
     // Debounce: 1000ms 후에 Supabase 저장
     if (user && currentSpace) {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = setTimeout(async () => {
         lastSaveTimeRef.current = Date.now();
         const currentLog = logs.find(l => l.date === dateStr);
-        supabase.from('task_logs').upsert({
+        const { error } = await supabase.from('task_logs').upsert({
           date: dateStr,
           user_id: user.id,
           space_id: currentSpace.id,
           tasks: JSON.stringify(newTasks),
           memo: currentLog?.memo || ''
         });
+        if (error) {
+          console.log('❌ Tasks sync failed:', error);
+        } else {
+          console.log('✅ Tasks synced');
+        }
       }, 1000);
     }
   };
@@ -1444,34 +1449,46 @@ export default function App() {
                   value={logs.find(l => l.date === viewDate.toDateString())?.memo || ''}
                   onChange={(e) => {
                     const dateStr = viewDate.toDateString();
+                    const memoValue = e.target.value;
                     setLogs(prev => {
                       const idx = prev.findIndex(l => l.date === dateStr);
                       const updated = [...prev];
                       if (idx >= 0) {
-                        updated[idx] = { ...updated[idx], memo: e.target.value };
+                        updated[idx] = { ...updated[idx], memo: memoValue };
                       } else {
-                        updated.push({ date: dateStr, tasks: [], memo: e.target.value });
+                        updated.push({ date: dateStr, tasks: [], memo: memoValue });
                       }
-                      
-                      // Supabase 동기화
-                      if (user && currentSpace) {
-                        const log = updated.find(l => l.date === dateStr);
-                        if (log) {
-                          supabase.from('task_logs').upsert({
-                            date: dateStr,
-                            user_id: user.id,
-                            space_id: currentSpace.id,
-                            tasks: JSON.stringify(log.tasks),
-                            memo: e.target.value
-                          });
-                        }
-                      }
-                      
                       return updated;
                     });
+                    
+                    // Supabase 동기화 (debounce)
+                    if (user && currentSpace) {
+                      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                      saveTimeoutRef.current = setTimeout(async () => {
+                        const currentLog = logs.find(l => l.date === dateStr);
+                        const { error } = await supabase.from('task_logs').upsert({
+                          date: dateStr,
+                          user_id: user.id,
+                          space_id: currentSpace.id,
+                          tasks: JSON.stringify(currentLog?.tasks || []),
+                          memo: memoValue
+                        });
+                        if (error) {
+                          console.log('❌ Memo sync failed:', error);
+                        } else {
+                          console.log('✅ Memo synced');
+                        }
+                      }, 1000);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
                   }}
                   placeholder="+"
-                  className="w-full max-w-md mx-auto bg-transparent border-b border-gray-800 text-sm text-blue-400 font-medium text-center outline-none focus:border-blue-500 transition-colors placeholder:text-gray-700 py-2"
+                  className="w-full max-w-md mx-auto bg-transparent text-sm text-blue-400 font-medium text-center outline-none placeholder:text-gray-700 py-2"
                 />
               </div>
             )}

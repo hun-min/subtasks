@@ -1014,6 +1014,7 @@ export default function App() {
   
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
+  const [supabaseLoaded, setSupabaseLoaded] = useState(false);
 
   // Undo/Redo 상태
   const [history, setHistory] = useState<DailyLog[][]>([]);
@@ -1103,8 +1104,10 @@ export default function App() {
           setLogs(supabaseLogs);
           localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(supabaseLogs));
         }
+        setSupabaseLoaded(true);
       } catch (error) {
         console.log('Supabase load error:', error);
+        setSupabaseLoaded(true);
       }
     };
     loadFromSupabase();
@@ -1217,10 +1220,11 @@ export default function App() {
   const updateLogs = (newTasks: Task[]) => {
     setTasks(newTasks);
     const dateStr = viewDate.toDateString();
-    const newLog = { date: dateStr, tasks: newTasks };
     
     setLogs(prev => {
       const idx = prev.findIndex(l => l.date === dateStr);
+      const currentMemo = idx >= 0 ? prev[idx].memo : '';
+      const newLog = { date: dateStr, tasks: newTasks, memo: currentMemo };
       const updated = idx >= 0 ? [...prev] : [...prev, newLog];
       if (idx >= 0) updated[idx] = newLog;
       
@@ -1228,29 +1232,28 @@ export default function App() {
       setHistory(h => [...h.slice(0, historyIndex + 1), updated]);
       setHistoryIndex(i => i + 1);
       
+      // Debounce: 1000ms 후에 Supabase 저장
+      if (user && currentSpace && supabaseLoaded) {
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(async () => {
+          lastSaveTimeRef.current = Date.now();
+          const { error } = await supabase.from('task_logs').upsert({
+            date: dateStr,
+            user_id: user.id,
+            space_id: currentSpace.id,
+            tasks: JSON.stringify(newTasks),
+            memo: currentMemo || ''
+          });
+          if (error) {
+            console.log('❌ Tasks sync failed:', error);
+          } else {
+            console.log('✅ Tasks synced');
+          }
+        }, 1000);
+      }
+      
       return updated;
     });
-    
-    // Debounce: 1000ms 후에 Supabase 저장
-    if (user && currentSpace) {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(async () => {
-        lastSaveTimeRef.current = Date.now();
-        const currentLog = logs.find(l => l.date === dateStr);
-        const { error } = await supabase.from('task_logs').upsert({
-          date: dateStr,
-          user_id: user.id,
-          space_id: currentSpace.id,
-          tasks: JSON.stringify(newTasks),
-          memo: currentLog?.memo || ''
-        });
-        if (error) {
-          console.log('❌ Tasks sync failed:', error);
-        } else {
-          console.log('✅ Tasks synced');
-        }
-      }, 1000);
-    }
   };
 
   const addTask = () => {

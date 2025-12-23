@@ -254,7 +254,7 @@ function UnifiedTaskItem({
       <div className="flex flex-col items-center justify-start mt-[7px]">
         <button onClick={() => updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false })} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'DONE' && <Check size={11} className="text-white stroke-[3]" />}
-          {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
+          {task.isTimerOn && <div className="w-1 h-1 bg-white rounded-full animate-pulse" />}
         </button>
       </div>
       <div className="flex-1 relative">
@@ -276,34 +276,6 @@ function UnifiedTaskItem({
   );
 }
 
-// --- [컴포넌트] 날짜 선택 모달 ---
-function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date) => void, onClose: () => void }) {
-  const [viewDate, setViewDate] = useState(new Date());
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
-  const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
-  return (
-    <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
-      <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
-          <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
-          <button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button>
-        </div>
-        <div className="grid grid-cols-7 gap-2">
-          {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}
-          {days.map((d: any, i) => {
-            if (!d) return <div key={i} />;
-            return <button key={i} onClick={() => onSelectDate(d)} className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>;
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
@@ -319,23 +291,8 @@ export default function App() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const lastClickedIndex = useRef<number | null>(null);
   
-  const [isSecondVisible, setIsSecondVisible] = useState(() => {
-    const saved = localStorage.getItem('ultra_tasks_is_second_visible');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
+  const [isSecondVisible, setIsSecondVisible] = useState(true);
 
-  useEffect(() => {
-    localStorage.setItem('ultra_tasks_is_second_visible', JSON.stringify(isSecondVisible));
-  }, [isSecondVisible]);
-
-  const toggleSecondVisible = () => {
-    if (currentSpace) {
-      const newVal = !isSecondVisible;
-      setIsSecondVisible(newVal);
-      localStorage.setItem(`ultra_tasks_is_second_visible_${currentSpace.id}`, JSON.stringify(newVal));
-    }
-  };
-  
   const [history, setHistory] = useState<Task[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isInternalUpdate = useRef(false);
@@ -497,6 +454,14 @@ export default function App() {
     } else {
       setSelectedTaskIds(new Set());
       lastClickedIndex.current = index;
+    }
+  };
+
+  const toggleSecondVisible = () => {
+    if (currentSpace) {
+      const newVal = !isSecondVisible;
+      setIsSecondVisible(newVal);
+      localStorage.setItem(`ultra_tasks_is_second_visible_${currentSpace.id}`, JSON.stringify(newVal));
     }
   };
 

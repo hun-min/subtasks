@@ -254,7 +254,7 @@ function UnifiedTaskItem({
       <div className="flex flex-col items-center justify-start mt-[7px]">
         <button onClick={() => updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false })} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'DONE' && <Check size={11} className="text-white stroke-[3]" />}
-          {task.isTimerOn && <div className="w-1 h-1 bg-white rounded-full animate-pulse" />}
+          {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>
       </div>
       <div className="flex-1 relative">
@@ -319,15 +319,14 @@ export default function App() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const lastClickedIndex = useRef<number | null>(null);
   
-  // A SECOND 가리기 상태 (로컬 저장 - 공간별 분리)
-  const [isSecondVisible, setIsSecondVisible] = useState(true);
+  const [isSecondVisible, setIsSecondVisible] = useState(() => {
+    const saved = localStorage.getItem('ultra_tasks_is_second_visible');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
 
   useEffect(() => {
-    if (currentSpace) {
-      const saved = localStorage.getItem(`ultra_tasks_is_second_visible_${currentSpace.id}`);
-      setIsSecondVisible(saved !== null ? JSON.parse(saved) : true);
-    }
-  }, [currentSpace]);
+    localStorage.setItem('ultra_tasks_is_second_visible', JSON.stringify(isSecondVisible));
+  }, [isSecondVisible]);
 
   const toggleSecondVisible = () => {
     if (currentSpace) {
@@ -365,6 +364,9 @@ export default function App() {
       setTasks(log.tasks);
       setHistory([log.tasks]);
       setHistoryIndex(0);
+
+      const savedVisible = localStorage.getItem(`ultra_tasks_is_second_visible_${currentSpace.id}`);
+      setIsSecondVisible(savedVisible !== null ? JSON.parse(savedVisible) : true);
     }
   }, [currentSpace, viewDate]);
 

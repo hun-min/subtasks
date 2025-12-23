@@ -101,7 +101,7 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
   const firstDay = new Date(year, month, 1).getDay();
   const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
   return (
-    <div className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
         <div className="flex justify-between items-start mb-6">
           <div><h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase mb-1">TASK HISTORY</h2><h1 className="text-xl font-black text-white">"{taskName}"</h1></div>
@@ -228,7 +228,6 @@ function UnifiedTaskItem({
       <div className="flex-1 relative">
         <AutoResizeTextarea value={task.text} autoFocus={isFocused} onFocus={() => setFocusedTaskId(task.id)} onChange={(e: any) => updateTask({ ...task, text: e.target.value })} onKeyDown={handleKeyDown} className={`w-full text-[16px] font-medium leading-[1.3] py-1.5 ${task.status === 'DONE' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} placeholder="" />
         
-        {/* / 힌트 */}
         {isFocused && task.text === '' && (
           <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] font-black text-gray-700 tracking-widest uppercase ml-1 opacity-50 animate-pulse">
             Type / for history
@@ -258,7 +257,7 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
   const firstDay = new Date(year, month, 1).getDay();
   const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
   return (
-    <div className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+    <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
       <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
@@ -401,87 +400,42 @@ export default function App() {
   const planTasks = tasks.filter(t => !t.isSecond);
   const secondTasks = tasks.filter(t => t.isSecond);
   const doneCount = tasks.filter(t => t.status === 'DONE').length;
-  const completionRate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
+  const totalCount = tasks.length;
+  const completionRate = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
   const currentLog = logs.find(l => l.date === viewDate.toDateString());
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#e0e0e0] selection:bg-[#7c4dff]/30 font-sans overflow-x-hidden flex flex-col">
+    <div className="min-h-screen bg-[#050505] text-[#e0e0e0] selection:bg-[#7c4dff]/30 font-sans overflow-x-hidden">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
-      <div className="max-w-xl mx-auto w-full flex-1 flex flex-col p-4 pb-32">
-        <div className="mb-4 flex justify-between items-center"><SpaceSelector /><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button></div>
+      <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4">
+        <div className="mb-4 flex justify-between items-center flex-shrink-0"><SpaceSelector /><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button></div>
         
-        {/* 상단 섹션 (고정 효과 위해 분리 가능) */}
+        {/* 상단 섹션 */}
         <div className="flex-shrink-0">
-          <div className="calendar-area mb-6 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
-             <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button><div className="text-center"><div className="text-[11px] text-gray-500 uppercase tracking-widest mb-0.5 font-bold">{viewDate.getFullYear()}</div><div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button></div>
+          <div className="calendar-area mb-6 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
+             <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button><div className="text-center"><div className="text-[11px] text-gray-500 uppercase tracking-widest mb-0.5 font-bold">{year}</div><div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button></div>
              <div className="grid grid-cols-7 gap-1">
                 {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[11px] text-gray-500 font-black py-1">{d}</div>)}
                 {Array.from({length: 35}).map((_, i) => {
-                  const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1); d.setDate(d.getDate() + (i - d.getDay()));
+                  const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay()));
                   const log = logs.find(l => l.date === d.toDateString()); const hasTasks = log && log.tasks.length > 0;
-                  return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all relative ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white shadow-lg shadow-[#7c4dff]/20' : d.getMonth() === viewDate.getMonth() ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'}`}><span className="font-black text-[14px]">{d.getDate()}</span>{hasTasks && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{Math.round((log!.tasks.filter(t => t.status === 'DONE').length / log!.tasks.length) * 100)}%</div>}</button>;
+                  return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all relative ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white shadow-lg shadow-[#7c4dff]/20' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'}`}><span className="font-black text-[14px]">{d.getDate()}</span>{hasTasks && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{Math.round((log!.tasks.filter(t => t.status === 'DONE').length / log!.tasks.length) * 100)}%</div>}</button>;
                 })}
              </div>
           </div>
 
           <div className="mb-8 text-center px-4">
-            <div className="text-[52px] font-black mb-1 flex items-baseline justify-center text-white tracking-tighter">
-              {doneCount}<span className="text-[28px] text-gray-600 font-light mx-2">/</span>{tasks.length}
-              <span className="text-[20px] text-[#7c4dff] font-black ml-2 tracking-normal">{completionRate}%</span>
-            </div>
+            <div className="text-[52px] font-black mb-1 flex items-baseline justify-center text-white tracking-tighter">{doneCount}<span className="text-[28px] text-gray-600 font-light mx-2">/</span>{totalCount}<span className="text-[20px] text-[#7c4dff] font-black ml-2 tracking-normal">{completionRate}%</span></div>
             <AutoResizeTextarea value={currentLog?.memo || ''} onChange={(e: any) => { const newMemo = e.target.value; setLogs(prev => { const updated = prev.map(l => l.date === viewDate.toDateString() ? { ...l, memo: newMemo } : l); saveToLocalStorage(updated); return updated; }); }} placeholder="+" className="w-full bg-transparent text-[18px] text-[#7c4dff] font-bold text-center outline-none placeholder:text-gray-800" />
           </div>
         </div>
 
-        {/* 할일 리스트 섹션 (스크롤 가능) */}
-        <div className="flex-1 space-y-10">
-          <div className="animate-in fade-in duration-500">
-            <div className="flex items-center justify-between mb-4 px-3">
-              <div className="flex items-center gap-3">
-                <h2 className="text-[13px] font-black tracking-[0.25em] text-pink-500 uppercase flex items-center gap-2">
-                  <Clock size={18} className="animate-pulse" /> A SECOND
-                </h2>
-                <button onClick={() => handleAddTask(undefined, true)} className="text-gray-500 hover:text-pink-500 transition-colors">
-                  <Plus size={20} />
-                </button>
-              </div>
-              <button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-600 hover:text-gray-400 transition-colors p-1">
-                {isSecondVisible ? <Eye size={18} /> : <EyeOff size={18} />}
-              </button>
-            </div>
-            {isSecondVisible && (
-              <div className="space-y-0">
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                    {secondTasks.map((task, idx) => (
-                      <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} deleteTask={(id) => { const newTasks = tasks.filter(t => t.id !== id); updateStateAndLogs(newTasks); const idxInTasks = tasks.findIndex(t => t.id === id); if (idxInTasks > 0) setFocusedTaskId(tasks[idxInTasks-1].id); else if (newTasks.length > 0) setFocusedTaskId(newTasks[0].id); else setFocusedTaskId(null); }} focusedTaskId={focusedTaskId} setFocusedTaskId={setFocusedTaskId} logs={logs} onAddTask={handleAddTask} />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              </div>
-            )}
-          </div>
-
-          <div className="animate-in fade-in duration-700">
-            <div className="flex items-center gap-3 mb-4 px-3">
-              <h2 className="text-[13px] font-black tracking-[0.25em] text-[#7c4dff] uppercase flex items-center gap-2">
-                <List size={18} /> FLOW
-              </h2>
-              <button onClick={() => handleAddTask(undefined, false)} className="text-gray-500 hover:text-[#7c4dff] transition-colors">
-                <Plus size={20} />
-              </button>
-            </div>
-            <div className="space-y-0">
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                  {planTasks.map((task, idx) => (
-                    <UnifiedTaskItem 
-                      key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} deleteTask={(id) => { const newTasks = tasks.filter(t => t.id !== id); updateStateAndLogs(newTasks); const idxInTasks = tasks.findIndex(t => t.id === id); if (idxInTasks > 0) setFocusedTaskId(tasks[idxInTasks-1].id); else if (newTasks.length > 0) setFocusedTaskId(newTasks[0].id); else setFocusedTaskId(null); }} focusedTaskId={focusedTaskId} setFocusedTaskId={setFocusedTaskId} logs={logs} onAddTask={handleAddTask} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} onMoveDown={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            </div>
-          </div>
+        {/* 할일 리스트 섹션 */}
+        <div className="flex-1 space-y-10 pb-32">
+          <div className="animate-in fade-in duration-500"><div className="flex items-center justify-between mb-4 px-3"><div className="flex items-center gap-3"><h2 className="text-[13px] font-black tracking-[0.25em] text-pink-500 uppercase flex items-center gap-2"><Clock size={18} className="animate-pulse" /> A SECOND</h2><button onClick={() => handleAddTask(undefined, true)} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={20} /></button></div><button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-600 hover:text-gray-400 transition-colors p-1">{isSecondVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button></div>{isSecondVisible && <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} deleteTask={(id) => { const newTasks = tasks.filter(t => t.id !== id); updateStateAndLogs(newTasks); const idxInTasks = tasks.findIndex(t => t.id === id); if (idxInTasks > 0) setFocusedTaskId(tasks[idxInTasks-1].id); else if (newTasks.length > 0) setFocusedTaskId(newTasks[0].id); else setFocusedTaskId(null); }} focusedTaskId={focusedTaskId} setFocusedTaskId={setFocusedTaskId} logs={logs} onAddTask={handleAddTask} />)}</SortableContext></DndContext></div>}</div>
+          <div className="animate-in fade-in duration-700"><div className="flex items-center gap-3 mb-4 px-3"><h2 className="text-[13px] font-black tracking-[0.25em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={18} /> FLOW</h2><button onClick={() => handleAddTask(undefined, false)} className="text-gray-500 hover:text-[#7c4dff] transition-colors"><Plus size={20} /></button></div><div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} deleteTask={(id) => { const newTasks = tasks.filter(t => t.id !== id); updateStateAndLogs(newTasks); const idxInTasks = tasks.findIndex(t => t.id === id); if (idxInTasks > 0) setFocusedTaskId(tasks[idxInTasks-1].id); else if (newTasks.length > 0) setFocusedTaskId(newTasks[0].id); else setFocusedTaskId(null); }} focusedTaskId={focusedTaskId} setFocusedTaskId={setFocusedTaskId} logs={logs} onAddTask={handleAddTask} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} onMoveDown={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} />)}</SortableContext></DndContext></div></div>
           {tasks.length === 0 && <button onClick={() => handleAddTask(undefined, false)} className="w-full py-3 border border-dashed border-white/5 rounded-2xl text-gray-700 hover:text-gray-400 transition-all flex items-center justify-center gap-2 text-sm font-black mt-2"><Plus size={16} /> NEW FLOW</button>}
         </div>
 
@@ -516,28 +470,7 @@ export default function App() {
           </div>
         )}
 
-        {showDatePicker && activeTask && (
-          <DatePickerModal 
-            onSelectDate={(date) => {
-              const targetDate = date.toDateString();
-              const currentDate = viewDate.toDateString();
-              if (targetDate !== currentDate) {
-                const newLogs = logs.map(l => {
-                  if (l.date === currentDate) return { ...l, tasks: l.tasks.filter(t => t.id !== activeTask.id) };
-                  if (l.date === targetDate) return { ...l, tasks: [...l.tasks, { ...activeTask, id: Date.now() }] };
-                  return l;
-                });
-                if (!newLogs.some(l => l.date === targetDate)) newLogs.push({ date: targetDate, tasks: [{ ...activeTask, id: Date.now() }], memo: '' });
-                setLogs(newLogs);
-                saveToLocalStorage(newLogs);
-                setTasks(prev => prev.filter(t => t.id !== activeTask.id));
-                setFocusedTaskId(null);
-              }
-              setShowDatePicker(false);
-            }} 
-            onClose={() => setShowDatePicker(false)} 
-          />
-        )}
+        {showDatePicker && activeTask && <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowDatePicker(false)}><div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button><span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span><button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button></div><div className="grid grid-cols-7 gap-2">{['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); return <button key={i} onClick={() => { const targetDate = d.toDateString(); const currentDate = viewDate.toDateString(); if (targetDate !== currentDate) { const newLogs = logs.map(l => { if (l.date === currentDate) return { ...l, tasks: l.tasks.filter(t => t.id !== activeTask.id) }; if (l.date === targetDate) return { ...l, tasks: [...l.tasks, { ...activeTask, id: Date.now() }] }; return l; }); if (!newLogs.some(l => l.date === targetDate)) newLogs.push({ date: targetDate, tasks: [{ ...activeTask, id: Date.now() }], memo: '' }); setLogs(newLogs); saveToLocalStorage(newLogs); setTasks(prev => prev.filter(t => t.id !== activeTask.id)); setFocusedTaskId(null); } setShowDatePicker(false); }} className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>; })}</div></div></div>}
         {showHistoryTarget && <TaskHistoryModal taskName={showHistoryTarget} logs={logs} onClose={() => setShowHistoryTarget(null)} />}
       </div>
     </div>

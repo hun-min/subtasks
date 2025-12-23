@@ -6,7 +6,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, List, Clock, Eye, EyeOff } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, List, Clock, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -17,8 +17,8 @@ type Task = {
   status: TaskStatus;
   done?: boolean; 
   percent: number;      
-  planTime: number; // 이제 거의 안쓰임
-  actTime: number; // 초 단위로 관리 (기존은 분 단위였으나 00:00:00 위해 초 단위 정밀도 사용)
+  planTime: number; 
+  actTime: number; 
   isTimerOn: boolean;
   timerStartTime?: number;
   parentId?: number;
@@ -220,6 +220,9 @@ function UnifiedTaskItem({
   const [suggestions, setSuggestions] = useState<Task[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
+  // 모바일 스와이프 들여쓰기 감지
+  const itemTouchStart = useRef<number | null>(null);
+
   useEffect(() => {
     if (!isFocused || !task.text.startsWith('/')) { setSuggestions([]); return; }
     const query = task.text.slice(1).toLowerCase();
@@ -270,6 +273,21 @@ function UnifiedTaskItem({
     }
   };
 
+  const handleItemTouchStart = (e: React.TouchEvent) => {
+    itemTouchStart.current = e.touches[0].clientX;
+  };
+
+  const handleItemTouchEnd = (e: React.TouchEvent) => {
+    if (itemTouchStart.current === null) return;
+    const touchEnd = e.changedTouches[0].clientX;
+    const diff = touchEnd - itemTouchStart.current; // 오른쪽으로 밀면 들여쓰기
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) onIndent?.();
+      else onOutdent?.();
+    }
+    itemTouchStart.current = null;
+  };
+
   const getStatusColor = () => {
     if (task.isTimerOn) return 'bg-blue-600 border-blue-600 shadow-[0_0_8px_rgba(59,130,246,0.5)]';
     if (task.status === 'DONE') return 'bg-green-600 border-green-600';
@@ -277,7 +295,7 @@ function UnifiedTaskItem({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-1 pl-4 transition-colors ${isFocused ? 'bg-white/5' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-1 pl-4 transition-colors ${isFocused ? 'bg-white/5' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
       {currentDepth > 0 && <div className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${paddingLeft + 6}px` }} />}
       <div className="flex items-center gap-1 mt-1.5 min-w-[60px] justify-end mr-1">
         <span className="text-[10px] text-gray-600 font-mono">{formatTime(task.actTime)}</span>
@@ -368,7 +386,7 @@ export default function App() {
         }
         return changed ? next : prev;
       });
-    }, 1000); // 1초 정밀도
+    }, 1000);
     return () => clearInterval(timer);
   }, [currentSpace, viewDate]);
 
@@ -426,7 +444,14 @@ export default function App() {
     }
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => touchStart.current = e.touches[0].clientX;
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // 캘린더 영역에서만 작동하도록 (리스트의 스와이프와 겹치지 않게)
+    const target = e.target as HTMLElement;
+    if (target.closest('.calendar-area')) {
+      touchStart.current = e.touches[0].clientX;
+    }
+  };
+
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStart.current === null) return;
     const touchEnd = e.changedTouches[0].clientX;
@@ -448,13 +473,17 @@ export default function App() {
   const completionRate = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white selection:bg-indigo-500/30 font-sans overflow-x-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <div className="min-h-screen bg-[#09090b] text-white selection:bg-indigo-500/30 font-sans overflow-x-hidden">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-32">
         <div className="mb-4 flex justify-between items-center"><SpaceSelector /><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500">{user ? 'Logout' : 'Login'}</button></div>
         
         {/* 캘린더 */}
-        <div className="mb-8 bg-[#0f0f14]/80 backdrop-blur-md p-5 rounded-3xl border border-white/5 shadow-2xl">
+        <div 
+          className="calendar-area mb-8 bg-[#0f0f14]/80 backdrop-blur-md p-5 rounded-3xl border border-white/5 shadow-2xl"
+          onTouchStart={handleTouchStart} 
+          onTouchEnd={handleTouchEnd}
+        >
            <div className="flex justify-between items-center mb-5 px-1">
               <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={20} /></button>
               <div className="text-center">
@@ -515,7 +544,7 @@ export default function App() {
             )}
           </div>
 
-          {/* PLAN (압박감 제거 버전) */}
+          {/* FLOW */}
           <div className="animate-in fade-in duration-700">
             <h2 className="text-[10px] font-black tracking-[0.2em] text-blue-500 uppercase mb-4 px-3 flex items-center gap-2"><List size={14} /> FLOW</h2>
             <div className="space-y-0.5">
@@ -549,6 +578,13 @@ export default function App() {
                   <input type="text" value={formatTime(activeTask.actTime)} onChange={(e) => handleUpdateTask({ ...activeTask, actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-sm font-black font-mono text-blue-400 outline-none w-20" />
                 </div>
               </div>
+              
+              {/* 모바일 들여쓰기 힌트/버튼 (선택 사항이지만 추가하면 명확함) */}
+              <div className="flex gap-1">
+                <button onClick={() => { const actualIdx = tasks.findIndex(t => t.id === activeTask.id); if (actualIdx > 0) handleUpdateTask({ ...activeTask, depth: Math.min((tasks[actualIdx-1].depth || 0) + 1, (activeTask.depth || 0) + 1) }); }} className="p-2.5 rounded-xl bg-white/5 text-gray-400 lg:hidden"><ArrowRight size={18} /></button>
+                <button onClick={() => handleUpdateTask({ ...activeTask, depth: Math.max(0, (activeTask.depth || 0) - 1) })} className="p-2.5 rounded-xl bg-white/5 text-gray-400 lg:hidden"><ArrowLeft size={18} /></button>
+              </div>
+
               <div className="flex items-center gap-1 pr-1">
                 <button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"><Calendar size={18} /></button>
                 <button onClick={() => setShowHistoryTarget(activeTask.text)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"><BarChart2 size={18} /></button>

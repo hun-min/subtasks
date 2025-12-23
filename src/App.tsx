@@ -109,7 +109,10 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
   const historyMap = useMemo(() => {
     const map = new Map();
     logs.forEach(log => {
-      const found = log.tasks.find(t => t.name.trim() === taskName.trim());
+      const found = log.tasks.find(t => {
+        const tName = t.name || t.text || '';
+        return tName.trim() === taskName.trim();
+      });
       if (found) map.set(log.date, { task: found });
     });
     return map;
@@ -201,41 +204,50 @@ function UnifiedTaskItem({
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
   useEffect(() => {
-    if (!isFocused || !task.name.startsWith('/')) { setSuggestions([]); return; }
-    const query = task.name.slice(1).toLowerCase();
+    const taskName = task.name || task.text || '';
+    if (!isFocused || !taskName.startsWith('/')) { setSuggestions([]); return; }
+    const query = taskName.slice(1).toLowerCase();
     const matches: Task[] = [];
     const seen = new Set();
-    [...logs].reverse().forEach(log => log.tasks.forEach(t => { if (t.name.toLowerCase().includes(query) && !seen.has(t.name)) { matches.push(t); seen.add(t.name); } }));
+    [...logs].reverse().forEach(log => log.tasks.forEach(t => { 
+      const tName = t.name || t.text || '';
+      if (tName.toLowerCase().includes(query) && !seen.has(tName)) { 
+        matches.push(t); 
+        seen.add(tName); 
+      } 
+    }));
     setSuggestions(matches.slice(0, 5));
     setSelectedSuggestionIndex(-1);
-  }, [task.name, isFocused, logs]);
+  }, [task.name, task.text, isFocused, logs]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    const taskName = task.name || task.text || '';
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
     if (e.key === 'ArrowUp' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
     
     if (e.key === 'Enter') {
       if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
         e.preventDefault();
-        updateTask({ ...task, name: suggestions[selectedSuggestionIndex].name });
+        const selectedName = suggestions[selectedSuggestionIndex].name || suggestions[selectedSuggestionIndex].text || '';
+        updateTask({ ...task, name: selectedName });
         setSuggestions([]);
       } else if (!e.shiftKey) {
         e.preventDefault();
         const cursorPos = textareaRef.current?.selectionStart || 0;
-        const textBefore = task.name.substring(0, cursorPos);
-        const textAfter = task.name.substring(cursorPos);
+        const textBefore = taskName.substring(0, cursorPos);
+        const textAfter = taskName.substring(cursorPos);
         onAddTaskAtCursor(task.id, textBefore, textAfter);
       }
       return;
     }
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
-      onMergeWithPrevious(task.id, task.name);
+      onMergeWithPrevious(task.id, taskName);
       return;
     }
-    if (e.key === 'Delete' && textareaRef.current?.selectionStart === task.name.length && textareaRef.current?.selectionEnd === task.name.length) {
+    if (e.key === 'Delete' && textareaRef.current?.selectionStart === taskName.length && textareaRef.current?.selectionEnd === taskName.length) {
       e.preventDefault();
-      onMergeWithNext(task.id, task.name);
+      onMergeWithNext(task.id, taskName);
       return;
     }
     // Tab 키: 무조건 들여쓰기/내어쓰기 동작
@@ -288,13 +300,16 @@ function UnifiedTaskItem({
         </button>
       </div>
       <div className="flex-1 relative">
-        <AutoResizeTextarea inputRef={textareaRef} value={task.name} autoFocus={isFocused} onFocus={() => setFocusedTaskId(task.id)} onChange={(e: any) => updateTask({ ...task, name: e.target.value })} onKeyDown={handleKeyDown} className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} placeholder="" />
-        {isFocused && task.name === '' && (
+        <AutoResizeTextarea inputRef={textareaRef} value={task.name || task.text || ''} autoFocus={isFocused} onFocus={() => setFocusedTaskId(task.id)} onChange={(e: any) => updateTask({ ...task, name: e.target.value })} onKeyDown={handleKeyDown} className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} placeholder="" />
+        {isFocused && (task.name || task.text || '') === '' && (
           <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>
         )}
         {suggestions.length > 0 && (
           <div className="absolute left-0 top-full z-[110] mt-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[180px]">
-            {suggestions.map((s, idx) => <button key={idx} onClick={() => { updateTask({ ...task, name: s.name }); setSuggestions([]); }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.name}</button>)}
+            {suggestions.map((s, idx) => {
+              const sName = s.name || s.text || '';
+              return <button key={idx} onClick={() => { updateTask({ ...task, name: sName }); setSuggestions([]); }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{sName}</button>;
+            })}
           </div>
         )}
       </div>
@@ -311,7 +326,8 @@ const migrateTasks = (tasks: any[]): Task[] => {
   if (!Array.isArray(tasks)) return [];
   return tasks.map(t => ({
     ...t,
-    status: t.status || (t.done ? 'DONE' : 'LATER'),
+    name: t.name || t.text || '',
+    status: t.status || (t.done ? 'completed' : 'pending'),
     depth: t.depth || 0,
     isSecond: t.isSecond || false,
     actTime: t.actTime || 0,
@@ -388,7 +404,7 @@ export default function App() {
               id: task.id,
               user_id: user.id,
               space_id: currentSpace.id,
-              name: task.name,
+              name: task.name || task.text || '',
               status: task.status,
               indent: task.indent,
               parent: task.parent,

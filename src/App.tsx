@@ -34,14 +34,20 @@ type DailyLog = {
 };
 
 // --- 유틸리티: 시간 포맷 (00:00:00) ---
-const formatTime = (seconds: number) => {
+const formatTimeFull = (seconds: number) => {
   const s = Math.floor(seconds % 60);
   const m = Math.floor((seconds / 60) % 60);
   const h = Math.floor(seconds / 3600);
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-// --- 유틸리티: 포맷된 시간을 초로 변환 ---
+// --- 유틸리티: 시간 포맷 축약 (1s, 1m, 1h) ---
+const formatTimeShort = (seconds: number) => {
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h`;
+};
+
 const parseTimeToSeconds = (timeStr: string) => {
   const parts = timeStr.split(':').map(Number);
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
@@ -118,7 +124,7 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
             if (!d) return <div key={i} />;
             const dateStr = d.toDateString();
             const record = historyMap.get(dateStr);
-            return <div key={i} className={`aspect-square rounded-lg border flex items-center justify-center relative ${record ? 'bg-blue-900/20 border-blue-500/50' : 'bg-gray-800/50 border-gray-800 text-gray-600'} ${dateStr === today.toDateString() ? 'ring-1 ring-white' : ''}`}><span className="text-xs font-medium">{d.getDate()}</span></div>;
+            return <div key={i} className={`aspect-square rounded-lg border flex items-center justify-center relative ${record ? 'bg-blue-900/20 border-blue-500/50' : 'bg-red-900/20 border-red-500/50'} ${dateStr === today.toDateString() ? 'ring-1 ring-white' : ''}`}><span className="text-xs font-medium">{d.getDate()}</span></div>;
           })}
         </div>
       </div>
@@ -134,9 +140,12 @@ function UnifiedTaskItem({
   updateTask, 
   setFocusedTaskId, 
   focusedTaskId,
+  selectedTaskIds,
+  onTaskClick,
   logs, 
   onAddTaskAtCursor,
   onMergeWithPrevious,
+  onMergeWithNext,
   onIndent, 
   onOutdent, 
   onMoveUp, 
@@ -148,9 +157,12 @@ function UnifiedTaskItem({
   updateTask: (task: Task) => void, 
   setFocusedTaskId: (id: number | null) => void, 
   focusedTaskId: number | null, 
+  selectedTaskIds: Set<number>,
+  onTaskClick: (e: React.MouseEvent, taskId: number, index: number) => void,
   logs: DailyLog[], 
   onAddTaskAtCursor: (taskId: number, textBefore: string, textAfter: string) => void,
   onMergeWithPrevious: (taskId: number, currentText: string) => void,
+  onMergeWithNext: (taskId: number, currentText: string) => void,
   onIndent?: () => void, 
   onOutdent?: () => void, 
   onMoveUp?: () => void, 
@@ -160,6 +172,7 @@ function UnifiedTaskItem({
   const currentDepth = task.depth || 0;
   const paddingLeft = currentDepth * 24;
   const isFocused = focusedTaskId === task.id;
+  const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const style = {
@@ -185,6 +198,7 @@ function UnifiedTaskItem({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
     if (e.key === 'ArrowUp' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
+    
     if (e.key === 'Enter') {
       if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
         e.preventDefault();
@@ -202,6 +216,11 @@ function UnifiedTaskItem({
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0) {
       e.preventDefault();
       onMergeWithPrevious(task.id, task.text);
+      return;
+    }
+    if (e.key === 'Delete' && textareaRef.current?.selectionStart === task.text.length) {
+      e.preventDefault();
+      onMergeWithNext(task.id, task.text);
       return;
     }
     if (e.key === 'Tab') { e.preventDefault(); if (e.shiftKey) onOutdent?.(); else onIndent?.(); return; }
@@ -230,7 +249,7 @@ function UnifiedTaskItem({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0 px-4 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
+    <div ref={setNodeRef} style={style} onClick={(e) => onTaskClick(e, task.id, index)} className={`relative group flex items-start gap-2 py-0 px-4 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-[#7c4dff]/10 border-l-2 border-[#7c4dff]' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
       {currentDepth > 0 && <div className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${paddingLeft + 6}px` }} />}
       <div className="flex flex-col items-center justify-start mt-[7px]">
         <button onClick={() => updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false })} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
@@ -249,8 +268,37 @@ function UnifiedTaskItem({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-[4px]">
+      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity mt-[4px]">
+        {task.actTime > 0 && <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap">{formatTimeShort(task.actTime)}</span>}
         <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab text-gray-700 flex items-center justify-center outline-none touch-none"><List size={13} /></div>
+      </div>
+    </div>
+  );
+}
+
+// --- [컴포넌트] 날짜 선택 모달 ---
+function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date) => void, onClose: () => void }) {
+  const [viewDate, setViewDate] = useState(new Date());
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
+  return (
+    <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
+          <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+          <button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}
+          {days.map((d: any, i) => {
+            if (!d) return <div key={i} />;
+            return <button key={i} onClick={() => onSelectDate(d)} className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>;
+          })}
+        </div>
       </div>
     </div>
   );
@@ -259,7 +307,7 @@ function UnifiedTaskItem({
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
-  const { currentSpace } = useSpace();
+  const { currentSpace, spaces, setCurrentSpace } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
@@ -268,7 +316,17 @@ export default function App() {
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
   const [showHistoryTarget, setShowHistoryTarget] = useState<string | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isSecondVisible, setIsSecondVisible] = useState(true);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
+  const lastClickedIndex = useRef<number | null>(null);
+  
+  const [isSecondVisible, setIsSecondVisible] = useState(() => {
+    const saved = localStorage.getItem('ultra_tasks_is_second_visible');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ultra_tasks_is_second_visible', JSON.stringify(isSecondVisible));
+  }, [isSecondVisible]);
   
   const [history, setHistory] = useState<Task[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -301,6 +359,20 @@ export default function App() {
     }
   }, [currentSpace, viewDate]);
 
+  const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
+    setTasks(newTasks);
+    const dateStr = viewDate.toDateString();
+    setLogs(prev => {
+      const updated = prev.map(l => l.date === dateStr ? { ...l, tasks: newTasks } : l);
+      saveToLocalStorage(updated);
+      return updated;
+    });
+    if (updateHistory && !isInternalUpdate.current) {
+      setHistory(prev => [...prev.slice(0, historyIndex + 1), newTasks]);
+      setHistoryIndex(prev => prev + 1);
+    }
+  }, [viewDate, historyIndex, saveToLocalStorage]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setTasks(prev => {
@@ -316,20 +388,6 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, [viewDate, saveToLocalStorage]);
-
-  const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
-    setTasks(newTasks);
-    const dateStr = viewDate.toDateString();
-    setLogs(prev => {
-      const updated = prev.map(l => l.date === dateStr ? { ...l, tasks: newTasks } : l);
-      saveToLocalStorage(updated);
-      return updated;
-    });
-    if (updateHistory && !isInternalUpdate.current) {
-      setHistory(prev => [...prev.slice(0, historyIndex + 1), newTasks]);
-      setHistoryIndex(prev => prev + 1);
-    }
-  }, [viewDate, historyIndex, saveToLocalStorage]);
 
   const handleAddTaskAtCursor = (taskId: number, textBefore: string, textAfter: string) => {
     const idx = tasks.findIndex(t => t.id === taskId);
@@ -354,6 +412,17 @@ export default function App() {
     setFocusedTaskId(prev.id);
   };
 
+  const handleMergeWithNext = (taskId: number, currentText: string) => {
+    const idx = tasks.findIndex(t => t.id === taskId);
+    if (idx >= tasks.length - 1) return;
+    const next = tasks[idx + 1];
+    const newTasks = [...tasks];
+    newTasks[idx] = { ...tasks[idx], text: currentText + next.text };
+    newTasks.splice(idx + 1, 1);
+    updateStateAndLogs(newTasks);
+    setFocusedTaskId(taskId);
+  };
+
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
       isInternalUpdate.current = true;
@@ -374,14 +443,23 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      const isInput = (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA';
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+      
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); handleRedo(); }
+      
       if (e.key === '?' && !isInput) { e.preventDefault(); setShowShortcuts(true); }
+      
+      if (e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const index = parseInt(e.key) - 1;
+        if (spaces[index]) setCurrentSpace(spaces[index]);
+      }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleUndo, handleRedo]);
+  }, [handleUndo, handleRedo, spaces, setCurrentSpace]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -389,6 +467,25 @@ export default function App() {
       const oldIndex = tasks.findIndex((t) => t.id === active.id);
       const newIndex = tasks.findIndex((t) => t.id === over.id);
       updateStateAndLogs(arrayMove(tasks, oldIndex, newIndex));
+    }
+  };
+
+  const onTaskClick = (e: React.MouseEvent, taskId: number, index: number) => {
+    if (e.shiftKey && lastClickedIndex.current !== null) {
+      const start = Math.min(lastClickedIndex.current, index);
+      const end = Math.max(lastClickedIndex.current, index);
+      const newSelected = new Set(selectedTaskIds);
+      for (let i = start; i <= end; i++) newSelected.add(tasks[i].id);
+      setSelectedTaskIds(newSelected);
+    } else if (e.ctrlKey || e.metaKey) {
+      const newSelected = new Set(selectedTaskIds);
+      if (newSelected.has(taskId)) newSelected.delete(taskId);
+      else newSelected.add(taskId);
+      setSelectedTaskIds(newSelected);
+      lastClickedIndex.current = index;
+    } else {
+      setSelectedTaskIds(new Set());
+      lastClickedIndex.current = index;
     }
   };
 
@@ -420,6 +517,7 @@ export default function App() {
               <div className="flex justify-between items-center"><span className="text-gray-400">타이머</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Space</kbd></div>
               <div className="flex justify-between items-center"><span className="text-gray-400">완료</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div>
               <div className="flex justify-between items-center"><span className="text-gray-400">Undo/Redo</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl+Z / Y</kbd></div>
+              <div className="flex justify-between items-center"><span className="text-gray-400">공간 전환</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + 1~9</kbd></div>
               <div className="flex justify-between items-center"><span className="text-gray-400">항목 분리(Enter)</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Enter</kbd></div>
               <div className="flex justify-between items-center"><span className="text-gray-400">항목 결합</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Backspace at Start</kbd></div>
             </div>
@@ -434,7 +532,7 @@ export default function App() {
           <div className="calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
              <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button><div className="text-center"><div className="text-[11px] text-gray-500 uppercase tracking-widest mb-0.5 font-bold">{year}</div><div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button></div>
              <div className="grid grid-cols-7 gap-1">
-                {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-500 font-black py-1">{d}</div>)}
+                {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}
                 {Array.from({length: 35}).map((_, i) => {
                   const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay()));
                   const log = logs.find(l => l.date === d.toDateString()); const hasTasks = log && log.tasks.length > 0;
@@ -445,28 +543,28 @@ export default function App() {
           </div>
 
           <div className="mb-6 flex justify-around items-center px-4">
-            <div className="text-center"><div className="text-[28px] font-black text-white leading-none">{secondStats.done}<span className="text-[16px] text-gray-600 font-light mx-1">/</span>{secondStats.total}</div><div className="text-[14px] text-pink-500 font-black mt-1">{secondStats.rate}%</div></div>
+            {isSecondVisible && <div className="text-center"><div className="text-[28px] font-black text-white leading-none">{secondStats.done}<span className="text-[16px] text-gray-600 font-light mx-1">/</span>{secondStats.total}</div><div className="text-[14px] text-pink-500 font-black mt-1">{secondStats.rate}%</div></div>}
             <div className="text-center"><div className="text-[28px] font-black text-white leading-none">{flowStats.done}<span className="text-[16px] text-gray-600 font-light mx-1">/</span>{flowStats.total}</div><div className="text-[14px] text-[#7c4dff] font-black mt-1">{flowStats.rate}%</div></div>
           </div>
           <div className="px-6 mb-6">
-            <AutoResizeTextarea value={currentLog?.memo || ''} onChange={(e: any) => { const newMemo = e.target.value; setLogs(prev => { const updated = prev.map(l => l.date === viewDate.toDateString() ? { ...l, memo: newMemo } : l); saveToLocalStorage(updated); return updated; }); }} placeholder="+" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none placeholder:text-gray-800" />
+            <AutoResizeTextarea value={currentLog?.memo || ''} onChange={(e: any) => { const newMemo = e.target.value; setLogs(prev => { const updated = prev.map(l => l.date === viewDate.toDateString() ? { ...l, memo: newMemo } : l); saveToLocalStorage(updated); return updated; }); }} placeholder="M E M O" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none placeholder:text-gray-800 placeholder:font-light tracking-widest" />
           </div>
         </div>
 
         <div className="flex-1 space-y-8 pb-32">
           <div className="animate-in fade-in duration-500">
             <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500"><Plus size={18} /></button></div><button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-600 p-1">{isSecondVisible ? <Eye size={16} /> : <EyeOff size={16} />}</button></div>
-            {isSecondVisible && <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} />)}</SortableContext></DndContext></div>}
+            {isSecondVisible && <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} />)}</SortableContext></DndContext></div>}
           </div>
           <div className="animate-in fade-in duration-700">
             <div className="flex items-center gap-3 mb-2 px-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={16} /> FLOW</h2><button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button></div>
-            <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}</SortableContext></DndContext></div>
+            <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}</SortableContext></DndContext></div>
           </div>
           {tasks.length === 0 && <button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="w-full py-2 border border-dashed border-white/5 rounded-2xl text-gray-700 text-xs font-bold mt-2"><Plus size={14} /> NEW FLOW</button>}
         </div>
 
         {activeTask && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-w-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
             <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 shadow-[0_25px_60px_rgba(0,0,0,0.6)] flex items-center gap-2 overflow-x-auto scrollbar-hide no-scrollbar">
               <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }` }} />
               <div className="flex items-center gap-2 flex-shrink-0 pl-1">
@@ -475,7 +573,7 @@ export default function App() {
                 </button>
                 <div className="flex flex-col flex-shrink-0 ml-1">
                   <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Execution</span>
-                  <input type="text" value={formatTime(activeTask.actTime)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight" />
+                  <input type="text" value={formatTimeFull(activeTask.actTime)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight" />
                 </div>
               </div>
               <div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" />

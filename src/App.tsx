@@ -398,25 +398,7 @@ export default function App() {
         clearTimeout(syncTimeoutRef.current);
       }
 
-      syncTimeoutRef.current = setTimeout(async () => {
-        if (user && navigator.onLine) {
-          try {
-            const updates = tasksToSave.map(task => ({
-              id: task.id,
-              user_id: user.id,
-              space_id: currentSpace.id,
-              title: task.name || task.text || '',
-              status: task.status,
-              parent: task.parent,
-              createdAt: task.created_at || new Date().toISOString(),
-            }));
-            const { error } = await supabase.from('tasks').upsert(updates, { onConflict: 'id' });
-            if (error) console.error('Supabase task sync error:', error);
-          } catch (error) {
-            console.error('Task sync failed:', error);
-          }
-        }
-      }, 1000); // 1-second debounce
+      // task_logs만 사용
     }
   }, [currentSpace, user]);
 

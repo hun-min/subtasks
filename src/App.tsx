@@ -406,7 +406,8 @@ export default function App() {
               space_id: currentSpace.id,
               name: task.name || task.text || '',
               status: task.status,
-              indent: task.indent,
+              // indent 컬럼이 DB에 없으므로 제거하고 depth만 사용 (DB 스키마 불일치 해결)
+              // indent: task.indent, 
               parent: task.parent,
             }));
             const { error } = await supabase.from('tasks').upsert(updates, { onConflict: 'id' });
@@ -599,7 +600,7 @@ export default function App() {
       planTime: 0,
       actTime: 0,
       isTimerOn: false,
-      depth: current.indent,
+      depth: current.depth || 0, // indent 대신 depth 사용 권장
       isSecond: current.isSecond,
       space_id: String(currentSpace?.id || ''), // Add space_id
     };

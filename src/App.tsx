@@ -6,7 +6,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, Eye, EyeOff, ArrowRight, ArrowLeft, RotateCcw, RotateCw, Calendar } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, Eye, EyeOff, ArrowRight, ArrowLeft, RotateCcw, RotateCw, Calendar, Trash2, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -132,9 +132,8 @@ function UnifiedTaskItem({
   index,
   allTasks,
   updateTask, 
-  deleteTask, 
-  focusedTaskId, 
   setFocusedTaskId, 
+  focusedTaskId,
   logs, 
   onAddTask,
   onIndent, 
@@ -146,9 +145,8 @@ function UnifiedTaskItem({
   index: number,
   allTasks: Task[],
   updateTask: (task: Task) => void, 
-  deleteTask: (id: number) => void, 
-  focusedTaskId: number | null, 
   setFocusedTaskId: (id: number | null) => void, 
+  focusedTaskId: number | null, 
   logs: DailyLog[], 
   onAddTask: (afterId: number, isSecond: boolean, depth: number) => void,
   onIndent?: () => void, 
@@ -186,19 +184,38 @@ function UnifiedTaskItem({
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
     if (e.key === 'ArrowUp' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
     if (e.key === 'Enter') {
-      e.preventDefault();
       if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
+        e.preventDefault();
         updateTask({ ...task, text: suggestions[selectedSuggestionIndex].text });
         setSuggestions([]);
-      } else { onAddTask(task.id, task.isSecond || false, currentDepth); }
+      } else if (!e.shiftKey) {
+        e.preventDefault();
+        onAddTask(task.id, task.isSecond || false, currentDepth);
+      }
       return;
     }
     if (e.key === 'Tab') { e.preventDefault(); if (e.shiftKey) onOutdent?.(); else onIndent?.(); return; }
-    if (e.key === 'Backspace' && task.text === '') { e.preventDefault(); deleteTask(task.id); return; }
+    if (e.key === 'Backspace' && task.text === '') { 
+      // 삭제는 이제 플로팅바나 단축키로 권장되지만, 텍스트가 비었을 때 Backspace도 허용 가능
+      // 하지만 사용자 요구대로 플로팅바로 유도하려면 여기서 막을 수도 있음
+      // 여기선 기본 UX를 위해 유지
+      return; 
+    }
     if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); onMoveUp?.(); return; }
     if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); onMoveDown?.(); return; }
     if (e.key === 'ArrowUp' && !e.altKey) { if (index > 0) { e.preventDefault(); setFocusedTaskId(allTasks[index-1].id); } }
     if (e.key === 'ArrowDown' && !e.altKey) { if (index < allTasks.length - 1) { e.preventDefault(); setFocusedTaskId(allTasks[index+1].id); } }
+    
+    // Ctrl + Space: 타이머 토글
+    if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
+      e.preventDefault();
+      updateTask({ ...task, isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined });
+    }
+    // Ctrl + Enter: 완료 토글
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false });
+    }
   };
 
   const handleItemTouchStart = (e: React.TouchEvent) => { if (document.activeElement?.tagName === 'TEXTAREA') return; itemTouchStart.current = e.touches[0].clientX; };
@@ -240,37 +257,9 @@ function UnifiedTaskItem({
           </div>
         )}
       </div>
+      {/* 줄 내의 삭제 버튼 제거됨. 플로팅바와 드래그 핸들만 유지(드래그 핸들도 터치 유도 위해 유지) */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-[6px]">
-        <button onClick={() => deleteTask(task.id)} className="text-gray-600 hover:text-red-500 p-0.5"><X size={15} /></button>
         <div {...attributes} {...listeners} className="w-5 h-5 cursor-grab text-gray-700 flex items-center justify-center outline-none touch-none"><List size={15} /></div>
-      </div>
-    </div>
-  );
-}
-
-// --- [컴포넌트] 날짜 선택 모달 ---
-function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date) => void, onClose: () => void }) {
-  const [viewDate, setViewDate] = useState(new Date());
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
-  const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
-  return (
-    <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
-      <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
-          <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
-          <button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button>
-        </div>
-        <div className="grid grid-cols-7 gap-2">
-          {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}
-          {days.map((d: any, i) => {
-            if (!d) return <div key={i} />;
-            return <button key={i} onClick={() => onSelectDate(d)} className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>;
-          })}
-        </div>
       </div>
     </div>
   );
@@ -281,6 +270,7 @@ export default function App() {
   const { user, signOut } = useAuth();
   const { currentSpace } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -372,8 +362,13 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+      
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); handleRedo(); }
+      
+      if (e.key === '?' && !isInput) { e.preventDefault(); setShowShortcuts(true); }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
@@ -409,8 +404,33 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#050505] text-[#e0e0e0] selection:bg-[#7c4dff]/30 font-sans overflow-x-hidden">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      
+      {/* 단축키 모달 복구 */}
+      {showShortcuts && (
+          <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
+            <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-start mb-6">
+                <h2 className="text-xl font-bold text-white">Shortcuts</h2>
+                <button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center"><span className="text-gray-400">타이머 시작/정지</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Space</kbd></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400">완료 토글</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400">실행 취소</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Z</kbd></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400">다시 실행</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Y / Shift + Z</kbd></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400">항목 추가</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Enter</kbd></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400">들여쓰기/내어쓰기</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Tab / Shift + Tab</kbd></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400">단축키 보기</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">?</kbd></div>
+              </div>
+            </div>
+          </div>
+        )}
+
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4">
-        <div className="mb-4 flex justify-between items-center flex-shrink-0"><SpaceSelector /><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button></div>
+        <div className="mb-4 flex justify-between items-center flex-shrink-0"><SpaceSelector /><div className="flex gap-3 items-center">
+            <button onClick={() => setShowShortcuts(true)} className="text-gray-500 hover:text-white p-1" title="Shortcuts (?)"><HelpCircle size={18} /></button>
+            <button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button>
+        </div></div>
         
         <div className="flex-shrink-0">
           <div className="calendar-area mb-6 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
@@ -432,14 +452,48 @@ export default function App() {
         </div>
 
         <div className="flex-1 space-y-10 pb-32">
-          <div className="animate-in fade-in duration-500"><div className="flex items-center justify-between mb-4 px-3"><div className="flex items-center gap-3"><h2 className="text-[13px] font-black tracking-[0.25em] text-pink-500 uppercase flex items-center gap-2"><Clock size={18} className="animate-pulse" /> A SECOND</h2><button onClick={() => handleAddTask(undefined, true)} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={20} /></button></div><button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-600 hover:text-gray-400 transition-colors p-1">{isSecondVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button></div>{isSecondVisible && <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} deleteTask={(id) => { const newTasks = tasks.filter(t => t.id !== id); updateStateAndLogs(newTasks); const idxInTasks = tasks.findIndex(t => t.id === id); if (idxInTasks > 0) setFocusedTaskId(tasks[idxInTasks-1].id); else if (newTasks.length > 0) setFocusedTaskId(newTasks[0].id); else setFocusedTaskId(null); }} focusedTaskId={focusedTaskId} setFocusedTaskId={setFocusedTaskId} logs={logs} onAddTask={handleAddTask} />)}</SortableContext></DndContext></div>}</div>
-          <div className="animate-in fade-in duration-700"><div className="flex items-center gap-3 mb-4 px-3"><h2 className="text-[13px] font-black tracking-[0.25em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={18} /> FLOW</h2><button onClick={() => handleAddTask(undefined, false)} className="text-gray-500 hover:text-[#7c4dff] transition-colors"><Plus size={20} /></button></div><div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} deleteTask={(id) => { const newTasks = tasks.filter(t => t.id !== id); updateStateAndLogs(newTasks); const idxInTasks = tasks.findIndex(t => t.id === id); if (idxInTasks > 0) setFocusedTaskId(tasks[idxInTasks-1].id); else if (newTasks.length > 0) setFocusedTaskId(newTasks[0].id); else setFocusedTaskId(null); }} focusedTaskId={focusedTaskId} setFocusedTaskId={setFocusedTaskId} logs={logs} onAddTask={handleAddTask} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} onMoveDown={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} />)}</SortableContext></DndContext></div></div>
+          <div className="animate-in fade-in duration-500"><div className="flex items-center justify-between mb-4 px-3"><div className="flex items-center gap-3"><h2 className="text-[13px] font-black tracking-[0.25em] text-pink-500 uppercase flex items-center gap-2"><Clock size={18} className="animate-pulse" /> A SECOND</h2><button onClick={() => handleAddTask(undefined, true)} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={20} /></button></div><button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-600 hover:text-gray-400 transition-colors p-1">{isSecondVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button></div>{isSecondVisible && <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} focusedTaskId={focusedTaskId} setFocusedTaskId={setFocusedTaskId} logs={logs} onAddTask={handleAddTask} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} onMoveDown={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} />)}</SortableContext></DndContext></div>}</div>
+          <div className="animate-in fade-in duration-700"><div className="flex items-center gap-3 mb-4 px-3"><h2 className="text-[13px] font-black tracking-[0.25em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={18} /> FLOW</h2><button onClick={() => handleAddTask(undefined, false)} className="text-gray-500 hover:text-[#7c4dff] transition-colors"><Plus size={20} /></button></div><div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} focusedTaskId={focusedTaskId} setFocusedTaskId={setFocusedTaskId} logs={logs} onAddTask={handleAddTask} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} onMoveDown={() => { const idx = tasks.findIndex(t => t.id === task.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} />)}</SortableContext></DndContext></div></div>
           {tasks.length === 0 && <button onClick={() => handleAddTask(undefined, false)} className="w-full py-3 border border-dashed border-white/5 rounded-2xl text-gray-700 hover:text-gray-400 transition-all flex items-center justify-center gap-2 text-sm font-black mt-2"><Plus size={16} /> NEW FLOW</button>}
         </div>
 
-        {activeTask && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)"><div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 shadow-[0_25px_60px_rgba(0,0,0,0.6)] flex items-center gap-2 overflow-x-auto scrollbar-hide scroll-smooth no-scrollbar"><div className="flex items-center gap-2 flex-shrink-0 pl-1"><button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white shadow-[0_0_25px_rgba(124,77,255,0.5)] scale-105' : 'bg-white/5 text-gray-400 hover:text-white'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button><div className="flex flex-col flex-shrink-0 ml-1"><span className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Execution</span><input type="text" value={formatTime(activeTask.actTime)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight" /></div></div><div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" /><div className="flex items-center gap-1 flex-shrink-0"><button onMouseDown={(e) => e.preventDefault()} onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} className="p-3 rounded-xl bg-white/5 text-gray-400 active:bg-white/10 flex-shrink-0"><ArrowLeft size={20} /></button><button onMouseDown={(e) => e.preventDefault()} onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} className="p-3 rounded-xl bg-white/5 text-gray-400 active:bg-white/10 flex-shrink-0"><ArrowRight size={20} /></button></div><div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" /><div className="flex items-center gap-1 flex-shrink-0 pr-2"><button onClick={() => setShowDatePicker(true)} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors flex-shrink-0"><Calendar size={20} /></button><button onClick={() => setShowHistoryTarget(activeTask.text)} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors flex-shrink-0"><BarChart2 size={20} /></button><button onMouseDown={(e) => e.preventDefault()} onClick={() => handleUndo()} disabled={historyIndex <= 0} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20 flex-shrink-0"><RotateCcw size={20} /></button><button onMouseDown={(e) => e.preventDefault()} onClick={() => handleRedo()} disabled={historyIndex >= history.length - 1} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20 flex-shrink-0"><RotateCw size={20} /></button><button onClick={() => setFocusedTaskId(null)} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors flex-shrink-0"><X size={20} /></button></div></div></div>}
+        {activeTask && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-w-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
+            <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 shadow-[0_25px_60px_rgba(0,0,0,0.6)] flex items-center gap-2 overflow-x-auto scrollbar-hide scroll-smooth no-scrollbar">
+              <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }` }} />
+              <div className="flex items-center gap-2 flex-shrink-0 pl-1">
+                <button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white shadow-[0_0_25px_rgba(124,77,255,0.5)] scale-105' : 'bg-white/5 text-gray-400 hover:text-white'}`}>
+                  {activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}
+                </button>
+                <div className="flex flex-col flex-shrink-0 ml-1">
+                  <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Execution</span>
+                  <input type="text" value={formatTime(activeTask.actTime)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight" />
+                </div>
+              </div>
+              <div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" />
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} className="p-3 rounded-xl bg-white/5 text-gray-400 active:bg-white/10 flex-shrink-0"><ArrowLeft size={20} /></button>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} className="p-3 rounded-xl bg-white/5 text-gray-400 active:bg-white/10 flex-shrink-0"><ArrowRight size={20} /></button>
+              </div>
+              <div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" />
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => { const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} className="p-3 rounded-xl bg-white/5 text-gray-400 active:bg-white/10 flex-shrink-0"><ArrowUp size={20} /></button>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => { const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} className="p-3 rounded-xl bg-white/5 text-gray-400 active:bg-white/10 flex-shrink-0"><ArrowDown size={20} /></button>
+              </div>
+              <div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" />
+              <div className="flex items-center gap-1 flex-shrink-0 pr-2">
+                <button onClick={() => updateStateAndLogs(tasks.filter(t => t.id !== activeTask.id))} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"><Trash2 size={20} /></button>
+                <button onClick={() => setShowDatePicker(true)} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors flex-shrink-0"><Calendar size={20} /></button>
+                <button onClick={() => setShowHistoryTarget(activeTask.text)} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors flex-shrink-0"><BarChart2 size={20} /></button>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => handleUndo()} disabled={historyIndex <= 0} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20 flex-shrink-0"><RotateCcw size={20} /></button>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => handleRedo()} disabled={historyIndex >= history.length - 1} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20 flex-shrink-0"><RotateCw size={20} /></button>
+                <button onClick={() => setFocusedTaskId(null)} className="p-3 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors flex-shrink-0"><X size={20} /></button>
+              </div>
+            </div>
+          </div>
+        )}
 
-        {showDatePicker && activeTask && <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowDatePicker(false)}><div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button><span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span><button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button></div><div className="grid grid-cols-7 gap-2">{['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); return <button key={i} onClick={() => { const targetDate = d.toDateString(); const currentDate = viewDate.toDateString(); if (targetDate !== currentDate) { const newLogs = logs.map(l => { if (l.date === currentDate) return { ...l, tasks: l.tasks.filter(t => t.id !== activeTask.id) }; if (l.date === targetDate) return { ...l, tasks: [...l.tasks, { ...activeTask, id: Date.now() }] }; return l; }); if (!newLogs.some(l => l.date === targetDate)) newLogs.push({ date: targetDate, tasks: [{ ...activeTask, id: Date.now() }], memo: '' }); setLogs(newLogs); saveToLocalStorage(newLogs); setTasks(prev => prev.filter(t => t.id !== activeTask.id)); setFocusedTaskId(null); } setShowDatePicker(false); }} className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>; })}</div></div></div>}
+        {showDatePicker && activeTask && <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowDatePicker(false)}><div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button><span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span><button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button></div><div className="grid grid-cols-7 gap-2">{['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); return <button key={i} onClick={() => { const targetDate = d.toDateString(); const currentDate = viewDate.toDateString(); if (targetDate !== currentDate) { const newLogs = logs.map(l => { if (l.date === currentDate) return { ...l, tasks: l.tasks.filter(t => t.id !== activeTask.id) }; if (l.date === targetDate) return { ...l, tasks: [...l.tasks, { ...activeTask, id: Date.now() }] }; return l; }); if (!newLogs.some(l => l.date === targetDate)) newLogs.push({ date: targetDate, tasks: [{ ...activeTask, id: Date.now() }], memo: '' }); setLogs(newLogs); saveToLocalStorage(newLogs); updateStateAndLogs(tasks.filter(t => t.id !== activeTask.id)); setFocusedTaskId(null); } setShowDatePicker(false); }} className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>; })}</div></div></div>}
         {showHistoryTarget && <TaskHistoryModal taskName={showHistoryTarget} logs={logs} onClose={() => setShowHistoryTarget(null)} />}
       </div>
     </div>

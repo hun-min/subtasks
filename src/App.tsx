@@ -108,7 +108,7 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
   const firstDay = new Date(year, month, 1).getDay();
   const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
   return (
-    <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[700] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
         <div className="flex justify-between items-start mb-6">
           <div><h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase mb-1">TASK HISTORY</h2><h1 className="text-xl font-black text-white">"{taskName}"</h1></div>
@@ -331,6 +331,7 @@ export default function App() {
     if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(allLogs));
   }, [currentSpace]);
 
+  // 'A SECOND' 가리기 상태 동기화
   useEffect(() => {
     if (currentSpace && user) {
       const fetchVisibility = async () => {
@@ -423,7 +424,6 @@ export default function App() {
     const idx = tasks.findIndex(t => t.id === taskId);
     if (idx <= 0) return;
     const prev = tasks[idx - 1];
-    // A SECOND과 FLOW 사이의 경계에서 병합 방지
     if (prev.isSecond !== tasks[idx].isSecond) return;
     const newTasks = [...tasks];
     newTasks[idx - 1] = { ...prev, text: prev.text + currentText };
@@ -599,15 +599,7 @@ export default function App() {
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-w-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
             <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 shadow-[0_25px_60px_rgba(0,0,0,0.6)] flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide no-scrollbar mx-auto">
               <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }` }} />
-              <div className="flex items-center gap-2 flex-shrink-0 pl-1">
-                <button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white shadow-[0_0_25px_rgba(124,77,255,0.5)] scale-105' : 'bg-white/5 text-gray-400 hover:text-white'}`}>
-                  {activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}
-                </button>
-                <div className="flex flex-col flex-shrink-0 ml-1">
-                  <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-0.5 text-center">Execution</span>
-                  <input type="text" value={formatTimeFull(activeTask.actTime)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight text-center" />
-                </div>
-              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 pl-1"><button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white shadow-[0_0_25px_rgba(124,77,255,0.5)] scale-105' : 'bg-white/5 text-gray-400 hover:text-white'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button><div className="flex flex-col flex-shrink-0 ml-1"><span className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-0.5 text-center">Execution</span><input type="text" value={formatTimeFull(activeTask.actTime)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight text-center" /></div></div>
               <div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" /><div className="flex items-center gap-0.5 flex-shrink-0">
                 <button onMouseDown={(e) => e.preventDefault()} onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 flex-shrink-0 transition-colors"><ArrowLeft size={18} /></button>
                 <button onMouseDown={(e) => e.preventDefault()} onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 flex-shrink-0 transition-colors"><ArrowRight size={18} /></button>

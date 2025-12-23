@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { supabase } from './supabase';
 import { useAuth } from './contexts/AuthContext';
 import { useSpace } from './contexts/SpaceContext';
 import { AuthModal } from './components/AuthModal';
@@ -7,7 +6,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, MoreVertical, RotateCcw, RotateCw, HelpCircle, Search, List, Clock, Eye, EyeOff } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, Calendar, List, Clock, Eye, EyeOff } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -182,7 +181,6 @@ function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date)
 // --- [컴포넌트] 통합 할 일 아이템 ---
 function UnifiedTaskItem({ 
   task, 
-  index, 
   updateTask, 
   deleteTask, 
   focusedTaskId, 
@@ -341,7 +339,7 @@ function UnifiedTaskItem({
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
-  const { currentSpace, spaces, setCurrentSpace } = useSpace();
+  const { currentSpace } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
   const [logs, setLogs] = useState<DailyLog[]>([]);

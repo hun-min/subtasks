@@ -6,7 +6,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, Eye, EyeOff, ArrowRight, ArrowLeft, RotateCcw, RotateCw, Calendar, Trash2, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, ArrowRight, ArrowLeft, RotateCcw, RotateCw, Calendar, Trash2, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -254,7 +254,7 @@ function UnifiedTaskItem({
       <div className="flex flex-col items-center justify-start mt-[7px]">
         <button onClick={() => updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false })} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'DONE' && <Check size={11} className="text-white stroke-[3]" />}
-          {task.isTimerOn && <div className="w-1 h-1 bg-white rounded-full animate-pulse" />}
+          {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>
       </div>
       <div className="flex-1 relative">
@@ -276,6 +276,34 @@ function UnifiedTaskItem({
   );
 }
 
+// --- [컴포넌트] 날짜 선택 모달 ---
+function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date) => void, onClose: () => void }) {
+  const [viewDate, setViewDate] = useState(new Date());
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
+  return (
+    <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
+          <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+          <button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}
+          {days.map((d: any, i) => {
+            if (!d) return <div key={i} />;
+            return <button key={i} onClick={() => onSelectDate(d)} className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>;
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
@@ -291,6 +319,7 @@ export default function App() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const lastClickedIndex = useRef<number | null>(null);
   
+  // A SECOND 가리기 상태 (로컬 저장 - 공간별 분리)
   const [isSecondVisible, setIsSecondVisible] = useState(true);
 
   const [history, setHistory] = useState<Task[][]>([]);
@@ -538,7 +567,7 @@ export default function App() {
                 <div className="flex items-center justify-between mb-2 px-3">
                   <div className="flex items-center gap-3">
                     <h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2>
-                    <button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={18} /></button>
+                    <button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500"><Plus size={18} /></button>
                   </div>
                 </div>
                 <div className="space-y-0">
@@ -555,7 +584,7 @@ export default function App() {
             <div className="flex items-center justify-between mb-2 px-3">
               <div className="flex items-center gap-3">
                 <h2 className="text-[11px] font-black tracking-[0.2em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={16} /> FLOW</h2>
-                <button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-[#7c4dff] transition-colors"><Plus size={18} /></button>
+                <button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
               </div>
             </div>
             <div className="space-y-0">

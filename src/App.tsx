@@ -407,11 +407,10 @@ export default function App() {
               id: task.id,
               user_id: user.id,
               space_id: currentSpace.id,
-              name: task.name || task.text || '',
+              title: task.name || task.text || '',
               status: task.status,
-              // indent 컬럼이 DB에 없으므로 제거하고 depth만 사용 (DB 스키마 불일치 해결)
-              // indent: task.indent, 
               parent: task.parent,
+              createdAt: task.created_at || new Date().toISOString(),
             }));
             const { error } = await supabase.from('tasks').upsert(updates, { onConflict: 'id' });
             if (error) console.error('Supabase task sync error:', error);

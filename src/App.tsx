@@ -6,7 +6,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, Eye, EyeOff, ArrowRight, ArrowLeft, RotateCcw, RotateCw, Calendar, Trash2, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, ArrowRight, ArrowLeft, RotateCcw, RotateCw, Calendar, Trash2, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
 
 // --- 데이터 타입 ---
 type TaskStatus = 'LATER' | 'NOW' | 'DONE';
@@ -213,12 +213,12 @@ function UnifiedTaskItem({
       }
       return;
     }
-    if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0) {
+    if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
       onMergeWithPrevious(task.id, task.text);
       return;
     }
-    if (e.key === 'Delete' && textareaRef.current?.selectionStart === task.text.length) {
+    if (e.key === 'Delete' && textareaRef.current?.selectionStart === task.text.length && textareaRef.current?.selectionEnd === task.text.length) {
       e.preventDefault();
       onMergeWithNext(task.id, task.text);
       return;

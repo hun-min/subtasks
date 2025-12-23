@@ -229,7 +229,7 @@ function UnifiedTaskItem({
     if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); onMoveDown?.(); return; }
     if (e.key === 'ArrowUp' && !e.altKey) { if (index > 0) { e.preventDefault(); setFocusedTaskId(allTasks[index-1].id); } }
     if (e.key === 'ArrowDown' && !e.altKey) { if (index < allTasks.length - 1) { e.preventDefault(); setFocusedTaskId(allTasks[index+1].id); } }
-    if ((e.ctrlKey || e.metaKey) && e.key === ' ') { e.preventDefault(); updateTask({ ...task, isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined }); }
+    if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) { e.preventDefault(); updateTask({ ...task, isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined }); }
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false }); }
   };
 
@@ -251,7 +251,10 @@ function UnifiedTaskItem({
 
   return (
     <div ref={setNodeRef} style={style} onClick={(e) => onTaskClick(e, task.id, index)} className={`relative group flex items-start gap-2 py-0 px-4 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-[#7c4dff]/10 border-l-2 border-[#7c4dff]' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
-      {currentDepth > 0 && <div className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${paddingLeft + 6}px` }} />}
+          {currentDepth > 0 && Array.from({ length: currentDepth }).map((_, i) => (
+            <div key={i} className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${i * 24 + 12}px` }} />
+          ))}
+
       <div className="flex flex-col items-center justify-start mt-[7px]">
         <button onClick={() => updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false })} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'DONE' && <Check size={11} className="text-white stroke-[3]" />}
@@ -277,6 +280,20 @@ function UnifiedTaskItem({
   );
 }
 
+// --- 유틸리티: 데이터 마이그레이션 ---
+const migrateTasks = (tasks: any[]): Task[] => {
+  if (!Array.isArray(tasks)) return [];
+  return tasks.map(t => ({
+    ...t,
+    status: t.status || (t.done ? 'DONE' : 'LATER'),
+    depth: t.depth || 0,
+    isSecond: t.isSecond || false,
+    actTime: t.actTime || 0,
+    planTime: t.planTime || 0,
+    percent: t.percent || 0
+  }));
+};
+
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
@@ -285,6 +302,7 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
   const [logs, setLogs] = useState<DailyLog[]>([]);
+  const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
   const [showHistoryTarget, setShowHistoryTarget] = useState<string | null>(null);
@@ -300,8 +318,35 @@ export default function App() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   const saveToLocalStorage = useCallback((allLogs: DailyLog[]) => {
-    if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(allLogs));
-  }, [currentSpace]);
+    if (currentSpace) {
+      localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(allLogs));
+      
+      // Sync with Supabase
+      if (user && navigator.onLine) {
+        // Debounce sync to avoid too many requests
+        const syncId = setTimeout(async () => {
+          try {
+            const today = new Date().toDateString();
+            const logToSync = allLogs.find(l => l.date === today);
+            
+            if (logToSync) {
+              await supabase.from('task_logs').upsert({
+                user_id: user.id,
+                space_id: currentSpace.id,
+                date: today,
+                tasks: JSON.stringify(logToSync.tasks),
+                memo: logToSync.memo || ''
+              }, { onConflict: 'user_id, space_id, date' });
+            }
+          } catch (error) {
+            console.error('Sync failed:', error);
+          }
+        }, 1000); // 1 second debounce
+        
+        return () => clearTimeout(syncId);
+      }
+    }
+  }, [currentSpace, user]);
 
   // 'A SECOND' 가리기 상태 동기화
   useEffect(() => {
@@ -330,8 +375,23 @@ export default function App() {
 
   useEffect(() => {
     if (currentSpace) {
+      setLocalLogsLoaded(false);
       const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
-      let currentLogs: DailyLog[] = saved ? JSON.parse(saved) : [];
+      let currentLogs: DailyLog[] = [];
+      if (saved) {
+        try {
+           const parsedLogs = JSON.parse(saved);
+           // 마이그레이션 적용
+           currentLogs = parsedLogs.map((log: any) => ({
+             ...log,
+             tasks: migrateTasks(log.tasks)
+           }));
+        } catch (e) {
+           console.error('Failed to parse logs', e);
+           currentLogs = [];
+        }
+      }
+
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       if (!log) {
@@ -347,8 +407,72 @@ export default function App() {
       setHistoryIndex(0);
       const savedVisible = localStorage.getItem(`ultra_tasks_is_second_visible_${currentSpace.id}`);
       setIsSecondVisible(savedVisible !== null ? JSON.parse(savedVisible) : true);
+      
+      setLocalLogsLoaded(true);
     }
   }, [currentSpace, viewDate]);
+
+  // Supabase 동기화 (불러오기)
+  useEffect(() => {
+    if (!user || !currentSpace || !localLogsLoaded) return;
+    
+    const loadFromSupabase = async () => {
+      try {
+        const { data } = await supabase
+          .from('task_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('space_id', currentSpace.id);
+          
+        if (data && data.length > 0) {
+          const supabaseLogs: DailyLog[] = data.map(item => {
+            let parsedTasks: Task[] = [];
+            try { parsedTasks = JSON.parse(item.tasks); } catch (e) {}
+            return {
+              date: item.date,
+              tasks: migrateTasks(parsedTasks),
+              memo: item.memo
+            };
+          });
+
+          setLogs(prev => {
+            const newLogs = [...prev];
+            let changed = false;
+
+            supabaseLogs.forEach(serverLog => {
+               if (serverLog.date === 'SETTINGS') return;
+               const idx = newLogs.findIndex(l => l.date === serverLog.date);
+               if (idx >= 0) {
+                 if (JSON.stringify(newLogs[idx]) !== JSON.stringify(serverLog)) {
+                    newLogs[idx] = serverLog;
+                    changed = true;
+                 }
+               } else {
+                 newLogs.push(serverLog);
+                 changed = true;
+               }
+            });
+
+            if (changed) {
+              localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+              
+              const currentViewLog = newLogs.find(l => l.date === viewDate.toDateString());
+              if (currentViewLog) {
+                setTasks(currentViewLog.tasks);
+                setHistory([currentViewLog.tasks]);
+                setHistoryIndex(0);
+              }
+              return newLogs;
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        console.error('Supabase load error:', error);
+      }
+    };
+    loadFromSupabase();
+  }, [user, currentSpace, localLogsLoaded]);
 
   const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
     setTasks(newTasks);
@@ -568,7 +692,7 @@ export default function App() {
           {tasks.length === 0 && <button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="w-full py-2 border border-dashed border-white/5 rounded-2xl text-gray-700 text-xs font-bold mt-2 transition-all"><Plus size={14} /> NEW FLOW</button>}
         </div>
         {activeTask && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-w-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-w-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1) px-2">
             <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 shadow-[0_25px_60px_rgba(0,0,0,0.6)] flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide no-scrollbar mx-auto">
               <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }` }} />
               <div className="flex items-center gap-2 flex-shrink-0 pl-1">

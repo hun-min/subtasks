@@ -207,7 +207,7 @@ function UnifiedTaskItem({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
-  const paddingLeft = currentDepth * 24;
+  const paddingLeft = currentDepth * 28; // 간격 조금 더 넓힘
   const isFocused = focusedTaskId === task.id;
 
   const style = {
@@ -220,7 +220,6 @@ function UnifiedTaskItem({
   const [suggestions, setSuggestions] = useState<Task[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
-  // 모바일 스와이프 들여쓰기 감지
   const itemTouchStart = useRef<number | null>(null);
 
   useEffect(() => {
@@ -273,50 +272,41 @@ function UnifiedTaskItem({
     }
   };
 
-  const handleItemTouchStart = (e: React.TouchEvent) => {
-    itemTouchStart.current = e.touches[0].clientX;
-  };
-
+  const handleItemTouchStart = (e: React.TouchEvent) => { itemTouchStart.current = e.touches[0].clientX; };
   const handleItemTouchEnd = (e: React.TouchEvent) => {
     if (itemTouchStart.current === null) return;
     const touchEnd = e.changedTouches[0].clientX;
-    const diff = touchEnd - itemTouchStart.current; // 오른쪽으로 밀면 들여쓰기
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) onIndent?.();
-      else onOutdent?.();
-    }
+    const diff = touchEnd - itemTouchStart.current;
+    if (Math.abs(diff) > 50) { if (diff > 0) onIndent?.(); else onOutdent?.(); }
     itemTouchStart.current = null;
   };
 
   const getStatusColor = () => {
-    if (task.isTimerOn) return 'bg-blue-600 border-blue-600 shadow-[0_0_8px_rgba(59,130,246,0.5)]';
-    if (task.status === 'DONE') return 'bg-green-600 border-green-600';
-    return 'bg-transparent border-gray-700 hover:border-gray-500';
+    if (task.isTimerOn) return 'bg-[#7c4dff] border-[#7c4dff] shadow-[0_0_12px_rgba(124,77,255,0.6)]';
+    if (task.status === 'DONE') return 'bg-[#4caf50] border-[#4caf50]';
+    return 'bg-transparent border-gray-600 hover:border-gray-400';
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-1 pl-4 transition-colors ${isFocused ? 'bg-white/5' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
-      {currentDepth > 0 && <div className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${paddingLeft + 6}px` }} />}
-      <div className="flex items-center gap-1 mt-1.5 min-w-[60px] justify-end mr-1">
-        <span className="text-[10px] text-gray-600 font-mono">{formatTime(task.actTime)}</span>
-      </div>
-      <button onClick={() => updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false })} className={`mt-2 flex-shrink-0 w-4 h-4 border rounded flex items-center justify-center transition-all ${getStatusColor()}`}>
-        {task.status === 'DONE' && <Check size={10} className="text-white" />}
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-3 py-0.5 px-4 transition-colors ${isFocused ? 'bg-white/[0.03]' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
+      {currentDepth > 0 && <div className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${paddingLeft + 10}px` }} />}
+      <button onClick={() => updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false })} className={`mt-2 flex-shrink-0 w-[18px] h-[18px] border-[1.5px] rounded-[4px] flex items-center justify-center transition-all ${getStatusColor()}`}>
+        {task.status === 'DONE' && <Check size={12} className="text-white stroke-[3]" />}
         {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
       </button>
       <div className="flex-1 relative">
-        <AutoResizeTextarea value={task.text} autoFocus={isFocused} onFocus={() => setFocusedTaskId(task.id)} onChange={(e: any) => updateTask({ ...task, text: e.target.value })} onKeyDown={handleKeyDown} className={`w-full text-sm leading-relaxed py-1.5 ${task.status === 'DONE' ? 'text-gray-600 line-through' : 'text-gray-200'}`} placeholder="" />
+        <AutoResizeTextarea value={task.text} autoFocus={isFocused} onFocus={() => setFocusedTaskId(task.id)} onChange={(e: any) => updateTask({ ...task, text: e.target.value })} onKeyDown={handleKeyDown} className={`w-full text-[17px] font-medium leading-[1.4] py-1.5 ${task.status === 'DONE' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} placeholder="" />
         {suggestions.length > 0 && (
           <div className="absolute left-0 top-full z-[110] mt-1 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[200px]">
             {suggestions.map((s, idx) => (
-              <button key={idx} onClick={() => { updateTask({ ...task, text: s.text }); setSuggestions([]); }} className={`w-full px-3 py-2 text-left text-xs ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.text}</button>
+              <button key={idx} onClick={() => { updateTask({ ...task, text: s.text }); setSuggestions([]); }} className={`w-full px-3 py-2 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.text}</button>
             ))}
           </div>
         )}
       </div>
-      <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-1.5 mr-2`}>
-        <button onClick={() => deleteTask(task.id)} className="text-gray-700 hover:text-red-500 p-1"><X size={12} /></button>
-        <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab text-gray-600 flex items-center justify-center"><List size={12} /></div>
+      <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-1.5`}>
+        <button onClick={() => deleteTask(task.id)} className="text-gray-600 hover:text-red-500 p-1"><X size={14} /></button>
+        <div {...attributes} {...listeners} className="w-5 h-5 cursor-grab text-gray-700 flex items-center justify-center"><List size={14} /></div>
       </div>
     </div>
   );
@@ -335,7 +325,6 @@ export default function App() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isSecondVisible, setIsSecondVisible] = useState(true);
   
-  // 스와이프 관련
   const touchStart = useRef<number | null>(null);
 
   const sensors = useSensors(
@@ -445,11 +434,8 @@ export default function App() {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    // 캘린더 영역에서만 작동하도록 (리스트의 스와이프와 겹치지 않게)
     const target = e.target as HTMLElement;
-    if (target.closest('.calendar-area')) {
-      touchStart.current = e.touches[0].clientX;
-    }
+    if (target.closest('.calendar-area')) touchStart.current = e.touches[0].clientX;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -473,27 +459,23 @@ export default function App() {
   const completionRate = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white selection:bg-indigo-500/30 font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#050505] text-[#e0e0e0] selection:bg-[#7c4dff]/30 font-sans overflow-x-hidden">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4 pb-32">
-        <div className="mb-4 flex justify-between items-center"><SpaceSelector /><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500">{user ? 'Logout' : 'Login'}</button></div>
+        <div className="mb-4 flex justify-between items-center"><SpaceSelector /><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button></div>
         
         {/* 캘린더 */}
-        <div 
-          className="calendar-area mb-8 bg-[#0f0f14]/80 backdrop-blur-md p-5 rounded-3xl border border-white/5 shadow-2xl"
-          onTouchStart={handleTouchStart} 
-          onTouchEnd={handleTouchEnd}
-        >
+        <div className="calendar-area mb-8 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
            <div className="flex justify-between items-center mb-5 px-1">
-              <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={20} /></button>
+              <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button>
               <div className="text-center">
-                <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-0.5">{viewDate.getFullYear()}</div>
-                <div className="font-black text-lg">{viewDate.toLocaleString('default', { month: 'long' })}</div>
+                <div className="text-[11px] text-gray-500 uppercase tracking-widest mb-0.5 font-bold">{viewDate.getFullYear()}</div>
+                <div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div>
               </div>
-              <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={20} /></button>
+              <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button>
            </div>
            <div className="grid grid-cols-7 gap-1">
-              {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-bold py-1">{d}</div>)}
+              {['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[11px] text-gray-500 font-black py-1">{d}</div>)}
               {Array.from({length: 35}).map((_, i) => {
                 const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
                 d.setDate(d.getDate() + (i - d.getDay()));
@@ -503,9 +485,9 @@ export default function App() {
                 const hasTasks = log && log.tasks.length > 0;
                 const dailyRate = (log && log.tasks.length > 0) ? Math.round((log.tasks.filter(t => t.status === 'DONE').length / log.tasks.length) * 100) : 0;
                 return (
-                  <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all relative ${isSelected ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : isCurrentMonth ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'}`}>
-                    <span className="font-bold">{d.getDate()}</span>
-                    {hasTasks && <div className={`mt-0.5 text-[8px] font-mono ${isSelected ? 'text-blue-100' : 'text-blue-500'}`}>{dailyRate}%</div>}
+                  <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all relative ${isSelected ? 'bg-[#7c4dff] text-white shadow-lg shadow-[#7c4dff]/20' : isCurrentMonth ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'}`}>
+                    <span className="font-black text-[14px]">{d.getDate()}</span>
+                    {hasTasks && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : 'text-[#7c4dff]'}`}>{dailyRate}%</div>}
                   </button>
                 )
               })}
@@ -514,24 +496,24 @@ export default function App() {
 
         {/* 평가 및 메모 */}
         <div className="mb-10 text-center px-4">
-          <div className="text-4xl font-black mb-1 flex items-baseline justify-center gap-1">
-            {doneCount}<span className="text-xl text-gray-700 font-thin">/</span>{totalCount}
-            <span className="text-lg text-blue-500 font-bold ml-1">{completionRate}%</span>
+          <div className="text-[52px] font-black mb-1 flex items-baseline justify-center text-white tracking-tighter">
+            {doneCount}<span className="text-[28px] text-gray-600 font-light mx-2">/</span>{totalCount}
+            <span className="text-[20px] text-[#7c4dff] font-black ml-2 tracking-normal">{completionRate}%</span>
           </div>
-          <AutoResizeTextarea value={currentMemo} onChange={(e: any) => saveLogs(tasks, e.target.value)} placeholder="+" className="w-full bg-transparent text-sm text-blue-400/80 font-medium text-center outline-none placeholder:text-gray-800" />
+          <AutoResizeTextarea value={currentMemo} onChange={(e: any) => saveLogs(tasks, e.target.value)} placeholder="+" className="w-full bg-transparent text-[18px] text-[#7c4dff] font-bold text-center outline-none placeholder:text-gray-800" />
         </div>
 
         <div className="flex-1 space-y-12">
           {/* A SECOND */}
           <div className="animate-in fade-in duration-500">
-            <div className="flex items-center justify-between mb-4 px-3">
-              <h2 className="text-[10px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2">
-                <Clock size={14} className="animate-pulse" /> A SECOND
+            <div className="flex items-center justify-between mb-5 px-3">
+              <h2 className="text-[11px] font-black tracking-[0.25em] text-pink-500 uppercase flex items-center gap-2">
+                <Clock size={16} className="animate-pulse" /> A SECOND
               </h2>
-              <button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-600 hover:text-gray-400 transition-colors p-1">{isSecondVisible ? <Eye size={16} /> : <EyeOff size={16} />}</button>
+              <button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-600 hover:text-gray-400 transition-colors p-1">{isSecondVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button>
             </div>
             {isSecondVisible && (
-              <div className="space-y-0.5">
+              <div className="space-y-0">
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                     {secondTasks.map((task, idx) => (
@@ -539,15 +521,15 @@ export default function App() {
                     ))}
                   </SortableContext>
                 </DndContext>
-                <button onClick={() => handleAddTask(undefined, true)} className="w-full py-2.5 border border-dashed border-pink-500/10 rounded-2xl text-gray-700 hover:text-pink-500/40 transition-all flex items-center justify-center gap-2 text-[10px] font-bold mt-2 uppercase tracking-widest"><Plus size={12} /> Add Ritual</button>
+                <button onClick={() => handleAddTask(undefined, true)} className="w-full py-2.5 border border-dashed border-pink-500/10 rounded-2xl text-gray-700 hover:text-pink-500/40 transition-all flex items-center justify-center gap-2 text-[11px] font-black mt-2 uppercase tracking-widest"><Plus size={14} /> Add Ritual</button>
               </div>
             )}
           </div>
 
           {/* FLOW */}
           <div className="animate-in fade-in duration-700">
-            <h2 className="text-[10px] font-black tracking-[0.2em] text-blue-500 uppercase mb-4 px-3 flex items-center gap-2"><List size={14} /> FLOW</h2>
-            <div className="space-y-0.5">
+            <h2 className="text-[11px] font-black tracking-[0.25em] text-[#7c4dff] uppercase mb-5 px-3 flex items-center gap-2"><List size={16} /> FLOW</h2>
+            <div className="space-y-0">
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                   {planTasks.map((task, idx) => (
@@ -559,36 +541,35 @@ export default function App() {
                   ))}
                 </SortableContext>
               </DndContext>
-              <button onClick={() => handleAddTask(undefined, false)} className="w-full py-3.5 border border-dashed border-white/5 rounded-2xl text-gray-700 hover:text-gray-500 transition-all flex items-center justify-center gap-2 text-xs font-bold mt-3"><Plus size={14} /> NEW FLOW</button>
+              <button onClick={() => handleAddTask(undefined, false)} className="w-full py-3.5 border border-dashed border-white/5 rounded-2xl text-gray-700 hover:text-gray-400 transition-all flex items-center justify-center gap-2 text-sm font-black mt-3"><Plus size={16} /> NEW FLOW</button>
             </div>
           </div>
         </div>
 
         {/* 플로팅 컨트롤 바 */}
         {activeTask && (
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[92%] max-w-sm z-[200] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
-            <div className="bg-[#1a1a1f]/95 backdrop-blur-2xl border border-white/10 rounded-[24px] p-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between gap-3">
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[94%] max-w-sm z-[200] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
+            <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[28px] p-3.5 shadow-[0_25px_60px_rgba(0,0,0,0.6)] flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <button onClick={() => handleUpdateTask({ ...activeTask, isTimerOn: !activeTask.isTimerOn, timerStartTime: !activeTask.isTimerOn ? Date.now() : undefined })} className={`p-3 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)] scale-110' : 'bg-white/5 text-gray-400 hover:text-white'}`}>
-                  {activeTask.isTimerOn ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+                <button onClick={() => handleUpdateTask({ ...activeTask, isTimerOn: !activeTask.isTimerOn, timerStartTime: !activeTask.isTimerOn ? Date.now() : undefined })} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white shadow-[0_0_25px_rgba(124,77,255,0.5)] scale-110' : 'bg-white/5 text-gray-400 hover:text-white'}`}>
+                  {activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}
                 </button>
-                <div className="h-10 w-px bg-white/10 mx-1" />
+                <div className="h-10 w-px bg-white/10 mx-1.5" />
                 <div className="flex flex-col">
-                  <span className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Execution</span>
-                  <input type="text" value={formatTime(activeTask.actTime)} onChange={(e) => handleUpdateTask({ ...activeTask, actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-sm font-black font-mono text-blue-400 outline-none w-20" />
+                  <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Time</span>
+                  <input type="text" value={formatTime(activeTask.actTime)} onChange={(e) => handleUpdateTask({ ...activeTask, actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight" />
                 </div>
               </div>
               
-              {/* 모바일 들여쓰기 힌트/버튼 (선택 사항이지만 추가하면 명확함) */}
               <div className="flex gap-1">
-                <button onClick={() => { const actualIdx = tasks.findIndex(t => t.id === activeTask.id); if (actualIdx > 0) handleUpdateTask({ ...activeTask, depth: Math.min((tasks[actualIdx-1].depth || 0) + 1, (activeTask.depth || 0) + 1) }); }} className="p-2.5 rounded-xl bg-white/5 text-gray-400 lg:hidden"><ArrowRight size={18} /></button>
-                <button onClick={() => handleUpdateTask({ ...activeTask, depth: Math.max(0, (activeTask.depth || 0) - 1) })} className="p-2.5 rounded-xl bg-white/5 text-gray-400 lg:hidden"><ArrowLeft size={18} /></button>
+                <button onClick={() => { const actualIdx = tasks.findIndex(t => t.id === activeTask.id); if (actualIdx > 0) handleUpdateTask({ ...activeTask, depth: Math.min((tasks[actualIdx-1].depth || 0) + 1, (activeTask.depth || 0) + 1) }); }} className="p-2.5 rounded-xl bg-white/5 text-gray-400 lg:hidden active:bg-white/10"><ArrowRight size={20} /></button>
+                <button onClick={() => handleUpdateTask({ ...activeTask, depth: Math.max(0, (activeTask.depth || 0) - 1) })} className="p-2.5 rounded-xl bg-white/5 text-gray-400 lg:hidden active:bg-white/10"><ArrowLeft size={20} /></button>
               </div>
 
-              <div className="flex items-center gap-1 pr-1">
-                <button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"><Calendar size={18} /></button>
-                <button onClick={() => setShowHistoryTarget(activeTask.text)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"><BarChart2 size={18} /></button>
-                <button onClick={() => setFocusedTaskId(null)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"><X size={18} /></button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"><Calendar size={20} /></button>
+                <button onClick={() => setShowHistoryTarget(activeTask.text)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"><BarChart2 size={20} /></button>
+                <button onClick={() => setFocusedTaskId(null)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"><X size={20} /></button>
               </div>
             </div>
           </div>

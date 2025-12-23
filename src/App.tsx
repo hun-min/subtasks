@@ -10,17 +10,29 @@ import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List
 import { supabase } from './supabase';
 
 // --- 데이터 타입 ---
-type TaskStatus = 'LATER' | 'NOW' | 'DONE';
 
 type Task = {
   id: number;
-  text: string;
-  status: TaskStatus;
+  name: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'icebox';
+  indent: number;
+  parent: number | null;
+  note?: string;
+  due?: string;
+  total_time?: number;
+  space_id: string;
+  created_at?: string;
+  updated_at?: string;
+  start_time?: number;
+  end_time?: number;
+  is_active?: boolean;
+  // Backward compatibility fields
+  text?: string;
   done?: boolean; 
-  percent: number;      
-  planTime: number; 
-  actTime: number; 
-  isTimerOn: boolean;
+  percent?: number;      
+  planTime?: number; 
+  actTime?: number; 
+  isTimerOn?: boolean;
   timerStartTime?: number;
   parentId?: number;
   subtasks?: Task[];
@@ -97,7 +109,7 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
   const historyMap = useMemo(() => {
     const map = new Map();
     logs.forEach(log => {
-      const found = log.tasks.find(t => t.text.trim() === taskName.trim());
+      const found = log.tasks.find(t => t.name.trim() === taskName.trim());
       if (found) map.set(log.date, { task: found });
     });
     return map;
@@ -187,41 +199,42 @@ function UnifiedTaskItem({
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
   useEffect(() => {
-    if (!isFocused || !task.text.startsWith('/')) { setSuggestions([]); return; }
-    const query = task.text.slice(1).toLowerCase();
+    if (!isFocused || !task.name.startsWith('/')) { setSuggestions([]); return; }
+    const query = task.name.slice(1).toLowerCase();
     const matches: Task[] = [];
     const seen = new Set();
-    [...logs].reverse().forEach(log => log.tasks.forEach(t => { if (t.text.toLowerCase().includes(query) && !seen.has(t.text)) { matches.push(t); seen.add(t.text); } }));
+    [...logs].reverse().forEach(log => log.tasks.forEach(t => { if (t.name.toLowerCase().includes(query) && !seen.has(t.name)) { matches.push(t); seen.add(t.name); } }));
     setSuggestions(matches.slice(0, 5));
     setSelectedSuggestionIndex(-1);
-  }, [task.text, isFocused, logs]);
+  }, [task.name, isFocused, logs]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    console.log('handleKeyDown event:', e.key, 'Ctrl:', e.ctrlKey, 'Meta:', e.metaKey, 'Shift:', e.shiftKey);
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
     if (e.key === 'ArrowUp' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
     
     if (e.key === 'Enter') {
       if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
         e.preventDefault();
-        updateTask({ ...task, text: suggestions[selectedSuggestionIndex].text });
+        updateTask({ ...task, name: suggestions[selectedSuggestionIndex].name });
         setSuggestions([]);
       } else if (!e.shiftKey) {
         e.preventDefault();
         const cursorPos = textareaRef.current?.selectionStart || 0;
-        const textBefore = task.text.substring(0, cursorPos);
-        const textAfter = task.text.substring(cursorPos);
+        const textBefore = task.name.substring(0, cursorPos);
+        const textAfter = task.name.substring(cursorPos);
         onAddTaskAtCursor(task.id, textBefore, textAfter);
       }
       return;
     }
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
-      onMergeWithPrevious(task.id, task.text);
+      onMergeWithPrevious(task.id, task.name);
       return;
     }
-    if (e.key === 'Delete' && textareaRef.current?.selectionStart === task.text.length && textareaRef.current?.selectionEnd === task.text.length) {
+    if (e.key === 'Delete' && textareaRef.current?.selectionStart === task.name.length && textareaRef.current?.selectionEnd === task.name.length) {
       e.preventDefault();
-      onMergeWithNext(task.id, task.text);
+      onMergeWithNext(task.id, task.name);
       return;
     }
     if (e.key === 'Tab') { e.preventDefault(); if (e.shiftKey) onOutdent?.(); else onIndent?.(); return; }
@@ -229,8 +242,14 @@ function UnifiedTaskItem({
     if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); onMoveDown?.(); return; }
     if (e.key === 'ArrowUp' && !e.altKey) { if (index > 0) { e.preventDefault(); setFocusedTaskId(allTasks[index-1].id); } }
     if (e.key === 'ArrowDown' && !e.altKey) { if (index < allTasks.length - 1) { e.preventDefault(); setFocusedTaskId(allTasks[index+1].id); } }
-    if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) { e.preventDefault(); updateTask({ ...task, isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined }); }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false }); }
+    if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) { 
+      e.preventDefault(); 
+      updateTask({ ...task, isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined }); 
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { 
+      e.preventDefault(); 
+      updateTask({ ...task, status: task.status === 'completed' ? 'pending' : 'completed', isTimerOn: false }); 
+    }
   };
 
   const swipeTouchStart = useRef<number | null>(null);
@@ -245,7 +264,7 @@ function UnifiedTaskItem({
 
   const getStatusColor = () => {
     if (task.isTimerOn) return 'bg-[#7c4dff] border-[#7c4dff] shadow-[0_0_8px_rgba(124,77,255,0.6)]';
-    if (task.status === 'DONE') return 'bg-[#4caf50] border-[#4caf50]';
+    if (task.status === 'completed') return 'bg-[#4caf50] border-[#4caf50]';
     return 'bg-transparent border-gray-600 hover:border-gray-400';
   };
 
@@ -256,24 +275,24 @@ function UnifiedTaskItem({
           ))}
 
       <div className="flex flex-col items-center justify-start mt-[7px]">
-        <button onClick={() => updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false })} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
-          {task.status === 'DONE' && <Check size={11} className="text-white stroke-[3]" />}
+        <button onClick={() => updateTask({ ...task, status: task.status === 'completed' ? 'pending' : 'completed', isTimerOn: false })} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
+          {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>
       </div>
       <div className="flex-1 relative">
-        <AutoResizeTextarea inputRef={textareaRef} value={task.text} autoFocus={isFocused} onFocus={() => setFocusedTaskId(task.id)} onChange={(e: any) => updateTask({ ...task, text: e.target.value })} onKeyDown={handleKeyDown} className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'DONE' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} placeholder="" />
-        {isFocused && task.text === '' && (
+        <AutoResizeTextarea inputRef={textareaRef} value={task.name} autoFocus={isFocused} onFocus={() => setFocusedTaskId(task.id)} onChange={(e: any) => updateTask({ ...task, name: e.target.value })} onKeyDown={handleKeyDown} className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} placeholder="" />
+        {isFocused && task.name === '' && (
           <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>
         )}
         {suggestions.length > 0 && (
           <div className="absolute left-0 top-full z-[110] mt-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[180px]">
-            {suggestions.map((s, idx) => <button key={idx} onClick={() => { updateTask({ ...task, text: s.text }); setSuggestions([]); }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.text}</button>)}
+            {suggestions.map((s, idx) => <button key={idx} onClick={() => { updateTask({ ...task, name: s.name }); setSuggestions([]); }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.name}</button>)}
           </div>
         )}
       </div>
       <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity mt-[4px]">
-        {task.actTime > 0 && <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap">{formatTimeShort(task.actTime)}</span>}
+        {task.actTime && task.actTime > 0 && <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap">{formatTimeShort(task.actTime)}</span>}
         <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab text-gray-700 flex items-center justify-center outline-none touch-none"><List size={13} /></div>
       </div>
     </div>
@@ -317,34 +336,63 @@ export default function App() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
-  const saveToLocalStorage = useCallback((allLogs: DailyLog[]) => {
-    if (currentSpace) {
-      localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(allLogs));
-      
-      // Sync with Supabase
-      if (user && navigator.onLine) {
-        // Debounce sync to avoid too many requests
-        const syncId = setTimeout(async () => {
-          try {
-            const today = new Date().toDateString();
-            const logToSync = allLogs.find(l => l.date === today);
-            
-            if (logToSync) {
-              await supabase.from('task_logs').upsert({
-                user_id: user.id,
-                space_id: currentSpace.id,
-                date: today,
-                tasks: JSON.stringify(logToSync.tasks),
-                memo: logToSync.memo || ''
-              }, { onConflict: 'user_id, space_id, date' });
-            }
-          } catch (error) {
-            console.error('Sync failed:', error);
-          }
-        }, 1000); // 1 second debounce
-        
-        return () => clearTimeout(syncId);
+// Debounce timeout ref
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const saveToLocalStorage = useCallback((logsToSave: DailyLog[]) => {
+      // Wrapper for backward compatibility if needed, or replace usages
+      // For now, let's just make it call saveTasks with the tasks from the current day log
+      const today = new Date().toDateString();
+      const currentLog = logsToSave.find(l => l.date === today);
+      if (currentLog) {
+          saveTasks(currentLog.tasks);
       }
+  }, []);
+
+  const saveTasks = useCallback((tasksToSave: Task[]) => {
+    if (currentSpace) {
+      // Still save the whole log structure for now to avoid breaking things
+      const today = new Date().toDateString();
+      const localData = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
+      let logs: DailyLog[] = [];
+      if (localData) {
+        try {
+          logs = JSON.parse(localData);
+        } catch (e) { console.error(e); }
+      }
+      
+      const logIndex = logs.findIndex(l => l.date === today);
+      if (logIndex > -1) {
+        logs[logIndex].tasks = tasksToSave;
+      } else {
+        logs.push({ date: today, tasks: tasksToSave, memo: '' });
+      }
+      localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
+
+      // Debounced sync with Supabase for TASKS
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+
+      syncTimeoutRef.current = setTimeout(async () => {
+        if (user && navigator.onLine) {
+          try {
+            const updates = tasksToSave.map(task => ({
+              id: task.id,
+              user_id: user.id,
+              space_id: currentSpace.id,
+              name: task.name,
+              status: task.status,
+              indent: task.indent,
+              parent: task.parent,
+            }));
+            const { error } = await supabase.from('tasks').upsert(updates, { onConflict: 'id' });
+            if (error) console.error('Supabase task sync error:', error);
+          } catch (error) {
+            console.error('Task sync failed:', error);
+          }
+        }
+      }, 1000); // 1-second debounce
     }
   }, [currentSpace, user]);
 
@@ -397,7 +445,13 @@ export default function App() {
       if (!log) {
         const yesterday = new Date(viewDate); yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayLog = currentLogs.find(l => l.date === yesterday.toDateString());
-        const secondTasks = yesterdayLog ? yesterdayLog.tasks.filter(t => t.isSecond).map(t => ({ ...t, id: Date.now() + Math.random(), status: 'LATER' as TaskStatus, actTime: 0, isTimerOn: false })) : [];
+        const secondTasks = yesterdayLog ? yesterdayLog.tasks.filter(t => t.isSecond).map(t => ({ 
+          ...t, 
+          id: Date.now() + Math.random(), 
+          status: 'pending' as const, 
+          actTime: 0, 
+          isTimerOn: false 
+        })) : [];
         log = { date: dateStr, tasks: secondTasks, memo: '' };
         currentLogs.push(log);
       }
@@ -479,30 +533,30 @@ export default function App() {
     const dateStr = viewDate.toDateString();
     setLogs(prev => {
       const updated = prev.map(l => l.date === dateStr ? { ...l, tasks: newTasks } : l);
-      saveToLocalStorage(updated);
+      saveTasks(newTasks);
       return updated;
     });
     if (updateHistory && !isInternalUpdate.current) {
       setHistory(prev => [...prev.slice(0, historyIndex + 1), newTasks]);
       setHistoryIndex(prev => prev + 1);
     }
-  }, [viewDate, historyIndex, saveToLocalStorage]);
+  }, [viewDate, historyIndex, saveTasks]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setTasks(prev => {
         const now = Date.now();
         let changed = false;
-        const next = prev.map(t => { if (t.isTimerOn && t.timerStartTime) { const elapsed = (now - t.timerStartTime) / 1000; changed = true; return { ...t, actTime: t.actTime + elapsed, timerStartTime: now }; } return t; });
+        const next = prev.map(t => { if (t.isTimerOn && t.timerStartTime) { const elapsed = (now - t.timerStartTime) / 1000; changed = true; return { ...t, actTime: (t.actTime || 0) + elapsed, timerStartTime: now }; } return t; });
         if (changed) {
           const dateStr = viewDate.toDateString();
-          setLogs(prevLogs => { const updated = prevLogs.map(l => l.date === dateStr ? { ...l, tasks: next } : l); saveToLocalStorage(updated); return updated; });
+          setLogs(prevLogs => { const updated = prevLogs.map(l => l.date === dateStr ? { ...l, tasks: next } : l); saveTasks(next); return updated; });
         }
         return changed ? next : prev;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [viewDate, saveToLocalStorage]);
+  }, [viewDate, saveTasks]);
 
   const handleAddTaskAtCursor = (taskId: number, textBefore: string, textAfter: string) => {
     const idx = tasks.findIndex(t => t.id === taskId);
@@ -510,7 +564,22 @@ export default function App() {
     const current = tasks[idx];
     const newTasks = [...tasks];
     newTasks[idx] = { ...current, text: textBefore };
-    const newTask: Task = { id: Date.now(), text: textAfter, status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: current.depth, isSecond: current.isSecond };
+    const newTask: Task = { 
+      id: Date.now(), 
+      name: textAfter, 
+      status: 'pending', 
+      indent: current.indent, 
+      parent: current.parent,
+      // Backward compatibility
+      text: textAfter,
+      percent: 0,
+      planTime: 0,
+      actTime: 0,
+      isTimerOn: false,
+      depth: current.indent,
+      isSecond: current.isSecond,
+      space_id: String(currentSpace?.id || ''), // Add space_id
+    };
     newTasks.splice(idx + 1, 0, newTask);
     updateStateAndLogs(newTasks);
     setFocusedTaskId(newTask.id);
@@ -608,7 +677,7 @@ export default function App() {
   const secondTasks = tasks.filter(t => t.isSecond);
   const getStats = (list: Task[]) => {
     const total = list.length;
-    const done = list.filter(t => t.status === 'DONE').length;
+    const done = list.filter(t => t.status === 'completed').length;
     const rate = total > 0 ? Math.round((done / total) * 100) : 0;
     return { total, done, rate };
   };
@@ -650,7 +719,7 @@ export default function App() {
                 {Array.from({length: 35}).map((_, i) => {
                   const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay()));
                   const log = logs.find(l => l.date === d.toDateString()); const hasTasks = log && log.tasks.length > 0;
-                  const rate = hasTasks ? Math.round((log!.tasks.filter(t => t.status === 'DONE').length / log!.tasks.length) * 100) : 0;
+                  const rate = hasTasks ? Math.round((log!.tasks.filter(t => t.status === 'completed').length / log!.tasks.length) * 100) : 0;
                   const isToday = d.toDateString() === new Date().toDateString();
                   return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all relative ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white shadow-lg shadow-[#7c4dff]/20' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'} ${isToday && d.toDateString() !== viewDate.toDateString() ? 'ring-1 ring-[#7c4dff]/50' : ''}`}><span className="font-black text-[14px]">{d.getDate()}</span>{hasTasks && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{rate}%</div>}</button>;
                 })}
@@ -668,7 +737,26 @@ export default function App() {
           <div className="animate-in fade-in duration-500">
             {isSecondVisible && (
               <>
-                <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={18} /></button></div></div>
+                <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { 
+      const newTask: Task = { 
+        id: Date.now(), 
+        name: '', 
+        status: 'pending', 
+        indent: 0, 
+        parent: null,
+        space_id: String(currentSpace?.id || 'default'),
+        // Backward compatibility
+        text: '',
+        percent: 0,
+        planTime: 0,
+        actTime: 0,
+        isTimerOn: false,
+        depth: 0,
+        isSecond: true 
+      }; 
+      updateStateAndLogs([...tasks, newTask]); 
+      setFocusedTaskId(newTask.id); 
+    }} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={18} /></button></div></div>
                 <div className="space-y-0">
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
@@ -680,7 +768,26 @@ export default function App() {
             )}
           </div>
           <div className="animate-in fade-in duration-700">
-            <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={16} /> FLOW</h2><button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-[#7c4dff] transition-colors"><Plus size={18} /></button></div></div>
+          <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={16} /> FLOW</h2><button onClick={() => { 
+            const newTask: Task = { 
+              id: Date.now(), 
+              name: '', 
+              status: 'pending', 
+              indent: 0, 
+              parent: null,
+              space_id: String(currentSpace?.id || 'default'), 
+              // Backward compatibility
+              text: '',
+              percent: 0,
+              planTime: 0,
+              actTime: 0,
+              isTimerOn: false,
+              depth: 0,
+              isSecond: false 
+            }; 
+            updateStateAndLogs([...tasks, newTask]); 
+            setFocusedTaskId(newTask.id); 
+          }} className="text-gray-500 hover:text-[#7c4dff] transition-colors"><Plus size={18} /></button></div></div>
             <div className="space-y-0">
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
@@ -689,7 +796,26 @@ export default function App() {
               </DndContext>
             </div>
           </div>
-          {tasks.length === 0 && <button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="w-full py-2 border border-dashed border-white/5 rounded-2xl text-gray-700 text-xs font-bold mt-2 transition-all"><Plus size={14} /> NEW FLOW</button>}
+          {tasks.length === 0 && <button onClick={() => { 
+            const newTask: Task = { 
+              id: Date.now(), 
+              name: '', 
+              status: 'pending', 
+              indent: 0, 
+              parent: null,
+              space_id: String(currentSpace?.id || 'default'), 
+              // Backward compatibility
+              text: '',
+              percent: 0,
+              planTime: 0,
+              actTime: 0,
+              isTimerOn: false,
+              depth: 0,
+              isSecond: false 
+            }; 
+            updateStateAndLogs([...tasks, newTask]); 
+            setFocusedTaskId(newTask.id); 
+          }} className="w-full py-2 border border-dashed border-white/5 rounded-2xl text-gray-700 text-xs font-bold mt-2 transition-all"><Plus size={14} /> NEW FLOW</button>}
         </div>
         {activeTask && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-w-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1) px-2">
@@ -698,7 +824,7 @@ export default function App() {
               <div className="flex items-center gap-2 flex-shrink-0 pl-1">
                 <button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white shadow-[0_0_25px_rgba(124,77,255,0.5)] scale-105' : 'bg-white/5 text-gray-400 hover:text-white'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button><div className="flex flex-col flex-shrink-0 ml-1">
                   <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-0.5 text-center">Execution</span>
-                  <input type="text" value={formatTimeFull(activeTask.actTime)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight text-center" />
+                  <input type="text" value={formatTimeFull(activeTask.actTime || 0)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 tracking-tight text-center" />
                 </div>
               </div>
               <div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" /><div className="flex items-center gap-0.5 flex-shrink-0">
@@ -712,7 +838,7 @@ export default function App() {
               <div className="h-8 w-px bg-white/10 flex-shrink-0 mx-1" /><div className="flex items-center gap-0.5 flex-shrink-0 pr-2">
                 <button onClick={() => { const newTasks = tasks.filter(t => t.id !== activeTask.id); updateStateAndLogs(newTasks); const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx > 0) setFocusedTaskId(tasks[idx-1].id); else if (newTasks.length > 0) setFocusedTaskId(newTasks[0].id); else setFocusedTaskId(null); }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500 transition-colors flex-shrink-0"><X size={18} /></button>
                 <button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 flex-shrink-0 transition-colors"><Calendar size={18} /></button>
-                <button onClick={() => setShowHistoryTarget(activeTask.text)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 flex-shrink-0 transition-colors"><BarChart2 size={18} /></button>
+                <button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 flex-shrink-0 transition-colors"><BarChart2 size={18} /></button>
                 <button onMouseDown={(e) => e.preventDefault()} onClick={() => handleUndo()} disabled={historyIndex <= 0} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20 flex-shrink-0 transition-colors"><RotateCcw size={18} /></button>
                 <button onMouseDown={(e) => e.preventDefault()} onClick={() => handleRedo()} disabled={historyIndex >= history.length - 1} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20 flex-shrink-0 transition-colors"><RotateCw size={18} /></button>
                 <button onClick={() => setFocusedTaskId(null)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors flex-shrink-0"><ArrowDown size={18} className="rotate-180" /></button>

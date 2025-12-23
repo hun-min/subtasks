@@ -319,14 +319,23 @@ export default function App() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const lastClickedIndex = useRef<number | null>(null);
   
-  const [isSecondVisible, setIsSecondVisible] = useState(() => {
-    const saved = localStorage.getItem('ultra_tasks_is_second_visible');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
+  // A SECOND 가리기 상태 (로컬 저장 - 공간별 분리)
+  const [isSecondVisible, setIsSecondVisible] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem('ultra_tasks_is_second_visible', JSON.stringify(isSecondVisible));
-  }, [isSecondVisible]);
+    if (currentSpace) {
+      const saved = localStorage.getItem(`ultra_tasks_is_second_visible_${currentSpace.id}`);
+      setIsSecondVisible(saved !== null ? JSON.parse(saved) : true);
+    }
+  }, [currentSpace]);
+
+  const toggleSecondVisible = () => {
+    if (currentSpace) {
+      const newVal = !isSecondVisible;
+      setIsSecondVisible(newVal);
+      localStorage.setItem(`ultra_tasks_is_second_visible_${currentSpace.id}`, JSON.stringify(newVal));
+    }
+  };
   
   const [history, setHistory] = useState<Task[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -553,7 +562,7 @@ export default function App() {
 
         <div className="flex-1 space-y-8 pb-32">
           <div className="animate-in fade-in duration-500">
-            <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500"><Plus size={18} /></button></div><button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-600 p-1">{isSecondVisible ? <Eye size={16} /> : <EyeOff size={16} />}</button></div>
+            <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { const newTask: Task = { id: Date.now(), text: '', status: 'LATER', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500"><Plus size={18} /></button></div><button onClick={toggleSecondVisible} className="text-gray-600 p-1">{isSecondVisible ? <Eye size={16} /> : <EyeOff size={16} />}</button></div>
             {isSecondVisible && <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} />)}</SortableContext></DndContext></div>}
           </div>
           <div className="animate-in fade-in duration-700">

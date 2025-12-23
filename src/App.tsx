@@ -7,6 +7,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, ArrowRight, ArrowLeft, RotateCcw, RotateCw, Calendar, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { supabase } from './supabase';
 
 // --- 데이터 타입 ---
@@ -356,9 +357,11 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isInternalUpdate = useRef(false);
   const swipeTouchStart = useRef<number | null>(null);
-
+  const [isReady, setIsReady] = useState(() => !!localStorage.getItem('manifesto'));
+  const [manifesto, setManifesto] = useState('');
+  const [showAudit, setShowAudit] = useState(false);
+  const [auditNote, setAuditNote] = useState('');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-
 // Debounce timeout ref
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -711,8 +714,124 @@ export default function App() {
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
 
+  const DeepFocusOverlay = () => {
+    const activeTimerTask = tasks.find(t => t.isTimerOn);
+    
+    if (showAudit) {
+       const targetTask = activeTask || tasks.find(t => t.id === focusedTaskId) || { name: 'Task' };
+       const title = (targetTask as any).name || (targetTask as any).text || 'Task';
+
+       return (
+        <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-6 font-mono animate-in fade-in duration-300">
+          <div className="w-full max-w-md border border-gray-700 bg-gray-900 p-8 rounded-xl shadow-2xl">
+            <h3 className="text-gray-500 text-xs uppercase tracking-widest mb-6">Mission Debriefing</h3>
+            <div className="mb-8 opacity-50">
+              <p className="text-xs text-blue-400 mb-1">INTENTION</p>
+              <h2 className="text-xl text-white">{title}</h2>
+            </div>
+            <div className="mb-8">
+              <p className="text-xs text-green-400 mb-2">REALITY (RESULT)</p>
+              <input 
+                type="text" 
+                value={auditNote}
+                onChange={(e) => setAuditNote(e.target.value)}
+                placeholder="무엇을 달성했는지 팩트만 기록하십시오."
+                className="w-full bg-black border-b border-gray-600 text-white p-2 outline-none focus:border-green-500 transition-colors"
+                autoFocus
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="mb-2">
+              <p className="text-xs text-yellow-400 mb-2">SATISFACTION SCORE</p>
+              <div className="flex justify-between gap-2">
+                {[1, 2, 3, 4, 5].map(score => (
+                  <button 
+                    key={score}
+                    className="w-10 h-10 rounded-full border border-gray-600 text-gray-400 hover:bg-white hover:text-black hover:border-white transition-all font-bold"
+                    onClick={async () => {
+                      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#3b82f6', '#8b5cf6', '#ffffff'] });
+                      
+                      if (targetTask && (targetTask as any).id && auditNote) {
+                          const tId = (targetTask as any).id;
+                          const tName = (targetTask as any).name || (targetTask as any).text || '';
+                          const newName = tName + (auditNote ? ` [Audit: ${auditNote}]` : '');
+                          updateStateAndLogs(tasks.map(t => t.id === tId ? { ...t, name: newName } : t));
+                      }
+                      
+                      setTimeout(() => {
+                        setShowAudit(false);
+                        setAuditNote('');
+                      }, 800);
+                    }}
+                  >
+                    {score}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (!activeTimerTask) return null;
+
+    const title = activeTimerTask.name || activeTimerTask.text || 'Untitled Task';
+    const timeLeft = activeTimerTask.actTime || 0; 
+    
+    return (
+      <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center animate-in fade-in duration-500">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-gray-950 to-gray-950" />
+        <div className="z-10 w-full max-w-2xl px-8 flex flex-col items-center text-center space-y-12">
+          <div className="space-y-2 opacity-80">
+            <span className="text-blue-400 font-medium tracking-[0.3em] uppercase text-xs">Current Objective</span>
+            <h2 className="text-xl text-gray-400 font-light">FOCUS MODE</h2>
+          </div>
+          <div className="space-y-6">
+            <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">{title}</h1>
+            <div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">
+                {formatTimeFull(timeLeft)}
+            </div>
+          </div>
+          <div className="w-full max-w-md h-1 bg-gray-900 rounded-full overflow-hidden">
+             <div className="h-full bg-blue-500/50 animate-pulse w-full" />
+          </div>
+           <button 
+              onClick={() => {
+                   updateStateAndLogs(tasks.map(t => t.id === activeTimerTask.id ? { ...t, isTimerOn: false } : t));
+                   setFocusedTaskId(activeTimerTask.id);
+                   setShowAudit(true);
+              }}
+              className="px-8 py-3 border border-white/20 rounded-full text-white hover:bg-white/10 transition-all uppercase tracking-widest text-xs"
+           >
+              Complete & Audit
+           </button>
+        </div>
+      </div>
+    );
+  };
+
+  if (!isReady) {
+    return (
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-8 z-[9999] font-mono">
+        <div className="text-green-500 text-sm mb-4">root@system:~$ ./initiate_protocol.sh</div>
+        <input 
+          type="text" 
+          value={manifesto}
+          onChange={(e) => setManifesto(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && manifesto.length > 0) { localStorage.setItem('manifesto', manifesto); setIsReady(true); } }}
+          placeholder="오늘 당신의 사명은 무엇입니까?"
+          className="bg-transparent border-b border-gray-700 text-center text-2xl md:text-4xl text-white outline-none w-full max-w-xl py-2 focus:border-white transition-colors placeholder-gray-800"
+          autoFocus
+        />
+        <p className="text-gray-600 text-xs mt-8 opacity-50">Press Enter to Access System</p>
+      </div>
+    );
+  }
+  
   return (
     <div className="min-h-screen bg-[#050505] text-[#e0e0e0] selection:bg-[#7c4dff]/30 font-sans overflow-x-hidden">
+      <DeepFocusOverlay />
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       {showShortcuts && (
         <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>

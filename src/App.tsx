@@ -357,8 +357,6 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isInternalUpdate = useRef(false);
   const swipeTouchStart = useRef<number | null>(null);
-  const [isReady, setIsReady] = useState(() => !!localStorage.getItem('manifesto'));
-  const [manifesto, setManifesto] = useState('');
   const [showAudit, setShowAudit] = useState(false);
   const [auditNote, setAuditNote] = useState('');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
@@ -810,24 +808,6 @@ export default function App() {
     );
   };
 
-  if (!isReady) {
-    return (
-      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-8 z-[9999] font-mono">
-        <div className="text-green-500 text-sm mb-4">root@system:~$ ./initiate_protocol.sh</div>
-        <input 
-          type="text" 
-          value={manifesto}
-          onChange={(e) => setManifesto(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && manifesto.length > 0) { localStorage.setItem('manifesto', manifesto); setIsReady(true); } }}
-          placeholder="오늘 당신의 사명은 무엇입니까?"
-          className="bg-transparent border-b border-gray-700 text-center text-2xl md:text-4xl text-white outline-none w-full max-w-xl py-2 focus:border-white transition-colors placeholder-gray-800"
-          autoFocus
-        />
-        <p className="text-gray-600 text-xs mt-8 opacity-50">Press Enter to Access System</p>
-      </div>
-    );
-  }
-  
   return (
     <div className="min-h-screen bg-[#050505] text-[#e0e0e0] selection:bg-[#7c4dff]/30 font-sans overflow-x-hidden">
       <DeepFocusOverlay />

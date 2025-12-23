@@ -158,7 +158,7 @@ function UnifiedTaskItem({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
-  const paddingLeft = currentDepth * 18; 
+  const paddingLeft = currentDepth * 24;
   const isFocused = focusedTaskId === task.id;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -185,7 +185,6 @@ function UnifiedTaskItem({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
     if (e.key === 'ArrowUp' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
-    
     if (e.key === 'Enter') {
       if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
         e.preventDefault();
@@ -214,6 +213,7 @@ function UnifiedTaskItem({
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); updateTask({ ...task, status: task.status === 'DONE' ? 'LATER' : 'DONE', isTimerOn: false }); }
   };
 
+  const swipeTouchStart = useRef<number | null>(null);
   const handleItemTouchStart = (e: React.TouchEvent) => { if (document.activeElement?.tagName === 'TEXTAREA') return; swipeTouchStart.current = e.touches[0].clientX; };
   const handleItemTouchEnd = (e: React.TouchEvent) => {
     if (swipeTouchStart.current === null) return;
@@ -222,7 +222,6 @@ function UnifiedTaskItem({
     if (Math.abs(diff) > 60) { if (diff > 0) onIndent?.(); else onOutdent?.(); }
     swipeTouchStart.current = null;
   };
-  const swipeTouchStart = useRef<number | null>(null);
 
   const getStatusColor = () => {
     if (task.isTimerOn) return 'bg-[#7c4dff] border-[#7c4dff] shadow-[0_0_8px_rgba(124,77,255,0.6)]';
@@ -252,34 +251,6 @@ function UnifiedTaskItem({
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-[4px]">
         <div {...attributes} {...listeners} className="w-4 h-4 cursor-grab text-gray-700 flex items-center justify-center outline-none touch-none"><List size={13} /></div>
-      </div>
-    </div>
-  );
-}
-
-// --- [컴포넌트] 날짜 선택 모달 ---
-function DatePickerModal({ onSelectDate, onClose }: { onSelectDate: (date: Date) => void, onClose: () => void }) {
-  const [viewDate, setViewDate] = useState(new Date());
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
-  const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
-  return (
-    <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
-      <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
-          <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
-          <button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button>
-        </div>
-        <div className="grid grid-cols-7 gap-2">
-          {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}
-          {days.map((d: any, i) => {
-            if (!d) return <div key={i} />;
-            return <button key={i} onClick={() => onSelectDate(d)} className={`aspect-square rounded-lg border flex items-center justify-center hover:bg-blue-600/20 transition-colors ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>;
-          })}
-        </div>
       </div>
     </div>
   );

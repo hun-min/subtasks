@@ -183,7 +183,9 @@ function UnifiedTaskItem({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
-  const paddingLeft = currentDepth * 24; 
+  // 기본 패딩 16px (px-4) + depth * 24px
+  const basePadding = 16;
+  const paddingLeft = basePadding + (currentDepth * 24); 
   const isFocused = focusedTaskId === task.id;
   const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -209,7 +211,6 @@ function UnifiedTaskItem({
   }, [task.name, isFocused, logs]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    console.log('handleKeyDown event:', e.key, 'Ctrl:', e.ctrlKey, 'Meta:', e.metaKey, 'Shift:', e.shiftKey);
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
     if (e.key === 'ArrowUp' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
     
@@ -237,7 +238,13 @@ function UnifiedTaskItem({
       onMergeWithNext(task.id, task.name);
       return;
     }
-    if (e.key === 'Tab') { e.preventDefault(); if (e.shiftKey) onOutdent?.(); else onIndent?.(); return; }
+    // Tab 키: 무조건 들여쓰기/내어쓰기 동작
+    if (e.key === 'Tab') { 
+      e.preventDefault(); 
+      if (e.shiftKey) onOutdent?.(); 
+      else onIndent?.(); 
+      return; 
+    }
     if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); onMoveUp?.(); return; }
     if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); onMoveDown?.(); return; }
     if (e.key === 'ArrowUp' && !e.altKey) { if (index > 0) { e.preventDefault(); setFocusedTaskId(allTasks[index-1].id); } }
@@ -271,7 +278,7 @@ function UnifiedTaskItem({
   return (
     <div ref={setNodeRef} style={style} onClick={(e) => onTaskClick(e, task.id, index)} className={`relative group flex items-start gap-2 py-0 px-4 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-[#7c4dff]/10 border-l-2 border-[#7c4dff]' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
           {currentDepth > 0 && Array.from({ length: currentDepth }).map((_, i) => (
-            <div key={i} className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${i * 24 + 12}px` }} />
+            <div key={i} className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${basePadding + i * 24 + 11}px` }} />
           ))}
 
       <div className="flex flex-col items-center justify-start mt-[7px]">
@@ -760,7 +767,7 @@ export default function App() {
                 <div className="space-y-0">
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                      {secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} />)}
+                      {secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}
                     </SortableContext>
                   </DndContext>
                 </div>
@@ -818,8 +825,8 @@ export default function App() {
           }} className="w-full py-2 border border-dashed border-white/5 rounded-2xl text-gray-700 text-xs font-bold mt-2 transition-all"><Plus size={14} /> NEW FLOW</button>}
         </div>
         {activeTask && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] max-w-md z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1) px-2">
-            <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 shadow-[0_25px_60px_rgba(0,0,0,0.6)] flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide no-scrollbar mx-auto">
+          <div className="fixed bottom-6 left-0 right-0 z-[500] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1) pointer-events-none flex justify-center px-4">
+            <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 shadow-[0_25px_60px_rgba(0,0,0,0.6)] flex items-center justify-start gap-2 overflow-x-auto scrollbar-hide no-scrollbar pointer-events-auto max-w-full w-fit">
               <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }` }} />
               <div className="flex items-center gap-2 flex-shrink-0 pl-1">
                 <button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white shadow-[0_0_25px_rgba(124,77,255,0.5)] scale-105' : 'bg-white/5 text-gray-400 hover:text-white'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button><div className="flex flex-col flex-shrink-0 ml-1">

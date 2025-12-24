@@ -405,21 +405,21 @@ export default function App() {
 
       if (user && currentSpace) {
         syncTimeoutRef.current = setTimeout(async () => {
-          // 최신 상태를 다시 가져오기
-          const latestLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
-          if (!latestLogsStr) return;
-          const latestLogs: DailyLog[] = JSON.parse(latestLogsStr);
-          const currentLog = latestLogs.find(l => l.date === dateStr);
+          // 서버로 보낼 때는 인메모리 tasksToSave가 아닌 localStorage의 가장 최신 상태를 읽어서 전송
+          const finalLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
+          if (!finalLogsStr) return;
+          const finalLogs: DailyLog[] = JSON.parse(finalLogsStr);
+          const finalLog = finalLogs.find(l => l.date === dateStr);
           
-          if (currentLog) {
+          if (finalLog) {
             const { error } = await supabase
               .from('task_logs')
               .upsert({
                 user_id: user.id,
                 space_id: currentSpace.id,
                 date: dateStr,
-                tasks: JSON.stringify(currentLog.tasks),
-                memo: currentLog.memo || ''
+                tasks: JSON.stringify(finalLog.tasks),
+                memo: finalLog.memo || ''
               }, { onConflict: 'user_id,space_id,date' });
             
             if (error) {
@@ -432,7 +432,7 @@ export default function App() {
   }, [currentSpace, user, viewDate]);
 
   const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
-    setTasks(newTasks);
+    setTasks([...newTasks]);
     const dateStr = viewDate.toDateString();
     setLogs(prev => {
       const log = prev.find(l => l.date === dateStr);
@@ -500,7 +500,6 @@ export default function App() {
       let log = currentLogs.find(l => l.date === dateStr);
       const isNeverVisited = !log;
       
-      // 미래 날짜 자동 생성 방지
       const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
 
       if (isNeverVisited && isNotFuture) {
@@ -602,8 +601,16 @@ export default function App() {
             const existingIdx = prev.findIndex(l => l.date === dateStr);
             let nextLogs = [...prev];
             if (existingIdx >= 0) {
-              if (JSON.stringify(prev[existingIdx].tasks) === JSON.stringify(serverLog.tasks) && prev[existingIdx].memo === serverLog.memo) return prev;
-              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) return prev;
+              const localDataStr = JSON.stringify(prev[existingIdx].tasks);
+              const serverDataStr = JSON.stringify(serverLog.tasks);
+              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) return prev;
+              
+              // [초강력 보호] 현재 편집 중(포커스)이라면 서버 데이터로 로컬을 절대 덮어쓰지 않음
+              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
+                console.log('[Sync-Realtime] Editing active. Blocking server overwrite.');
+                return prev;
+              }
+              
               nextLogs[existingIdx] = serverLog;
             } else {
               nextLogs.push(serverLog);

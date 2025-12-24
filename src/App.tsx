@@ -293,18 +293,13 @@ function UnifiedTaskItem({
 
   const handleTextChange = (e: any) => {
     const newVal = e.target.value;
-    
-    // Ctrl+Enter 등으로 상태만 바뀔 때 text가 0이 되거나 undefined가 되는 현상 방지
     if (newVal === undefined) return;
-
     if (newVal.includes('\n')) {
       const lines = newVal.split('\n');
       const textBefore = lines[0];
       const textAfter = lines.slice(1).join('\n');
-      console.log(`[TextChange-Debug] Multi-line detected. Splitting at: "${textBefore}" and "${textAfter}"`);
       onAddTaskAtCursor(task.id, textBefore, textAfter);
     } else {
-      console.log(`[TextChange-Debug] Single line update for ${task.id}: "${newVal}"`);
       updateTask({ ...task, name: newVal, text: newVal });
     }
   };
@@ -436,7 +431,7 @@ export default function App() {
               console.log(`[Sync-Debug] Successfully synced ${dateStr}`);
             }
           }
-        }, 3000); 
+        }, 1500); 
       }
     }
   }, [currentSpace, user, viewDate]);
@@ -510,56 +505,20 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       
-      // [문제 해결] 사용자가 해당 날짜에 할 일이 하나도 없을 때 뿐만 아니라,
-      // 'A SECOND' 타입의 할 일만 쏙 빠져있는 경우에도 체크해서 채워넣어야 함
-      const hasAnySecondTasks = log && log.tasks.some(t => t.isSecond);
-      
-      // 미래 날짜 자동 생성 방지 (오늘 포함 과거만)
-      const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
-
-      if ((!log || !hasAnySecondTasks) && isNotFuture) {
-        console.log(`[Log-Init] Checking carry-over for ${dateStr}. log exists: ${!!log}, hasSecond: ${hasAnySecondTasks}`);
-        
-        const sortedLogs = [...currentLogs]
-          .filter(l => l.tasks.some(t => t.isSecond) && l.date !== dateStr)
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
-        const lastLogWithSeconds = sortedLogs[0];
-        const carryOverTasks = lastLogWithSeconds 
-          ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ 
-              ...t, 
-              id: Date.now() + Math.random(), 
-              status: 'pending' as const, 
-              actTime: 0, 
-              isTimerOn: false 
-            }))
-          : [];
-        
-        if (carryOverTasks.length > 0) {
-          if (log) {
-            // 로그는 있는데 세컨드만 없는 경우 -> 기존 태스크에 세컨드 추가
-            log.tasks = [...carryOverTasks, ...log.tasks.filter(t => !t.isSecond)];
-          } else {
-            // 로그 자체가 없는 경우 -> 새로 생성
-            log = { date: dateStr, tasks: carryOverTasks, memo: '' };
-            currentLogs.push(log);
-          }
-          
-          localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
-          
-          if (user) {
-            supabase.from('task_logs').upsert({
-              user_id: user.id,
-              space_id: currentSpace.id,
-              date: dateStr,
-              tasks: JSON.stringify(log.tasks),
-              memo: log.memo || ''
-            }, { onConflict: 'user_id,space_id,date' }).then();
-          }
-        } else if (!log) {
-          // 가져올 데이터도 없고 로그도 없는 순수 빈 날짜
-          log = { date: dateStr, tasks: [], memo: '' };
-          currentLogs.push(log);
+      if (!log) {
+        console.log(`[Log-Init] Initializing tasks for ${dateStr}...`);
+        const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
+        let carryOverTasks: Task[] = [];
+        if (isNotFuture) {
+          const sortedLogs = [...currentLogs].filter(l => l.tasks.some(t => t.isSecond)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          const lastLogWithSeconds = sortedLogs[0];
+          carryOverTasks = lastLogWithSeconds ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ ...t, id: Date.now() + Math.random(), status: 'pending' as const, actTime: 0, isTimerOn: false })) : [];
+        }
+        log = { date: dateStr, tasks: carryOverTasks, memo: '' };
+        currentLogs.push(log);
+        localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
+        if (user && carryOverTasks.length > 0) {
+          supabase.from('task_logs').upsert({ user_id: user.id, space_id: currentSpace.id, date: dateStr, tasks: JSON.stringify(carryOverTasks), memo: '' }, { onConflict: 'user_id,space_id,date' }).then();
         }
       }
       

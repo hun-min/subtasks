@@ -400,7 +400,7 @@ export default function App() {
           const currentLog = logs.find(l => l.date === dateStr);
           if (currentLog) {
             console.log(`[Sync] Starting sync to Supabase for date: ${dateStr}...`);
-            const { data, error } = await supabase
+            const { error } = await supabase
               .from('task_logs')
               .upsert({
                 user_id: user.id,
@@ -408,8 +408,7 @@ export default function App() {
                 date: dateStr,
                 tasks: JSON.stringify(currentLog.tasks),
                 memo: currentLog.memo || ''
-              }, { onConflict: 'user_id,space_id,date' })
-              .select();
+              }, { onConflict: 'user_id,space_id,date' });
             
             if (error) {
               console.error('[Sync] Supabase sync error:', error.message);

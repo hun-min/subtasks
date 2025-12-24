@@ -223,8 +223,6 @@ function UnifiedTaskItem({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const taskName = task.name || task.text || '';
-    
-    // 디버깅용 로그
     console.log(`[KeyDown-Debug] Key: ${e.key}, Task: "${taskName}", Cursor: ${textareaRef.current?.selectionStart}`);
 
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
@@ -241,20 +239,17 @@ function UnifiedTaskItem({
         const cursorPos = textareaRef.current?.selectionStart || 0;
         const textBefore = taskName.substring(0, cursorPos);
         const textAfter = taskName.substring(cursorPos);
-        console.log(`[Enter-Debug] Splitting task at ${cursorPos}. Before: "${textBefore}", After: "${textAfter}"`);
         onAddTaskAtCursor(task.id, textBefore, textAfter);
       }
       return;
     }
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
-      console.log(`[Backspace-Debug] Merging with previous from "${taskName}"`);
       onMergeWithPrevious(task.id, taskName);
       return;
     }
     if (e.key === 'Delete' && textareaRef.current?.selectionStart === taskName.length && textareaRef.current?.selectionEnd === taskName.length) {
       e.preventDefault();
-      console.log(`[Delete-Debug] Merging with next from "${taskName}"`);
       onMergeWithNext(task.id, taskName);
       return;
     }
@@ -405,7 +400,6 @@ export default function App() {
       }
       localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
 
-      // Debounced sync with Supabase for TASKS
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
       }
@@ -564,7 +558,7 @@ export default function App() {
                if (serverLog.date === 'SETTINGS') return;
                const idx = newLogs.findIndex(l => l.date === serverLog.date);
                if (idx >= 0) {
-                 if (JSON.stringify(newLogs[idx]) !== JSON.stringify(serverLog)) {
+                 if (JSON.stringify(newLogs[idx].tasks) !== JSON.stringify(serverLog.tasks) || newLogs[idx].memo !== serverLog.memo) {
                     newLogs[idx] = serverLog;
                     changed = true;
                  }
@@ -576,7 +570,7 @@ export default function App() {
             if (changed) {
               localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
               const currentViewLog = newLogs.find(l => l.date === viewDate.toDateString());
-              if (currentViewLog) setTasks(currentViewLog.tasks);
+              if (currentViewLog && focusedTaskId === null) setTasks(currentViewLog.tasks);
               return newLogs;
             }
             return prev;
@@ -601,7 +595,6 @@ export default function App() {
               const serverDataStr = JSON.stringify(serverLog.tasks);
               if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) return prev;
               
-              // 현재 편집 중인 태스크가 있다면 덮어쓰기 방지
               if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
                 console.log(`[Sync-Realtime] User is editing ${dateStr}, skipping overwrite.`);
                 return prev;
@@ -611,7 +604,7 @@ export default function App() {
               nextLogs.push(serverLog);
             }
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
-            if (dateStr === viewDate.toDateString()) {
+            if (dateStr === viewDate.toDateString() && focusedTaskId === null) {
               console.log(`[Sync-Realtime] Refreshing tasks for ${dateStr}`);
               setTasks(serverLog.tasks);
             }
@@ -621,7 +614,7 @@ export default function App() {
       })
       .subscribe((status) => { console.log(`[Sync-Realtime] Subscription: ${status}`); });
     return () => { supabase.removeChannel(channel); };
-  }, [user, currentSpace, localLogsLoaded, tasks, focusedTaskId, viewDate]);
+  }, [user, currentSpace, localLogsLoaded, focusedTaskId, viewDate]);
 
   useEffect(() => {
     const timer = setInterval(() => {

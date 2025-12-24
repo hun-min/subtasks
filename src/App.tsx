@@ -365,7 +365,7 @@ export default function App() {
 
   const saveTasks = useCallback((tasksToSave: Task[], memoToSave?: string) => {
     if (currentSpace) {
-      const today = new Date().toDateString();
+      const dateStr = viewDate.toDateString(); // new Date().toDateString() 대신 viewDate 사용
       const localData = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let logs: DailyLog[] = [];
       if (localData) {
@@ -374,12 +374,12 @@ export default function App() {
         } catch (e) { console.error(e); }
       }
       
-      const logIndex = logs.findIndex(l => l.date === today);
+      const logIndex = logs.findIndex(l => l.date === dateStr);
       if (logIndex > -1) {
         logs[logIndex].tasks = tasksToSave;
         if (memoToSave !== undefined) logs[logIndex].memo = memoToSave;
       } else {
-        logs.push({ date: today, tasks: tasksToSave, memo: memoToSave || '' });
+        logs.push({ date: dateStr, tasks: tasksToSave, memo: memoToSave || '' });
       }
       localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
 
@@ -389,9 +389,8 @@ export default function App() {
       }
 
       if (user && currentSpace) {
-        console.log(`[Sync] Scheduling sync for space: ${currentSpace.id}, user: ${user.id}`);
+        console.log(`[Sync] Scheduling sync for space: ${currentSpace.id}, date: ${dateStr}`);
         syncTimeoutRef.current = setTimeout(async () => {
-          const dateStr = new Date().toDateString();
           const currentLog = logs.find(l => l.date === dateStr);
           if (currentLog) {
             console.log(`[Sync] Starting sync to Supabase for date: ${dateStr}...`);
@@ -407,25 +406,15 @@ export default function App() {
               .select();
             
             if (error) {
-              console.error('[Sync] Supabase sync error details:', {
-                message: error.message,
-                code: error.code,
-                details: error.details,
-                hint: error.hint
-              });
-              // alert(`동기화 실패: ${error.message}`); // 사용자 피드백을 위해 일단 제거하거나 로깅 강화
+              console.error('[Sync] Supabase sync error:', error.message);
             } else {
-              console.log('[Sync] Supabase sync successful. Data returned:', data);
+              console.log('[Sync] Supabase sync successful for', dateStr);
             }
-          } else {
-            console.warn(`[Sync] No log found for date: ${dateStr} to sync.`);
           }
-        }, 1000); // 1초로 단축
-      } else {
-        console.log('[Sync] Sync skipped: User or CurrentSpace missing', { user: !!user, currentSpace: !!currentSpace });
+        }, 1000);
       }
     }
-  }, [currentSpace, user]);
+  }, [currentSpace, user, viewDate]);
 
   const saveToLocalStorage = useCallback((logsToSave: DailyLog[]) => {
       const today = new Date().toDateString();

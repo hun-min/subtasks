@@ -417,11 +417,12 @@ export default function App() {
             
             if (error) {
               console.error('[Sync] Supabase sync error:', error.message);
+              alert(`동기화 전송 에러: ${error.message}`);
             } else {
               console.log('[Sync] Supabase sync successful for', dateStr);
             }
           }
-        }, 1000);
+        }, 500); // 0.5초로 더 단축
       }
     }
   }, [currentSpace, user, viewDate]);
@@ -594,7 +595,7 @@ export default function App() {
       }, (payload: any) => {
         // 현재 공간의 데이터인지 확인
         if (payload.new && payload.new.space_id === currentSpace.id) {
-          console.log('[Sync-Realtime] Change detected:', payload.eventType);
+          console.log(`[Sync-Realtime] Change detected: ${payload.eventType} for date: ${payload.new.date}`);
           const serverLog = {
             date: payload.new.date,
             tasks: migrateTasks(JSON.parse(payload.new.tasks)),
@@ -612,26 +613,32 @@ export default function App() {
               // 단순 문자열 비교 시 공백 등으로 인한 오탐 방지
               if (JSON.stringify(prev[existingIdx].tasks) === JSON.stringify(serverLog.tasks) && 
                   prev[existingIdx].memo === serverLog.memo) {
+                console.log(`[Sync-Realtime] Data for ${dateStr} is identical, ignoring.`);
                 return prev;
               }
-              console.log(`[Sync-Realtime] Data for ${dateStr} changed on server, updating...`);
+              console.log(`[Sync-Realtime] Data for ${dateStr} changed on server, updating local logs...`);
               nextLogs[existingIdx] = serverLog;
             } else {
+              console.log(`[Sync-Realtime] New data for ${dateStr} from server, adding to local logs...`);
               nextLogs.push(serverLog);
             }
 
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
 
             if (dateStr === viewDate.toDateString()) {
-              console.log('[Sync-Realtime] Updating current view tasks from server');
+              console.log(`[Sync-Realtime] Current view date (${dateStr}) matches server update. Refreshing tasks...`);
               setTasks(serverLog.tasks);
-              // 서버 데이터 수신 시에는 히스토리 업데이트를 생략하거나 신중하게 처리
             }
             return nextLogs;
           });
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`[Sync-Realtime] Subscription status: ${status}`);
+        if (status === 'SUBSCRIBED') {
+          console.log('[Sync-Realtime] Successfully subscribed to real-time updates.');
+        }
+      });
 
     return () => {
       console.log('[Sync-Realtime] Unsubscribing');

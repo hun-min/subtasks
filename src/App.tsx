@@ -780,11 +780,20 @@ export default function App() {
   };
 
   const onTaskClick = (e: React.MouseEvent, taskId: number, index: number) => {
+    // shiftKey 처리를 우선하되, list 전체에서의 index가 아닌 필터링된 리스트(planTasks vs secondTasks)에서의 index인지 확인 필요
+    // UnifiedTaskItem에 전달되는 index는 해당 리스트 내에서의 순서임
+    
     if (e.shiftKey && lastClickedIndex.current !== null) {
+      const isSecond = tasks.find(t => t.id === taskId)?.isSecond;
+      const currentList = isSecond ? tasks.filter(t => t.isSecond) : tasks.filter(t => !t.isSecond);
+      
       const start = Math.min(lastClickedIndex.current, index);
       const end = Math.max(lastClickedIndex.current, index);
+      
       const newSelected = new Set(selectedTaskIds);
-      for (let i = start; i <= end; i++) newSelected.add(tasks[i].id);
+      for (let i = start; i <= end; i++) {
+        if (currentList[i]) newSelected.add(currentList[i].id);
+      }
       setSelectedTaskIds(newSelected);
     } else if (e.ctrlKey || e.metaKey) {
       const newSelected = new Set(selectedTaskIds);
@@ -793,7 +802,7 @@ export default function App() {
       setSelectedTaskIds(newSelected);
       lastClickedIndex.current = index;
     } else {
-      setSelectedTaskIds(new Set());
+      setSelectedTaskIds(new Set([taskId])); // 클릭한 항목은 기본적으로 선택
       lastClickedIndex.current = index;
     }
   };

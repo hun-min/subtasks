@@ -426,12 +426,11 @@ export default function App() {
             
             if (error) {
               console.error('[Sync-Debug] Error:', error.message);
-              alert('서버 동기화 실패: ' + error.message);
             } else {
               console.log(`[Sync-Debug] Successfully synced ${dateStr}`);
             }
           }
-        }, 500); 
+        }, 1500); 
       }
     }
   }, [currentSpace, user, viewDate]);
@@ -596,7 +595,7 @@ export default function App() {
               if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) return prev;
               
               if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
-                console.log(`[Sync-Realtime] User is editing ${dateStr}, skipping overwrite.`);
+                console.warn(`[Sync-Realtime] BLOCKING overwrite during active edit for ${dateStr}`);
                 return prev;
               }
               nextLogs[existingIdx] = serverLog;

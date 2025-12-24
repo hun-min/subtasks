@@ -467,42 +467,52 @@ export default function App() {
       if (saved) {
         try {
            const parsedLogs = JSON.parse(saved);
-           // 마이그레이션 적용
            currentLogs = parsedLogs.map((log: any) => ({
              ...log,
              tasks: migrateTasks(log.tasks)
            }));
         } catch (e) {
            console.error('Failed to parse logs', e);
-           currentLogs = [];
         }
       }
 
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
-      if (!log) {
-        console.log(`[Log-Init] No log for ${dateStr}, checking for a second tasks to carry over...`);
-        // 현재 공간의 모든 로그에서 가장 최근 날짜 찾기
-        const sortedLogs = [...currentLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const lastLog = sortedLogs[0];
+      
+      // [핵심] 할 일이 아예 없거나, 'A SECOND' 타입의 할 일이 하나도 없을 때 강제 생성
+      const hasSecondTasks = log && log.tasks.some(t => t.isSecond);
+      
+      if (!log || !hasSecondTasks) {
+        console.log(`[Log-Init] Initializing second tasks for ${dateStr}...`);
         
-        const secondTasks = lastLog ? lastLog.tasks.filter(t => t.isSecond).map(t => ({ 
-          ...t, 
-          id: Date.now() + Math.random(), 
-          status: 'pending' as const, 
-          actTime: 0, 
-          isTimerOn: false 
-        })) : [];
+        // 1. 모든 과거 로그에서 가장 최근의 A SECOND 태스크들 찾기
+        const sortedLogs = [...currentLogs]
+          .filter(l => l.tasks.some(t => t.isSecond))
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
-        if (secondTasks.length > 0) {
-          console.log(`[Log-Init] Carrying over ${secondTasks.length} tasks to ${dateStr}`);
+        const lastLogWithSeconds = sortedLogs[0];
+        const carryOverTasks = lastLogWithSeconds 
+          ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ 
+              ...t, 
+              id: Date.now() + Math.random(), 
+              status: 'pending' as const, 
+              actTime: 0, 
+              isTimerOn: false 
+            }))
+          : [];
+        
+        if (log) {
+          // 날짜 로그는 있는데 세컨만 없는 경우 -> 기존 일반 태스크 유지하며 세컨 추가
+          log.tasks = [...carryOverTasks, ...log.tasks.filter(t => !t.isSecond)];
+        } else {
+          // 날짜 로그 자체가 없는 경우
+          log = { date: dateStr, tasks: carryOverTasks, memo: '' };
+          currentLogs.push(log);
         }
         
-        log = { date: dateStr, tasks: secondTasks, memo: '' };
-        currentLogs.push(log);
-        // 새로운 로그 생성 시 저장
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
       }
+      
       setLogs(currentLogs);
       setTasks(log.tasks);
       setHistory([log.tasks]);

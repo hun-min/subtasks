@@ -363,14 +363,6 @@ export default function App() {
 // Debounce timeout ref
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const saveToLocalStorage = useCallback((logsToSave: DailyLog[]) => {
-      const today = new Date().toDateString();
-      const currentLog = logsToSave.find(l => l.date === today);
-      if (currentLog) {
-          saveTasks(currentLog.tasks, currentLog.memo);
-      }
-  }, [saveTasks]);
-
   const saveTasks = useCallback((tasksToSave: Task[], memoToSave?: string) => {
     if (currentSpace) {
       const today = new Date().toDateString();
@@ -419,6 +411,14 @@ export default function App() {
       }
     }
   }, [currentSpace, user]);
+
+  const saveToLocalStorage = useCallback((logsToSave: DailyLog[]) => {
+      const today = new Date().toDateString();
+      const currentLog = logsToSave.find(l => l.date === today);
+      if (currentLog) {
+          saveTasks(currentLog.tasks, currentLog.memo);
+      }
+  }, [saveTasks]);
 
   // 'A SECOND' 가리기 상태 동기화
   useEffect(() => {

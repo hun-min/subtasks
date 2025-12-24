@@ -413,14 +413,14 @@ export default function App() {
                 details: error.details,
                 hint: error.hint
               });
-              alert(`동기화 실패: ${error.message}`);
+              // alert(`동기화 실패: ${error.message}`); // 사용자 피드백을 위해 일단 제거하거나 로깅 강화
             } else {
               console.log('[Sync] Supabase sync successful. Data returned:', data);
             }
           } else {
             console.warn(`[Sync] No log found for date: ${dateStr} to sync.`);
           }
-        }, 2000); // 2초 디바운스
+        }, 1000); // 1초로 단축
       } else {
         console.log('[Sync] Sync skipped: User or CurrentSpace missing', { user: !!user, currentSpace: !!currentSpace });
       }

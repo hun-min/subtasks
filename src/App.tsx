@@ -776,6 +776,49 @@ export default function App() {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+      
+      // Ctrl+V 또는 Cmd+V 처리 (다중 선택된 상태에서 붙여넣기 시)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && selectedTaskIds.size > 0 && !isInput) {
+        // 클립보드 데이터 읽기 시도 (사용자 권한 필요할 수 있음)
+        navigator.clipboard.readText().then(text => {
+          if (!text) return;
+          const lines = text.split('\n').filter(line => line.trim() !== '');
+          if (lines.length === 0) return;
+
+          const sortedSelectedIds = Array.from(selectedTaskIds).sort((a, b) => {
+            return tasks.findIndex(t => t.id === a) - tasks.findIndex(t => t.id === b);
+          });
+          
+          const lastId = sortedSelectedIds[sortedSelectedIds.length - 1];
+          const insertIdx = tasks.findIndex(t => t.id === lastId);
+          if (insertIdx === -1) return;
+
+          const referenceTask = tasks[insertIdx];
+          const newTasksFromPaste: Task[] = lines.map((line, i) => ({
+            id: Date.now() + i,
+            name: line.trim(),
+            status: 'pending',
+            indent: referenceTask.indent,
+            parent: referenceTask.parent,
+            text: line.trim(),
+            percent: 0,
+            planTime: 0,
+            actTime: 0,
+            isTimerOn: false,
+            depth: referenceTask.depth || 0,
+            isSecond: referenceTask.isSecond,
+            space_id: String(currentSpace?.id || ''),
+          }));
+
+          const nextTasks = [...tasks];
+          nextTasks.splice(insertIdx + 1, 0, ...newTasksFromPaste);
+          updateStateAndLogs(nextTasks);
+          setSelectedTaskIds(new Set());
+        }).catch(err => {
+          console.error('Failed to read clipboard:', err);
+        });
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); handleRedo(); }
       if (e.key === '?' && !isInput) { e.preventDefault(); setShowShortcuts(true); }
@@ -787,7 +830,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleUndo, handleRedo, spaces, setCurrentSpace]);
+  }, [handleUndo, handleRedo, spaces, setCurrentSpace, selectedTaskIds, tasks, currentSpace, updateStateAndLogs]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;

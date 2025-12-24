@@ -394,7 +394,6 @@ export default function App() {
       }
 
       if (user && currentSpace) {
-        console.log(`[Sync] Scheduling sync for space: ${currentSpace.id}, date: ${dateStr}`);
         syncTimeoutRef.current = setTimeout(async () => {
           // 최신 상태를 다시 가져오기
           const latestLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
@@ -403,7 +402,6 @@ export default function App() {
           const currentLog = latestLogs.find(l => l.date === dateStr);
           
           if (currentLog) {
-            console.log(`[Sync] Starting sync to Supabase for date: ${dateStr}...`);
             const { error } = await supabase
               .from('task_logs')
               .upsert({
@@ -415,13 +413,10 @@ export default function App() {
               }, { onConflict: 'user_id,space_id,date' });
             
             if (error) {
-              console.error('[Sync] Supabase sync error:', error.message);
-              alert(`동기화 전송 에러: ${error.message}`);
-            } else {
-              console.log('[Sync] Supabase sync successful for', dateStr);
+              console.error('[Sync] Error:', error.message);
             }
           }
-        }, 500); // 0.5초로 더 단축
+        }, 500); 
       }
     }
   }, [currentSpace, user, viewDate]);
@@ -625,22 +620,24 @@ export default function App() {
 
             if (existingIdx >= 0) {
               // 단순 문자열 비교 시 공백 등으로 인한 오탐 방지
-              if (JSON.stringify(prev[existingIdx].tasks) === JSON.stringify(serverLog.tasks) && 
-                  prev[existingIdx].memo === serverLog.memo) {
-                console.log(`[Sync-Realtime] Data for ${dateStr} is identical, ignoring.`);
+              const localDataStr = JSON.stringify(prev[existingIdx].tasks);
+              const serverDataStr = JSON.stringify(serverLog.tasks);
+              
+              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) {
+                // 완전히 동일하면 무시
                 return prev;
               }
-              console.log(`[Sync-Realtime] Data for ${dateStr} changed on server, updating local logs...`);
+              
+              // [개선] 현재 편집 중인 날짜라면 더 신중하게 병합하거나 덮어쓰기
+              // 여기서는 일단 업데이트하되, 로그를 줄임
               nextLogs[existingIdx] = serverLog;
             } else {
-              console.log(`[Sync-Realtime] New data for ${dateStr} from server, adding to local logs...`);
               nextLogs.push(serverLog);
             }
 
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
 
             if (dateStr === viewDate.toDateString()) {
-              console.log(`[Sync-Realtime] Current view date (${dateStr}) matches server update. Refreshing tasks...`);
               setTasks(serverLog.tasks);
             }
             return nextLogs;

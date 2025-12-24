@@ -482,17 +482,27 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       if (!log) {
-        const yesterday = new Date(viewDate); yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayLog = currentLogs.find(l => l.date === yesterday.toDateString());
-        const secondTasks = yesterdayLog ? yesterdayLog.tasks.filter(t => t.isSecond).map(t => ({ 
+        console.log(`[Log-Init] No log for ${dateStr}, checking for a second tasks to carry over...`);
+        // 현재 공간의 모든 로그에서 가장 최근 날짜 찾기
+        const sortedLogs = [...currentLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const lastLog = sortedLogs[0];
+        
+        const secondTasks = lastLog ? lastLog.tasks.filter(t => t.isSecond).map(t => ({ 
           ...t, 
           id: Date.now() + Math.random(), 
           status: 'pending' as const, 
           actTime: 0, 
           isTimerOn: false 
         })) : [];
+        
+        if (secondTasks.length > 0) {
+          console.log(`[Log-Init] Carrying over ${secondTasks.length} tasks to ${dateStr}`);
+        }
+        
         log = { date: dateStr, tasks: secondTasks, memo: '' };
         currentLogs.push(log);
+        // 새로운 로그 생성 시 저장
+        localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
       }
       setLogs(currentLogs);
       setTasks(log.tasks);

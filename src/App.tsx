@@ -404,14 +404,15 @@ export default function App() {
       }
 
       if (user && currentSpace) {
+        console.log(`[Sync] Scheduling sync for date: ${dateStr}`);
         syncTimeoutRef.current = setTimeout(async () => {
-          // 서버로 보낼 때는 인메모리 tasksToSave가 아닌 localStorage의 가장 최신 상태를 읽어서 전송
           const finalLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
           if (!finalLogsStr) return;
           const finalLogs: DailyLog[] = JSON.parse(finalLogsStr);
           const finalLog = finalLogs.find(l => l.date === dateStr);
           
           if (finalLog) {
+            console.log(`[Sync] Sending to Supabase for ${dateStr}... tasks count: ${finalLog.tasks.length}`);
             const { error } = await supabase
               .from('task_logs')
               .upsert({
@@ -424,6 +425,8 @@ export default function App() {
             
             if (error) {
               console.error('[Sync] Error:', error.message);
+            } else {
+              console.log(`[Sync] Success for ${dateStr}`);
             }
           }
         }, 500); 
@@ -594,6 +597,7 @@ export default function App() {
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
         if (payload.new && payload.new.space_id === currentSpace.id) {
+          console.log(`[Sync-Realtime] UPDATE detected for ${payload.new.date}`);
           const serverLog = { date: payload.new.date, tasks: migrateTasks(JSON.parse(payload.new.tasks)), memo: payload.new.memo };
           if (serverLog.date === 'SETTINGS') return;
           setLogs(prev => {
@@ -603,25 +607,32 @@ export default function App() {
             if (existingIdx >= 0) {
               const localDataStr = JSON.stringify(prev[existingIdx].tasks);
               const serverDataStr = JSON.stringify(serverLog.tasks);
-              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) return prev;
-              
-              // [초강력 보호] 현재 편집 중(포커스)이라면 서버 데이터로 로컬을 절대 덮어쓰지 않음
-              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
-                console.log('[Sync-Realtime] Editing active. Blocking server overwrite.');
+              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) {
+                console.log(`[Sync-Realtime] Identical data for ${dateStr}, skipping.`);
                 return prev;
               }
-              
+              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
+                console.log(`[Sync-Realtime] Blocking overwrite for ${dateStr} while editing.`);
+                return prev;
+              }
+              console.log(`[Sync-Realtime] Updating local log for ${dateStr}`);
               nextLogs[existingIdx] = serverLog;
             } else {
+              console.log(`[Sync-Realtime] Adding new log for ${dateStr}`);
               nextLogs.push(serverLog);
             }
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
-            if (dateStr === viewDate.toDateString()) setTasks(serverLog.tasks);
+            if (dateStr === viewDate.toDateString()) {
+              console.log(`[Sync-Realtime] Refreshing tasks for current view: ${dateStr}`);
+              setTasks(serverLog.tasks);
+            }
             return nextLogs;
           });
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`[Sync-Realtime] Subscription status: ${status}`);
+      });
     return () => { supabase.removeChannel(channel); };
   }, [user, currentSpace, localLogsLoaded]);
 

@@ -371,7 +371,7 @@ export default function App() {
 
   const saveTasks = useCallback((tasksToSave: Task[], memoToSave?: string) => {
     if (currentSpace) {
-      const dateStr = viewDate.toDateString(); // new Date().toDateString() 대신 viewDate 사용
+      const dateStr = viewDate.toDateString();
       const localData = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let logs: DailyLog[] = [];
       if (localData) {
@@ -397,7 +397,12 @@ export default function App() {
       if (user && currentSpace) {
         console.log(`[Sync] Scheduling sync for space: ${currentSpace.id}, date: ${dateStr}`);
         syncTimeoutRef.current = setTimeout(async () => {
-          const currentLog = logs.find(l => l.date === dateStr);
+          // 최신 상태를 다시 가져오기
+          const latestLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
+          if (!latestLogsStr) return;
+          const latestLogs: DailyLog[] = JSON.parse(latestLogsStr);
+          const currentLog = latestLogs.find(l => l.date === dateStr);
+          
           if (currentLog) {
             console.log(`[Sync] Starting sync to Supabase for date: ${dateStr}...`);
             const { error } = await supabase

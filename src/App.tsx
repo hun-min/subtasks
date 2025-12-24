@@ -619,17 +619,20 @@ export default function App() {
             let nextLogs = [...prev];
 
             if (existingIdx >= 0) {
-              // 단순 문자열 비교 시 공백 등으로 인한 오탐 방지
               const localDataStr = JSON.stringify(prev[existingIdx].tasks);
               const serverDataStr = JSON.stringify(serverLog.tasks);
               
               if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) {
-                // 완전히 동일하면 무시
                 return prev;
               }
               
-              // [개선] 현재 편집 중인 날짜라면 더 신중하게 병합하거나 덮어쓰기
-              // 여기서는 일단 업데이트하되, 로그를 줄임
+              // [핵심 해결책] 현재 이 기기에서 편집 중인 태스크(focusedTaskId)가 있는 경우 
+              // 서버 데이터로 로컬을 무작정 덮어쓰지 않고 무시하거나 나중에 동기화하도록 유도
+              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
+                console.log(`[Sync-Realtime] User is editing, skipping server overwrite for ${dateStr}`);
+                return prev;
+              }
+              
               nextLogs[existingIdx] = serverLog;
             } else {
               nextLogs.push(serverLog);

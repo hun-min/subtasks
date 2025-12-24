@@ -7,7 +7,6 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, ArrowRight, ArrowLeft, Calendar, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { supabase } from './supabase';
 
 // --- 데이터 타입 ---
@@ -245,12 +244,6 @@ function UnifiedTaskItem({
     }
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
-      
-      // [수정] 빈 줄에서 백스페이스 시 그냥 줄 삭제 (병합 로직보다 우선)
-      if (taskName === '') {
-        console.log(`[Backspace-Debug] Empty task ${task.id}, deleting.`);
-      }
-      
       onMergeWithPrevious(task.id, taskName);
       return;
     }
@@ -381,8 +374,6 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isInternalUpdate = useRef(false);
   const swipeTouchStart = useRef<number | null>(null);
-  const [showAudit, setShowAudit] = useState(false);
-  const [auditNote, setAuditNote] = useState('');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 // Debounce timeout ref
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -391,21 +382,19 @@ export default function App() {
     if (currentSpace) {
       const dateStr = viewDate.toDateString();
       const localData = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
-      let logs: DailyLog[] = [];
+      let currentLogs: DailyLog[] = [];
       if (localData) {
-        try {
-          logs = JSON.parse(localData);
-        } catch (e) { console.error(e); }
+        try { currentLogs = JSON.parse(localData); } catch (e) { console.error(e); }
       }
       
-      const logIndex = logs.findIndex(l => l.date === dateStr);
+      const logIndex = currentLogs.findIndex(l => l.date === dateStr);
       if (logIndex > -1) {
-        logs[logIndex].tasks = tasksToSave;
-        if (memoToSave !== undefined) logs[logIndex].memo = memoToSave;
+        currentLogs[logIndex].tasks = tasksToSave;
+        if (memoToSave !== undefined) currentLogs[logIndex].memo = memoToSave;
       } else {
-        logs.push({ date: dateStr, tasks: tasksToSave, memo: memoToSave || '' });
+        currentLogs.push({ date: dateStr, tasks: tasksToSave, memo: memoToSave || '' });
       }
-      localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
+      localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
 
       if (user && currentSpace) {
         console.log(`[Sync-Debug] Requesting sync for ${dateStr}. Task count: ${tasksToSave.length}`);
@@ -468,7 +457,6 @@ export default function App() {
       }
   }, [saveTasks]);
 
-  // 'A SECOND' 가리기 상태 동기화
   useEffect(() => {
     if (currentSpace && user) {
       const fetchVisibility = async () => {
@@ -680,41 +668,32 @@ export default function App() {
   const handleMergeWithPrevious = (taskId: number, currentText: string) => {
     const idx = tasks.findIndex(t => t.id === taskId);
     if (idx === -1) return;
-    
-    const current = tasks[idx];
     const newTasks = [...tasks];
-
     if (idx > 0) {
       const prev = tasks[idx - 1];
-      // 같은 그룹(세컨드 여부)일 때만 병합, 다르면 그냥 삭제
-      if (prev.isSecond === current.isSecond) {
-        newTasks[idx - 1] = { ...prev, name: prev.name + currentText, text: prev.text + currentText };
-        newTasks.splice(idx, 1);
-        updateStateAndLogs(newTasks);
-        setFocusedTaskId(prev.id);
-      } else {
-        newTasks.splice(idx, 1);
-        updateStateAndLogs(newTasks);
-        setFocusedTaskId(prev.id);
-      }
+      newTasks[idx - 1] = { ...prev, name: (prev.name || '') + (currentText || ''), text: (prev.text || '') + (currentText || '') };
+      newTasks.splice(idx, 1);
+      updateStateAndLogs(newTasks);
+      setFocusedTaskId(prev.id);
     } else {
-      // 첫 번째 항목이면 그냥 삭제
       newTasks.splice(idx, 1);
       updateStateAndLogs(newTasks);
       setFocusedTaskId(null);
     }
   };
 
-  const handleMergeWithNext = (taskId: number, currentText: string) => {
+  const handleMergeWithNext = (taskId: number, _currentText: string) => {
     const idx = tasks.findIndex(t => t.id === taskId);
-    if (idx >= tasks.length - 1) return;
+    if (idx === -1 || idx >= tasks.length - 1) return;
+    const current = tasks[idx];
     const next = tasks[idx + 1];
-    if (next.isSecond !== tasks[idx].isSecond) return;
-    const newTasks = [...tasks];
-    newTasks[idx] = { ...tasks[idx], name: currentText + next.name, text: currentText + next.text };
-    newTasks.splice(idx + 1, 1);
-    updateStateAndLogs(newTasks);
-    setFocusedTaskId(taskId);
+    if (next.isSecond === current.isSecond) {
+      const newTasks = [...tasks];
+      newTasks[idx] = { ...current, name: (current.name || '') + (next.name || ''), text: (current.text || '') + (next.text || '') };
+      newTasks.splice(idx + 1, 1);
+      updateStateAndLogs(newTasks);
+      setFocusedTaskId(taskId);
+    }
   };
 
   const handleUndo = useCallback(() => {
@@ -829,26 +808,13 @@ export default function App() {
 
   const DeepFocusOverlay = () => {
     const activeTimerTask = tasks.find(t => t.isTimerOn);
-    if (showAudit) {
-       const targetTask = activeTask || tasks.find(t => t.id === focusedTaskId) || { name: 'Task' };
-       const title = (targetTask as any).name || (targetTask as any).text || 'Task';
-       return (
-        <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-6 font-mono animate-in fade-in duration-300">
-          <div className="w-full max-w-md border border-gray-700 bg-gray-900 p-8 rounded-xl shadow-2xl">
-            <h3 className="text-gray-500 text-xs uppercase tracking-widest mb-6">Mission Debriefing</h3>
-            <div className="mb-8 opacity-50"><p className="text-xs text-blue-400 mb-1">INTENTION</p><h2 className="text-xl text-white">{title}</h2></div>
-            <div className="mb-8"><p className="text-xs text-green-400 mb-2">REALITY (RESULT)</p><input type="text" value={auditNote} onChange={(e) => setAuditNote(e.target.value)} placeholder="기록하십시오." className="w-full bg-black border-b border-gray-600 text-white p-2 outline-none" autoFocus onKeyDown={(e) => e.stopPropagation()} /></div>
-            <div className="mb-2"><p className="text-xs text-yellow-400 mb-2">SATISFACTION SCORE</p><div className="flex justify-between gap-2">{[1, 2, 3, 4, 5].map(score => (<button key={score} className="w-10 h-10 rounded-full border border-gray-600 text-gray-400 hover:bg-white hover:text-black font-bold" onClick={async () => { confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } }); if (targetTask && (targetTask as any).id && auditNote) { const tId = (targetTask as any).id; const tName = (targetTask as any).name || (targetTask as any).text || ''; const newName = tName + (auditNote ? ` [Audit: ${auditNote}]` : ''); updateStateAndLogs(tasks.map(t => t.id === tId ? { ...t, name: newName } : t)); } setTimeout(() => { setShowAudit(false); setAuditNote(''); }, 800); }}>{score}</button>))}</div></div>
-          </div>
-        </div>
-      );
-    }
+    
     if (!activeTimerTask) return null;
     const title = activeTimerTask.name || activeTimerTask.text || 'Untitled Task';
     const timeLeft = activeTimerTask.actTime || 0; 
     return (
       <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center animate-in fade-in duration-500">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-gray-950 to-gray-950" /><div className="z-10 w-full max-w-2xl px-8 flex flex-col items-center text-center space-y-12"><div className="space-y-2 opacity-80"><span className="text-blue-400 font-medium tracking-[0.3em] uppercase text-xs">Current Objective</span><h2 className="text-xl text-gray-400 font-light">FOCUS MODE</h2></div><div className="space-y-6"><h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">{title}</h1><div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{formatTimeFull(timeLeft)}</div></div><div className="w-full max-w-md h-1 bg-gray-900 rounded-full overflow-hidden"><div className="h-full bg-blue-500/50 animate-pulse w-full" /></div><button onClick={() => { updateStateAndLogs(tasks.map(t => t.id === activeTimerTask.id ? { ...t, isTimerOn: false } : t)); setFocusedTaskId(activeTimerTask.id); setShowAudit(true); }} className="px-8 py-3 border border-white/20 rounded-full text-white hover:bg-white/10 transition-all uppercase tracking-widest text-xs">Complete & Audit</button></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-gray-950 to-gray-950" /><div className="z-10 w-full max-w-2xl px-8 flex flex-col items-center text-center space-y-12"><div className="space-y-2 opacity-80"><span className="text-blue-400 font-medium tracking-[0.3em] uppercase text-xs">Current Objective</span><h2 className="text-xl text-gray-400 font-light">FOCUS MODE</h2></div><div className="space-y-6"><h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">{title}</h1><div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{formatTimeFull(timeLeft)}</div></div><div className="w-full max-w-md h-1 bg-gray-900 rounded-full overflow-hidden"><div className="h-full bg-blue-500/50 animate-pulse w-full" /></div><button onClick={() => { updateStateAndLogs(tasks.map(t => t.id === activeTimerTask.id ? { ...t, isTimerOn: false } : t)); setFocusedTaskId(activeTimerTask.id); }} className="px-8 py-3 border border-white/20 rounded-full text-white hover:bg-white/10 transition-all uppercase tracking-widest text-xs">Complete</button></div>
       </div>
     );
   };
@@ -865,7 +831,7 @@ export default function App() {
         <div className="flex-shrink-0">
           <div className="calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
              <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400 transition-colors"><ChevronLeft size={22} /></button><div className="text-center group cursor-pointer" onClick={() => setViewDate(new Date())}><div className="text-[11px] text-gray-500 uppercase tracking-widest mb-0.5 font-bold group-hover:text-blue-500 transition-colors">{year}</div><div className="font-black text-xl text-white group-hover:text-[#7c4dff] transition-colors">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400 transition-colors"><ChevronRight size={22} /></button></div>
-             <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({length: 35}).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); const log = logs.find(l => l.date === d.toDateString()); const hasTasks = log && log.tasks.length > 0; const rate = hasTasks ? Math.round((log!.tasks.filter(t => t.status === 'completed').length / log!.tasks.length) * 100) : 0; const isToday = d.toDateString() === new Date().toDateString(); return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all relative ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white shadow-lg shadow-[#7c4dff]/20' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'} ${isToday && d.toDateString() !== viewDate.toDateString() ? 'ring-1 ring-[#7c4dff]/50' : ''}`}><span className="font-black text-[14px]">{d.getDate()}</span>{hasTasks && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{rate}%</div>}</button>; })}</div>
+             <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); const l = logs.find(log => log.date === d.toDateString()); const hasTasks = l && l.tasks.length > 0; const rate = hasTasks ? Math.round((l!.tasks.filter(t => t.status === 'completed').length / l!.tasks.length) * 100) : 0; const isToday = d.toDateString() === new Date().toDateString(); return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all relative ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white shadow-lg shadow-[#7c4dff]/20' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'} ${isToday && d.toDateString() !== viewDate.toDateString() ? 'ring-1 ring-[#7c4dff]/50' : ''}`}><span className="font-black text-[14px]">{d.getDate()}</span>{hasTasks && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{rate}%</div>}</button>; })}</div>
           </div>
           <div className="mb-6 flex justify-around items-center px-4">
             {isSecondVisible && <div className="text-center"><div className="text-[28px] font-black text-white leading-none">{secondStats.done}<span className="text-[16px] text-gray-600 font-light mx-1">/</span>{secondStats.total}</div><div className="text-[14px] text-pink-500 font-black mt-1">{secondStats.rate}%</div></div>}

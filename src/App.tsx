@@ -599,7 +599,12 @@ export default function App() {
             let nextLogs = [...prev];
 
             if (existingIdx >= 0) {
-              if (JSON.stringify(prev[existingIdx]) === JSON.stringify(serverLog)) return prev;
+              // 단순 문자열 비교 시 공백 등으로 인한 오탐 방지
+              if (JSON.stringify(prev[existingIdx].tasks) === JSON.stringify(serverLog.tasks) && 
+                  prev[existingIdx].memo === serverLog.memo) {
+                return prev;
+              }
+              console.log(`[Sync-Realtime] Data for ${dateStr} changed on server, updating...`);
               nextLogs[existingIdx] = serverLog;
             } else {
               nextLogs.push(serverLog);
@@ -608,8 +613,9 @@ export default function App() {
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
 
             if (dateStr === viewDate.toDateString()) {
-              console.log('[Sync-Realtime] Updating current view tasks');
+              console.log('[Sync-Realtime] Updating current view tasks from server');
               setTasks(serverLog.tasks);
+              // 서버 데이터 수신 시에는 히스토리 업데이트를 생략하거나 신중하게 처리
             }
             return nextLogs;
           });
@@ -624,10 +630,12 @@ export default function App() {
   }, [user, currentSpace, localLogsLoaded, viewDate]);
 
   const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
+    // console.log('[Update] Updating tasks:', newTasks.length);
     setTasks(newTasks);
     const dateStr = viewDate.toDateString();
     setLogs(prev => {
       const log = prev.find(l => l.date === dateStr);
+      // 기존 메모를 보존하면서 태스크만 업데이트
       const updated = prev.map(l => l.date === dateStr ? { ...l, tasks: newTasks } : l);
       saveTasks(newTasks, log?.memo);
       return updated;

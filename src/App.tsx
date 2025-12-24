@@ -568,8 +568,12 @@ export default function App() {
             });
             if (changed) {
               localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-              const currentViewLog = newLogs.find(l => l.date === viewDate.toDateString());
-              if (currentViewLog && focusedTaskId === null) setTasks(currentViewLog.tasks);
+              
+              // 편집 중일 때는 로드된 데이터로 덮어쓰지 않음
+              if (focusedTaskId === null) {
+                const currentViewLog = newLogs.find(l => l.date === viewDate.toDateString());
+                if (currentViewLog) setTasks(currentViewLog.tasks);
+              }
               return newLogs;
             }
             return prev;

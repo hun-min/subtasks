@@ -501,31 +501,36 @@ export default function App() {
 
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
-      const isNeverVisited = !log;
       
-      const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
-
-      if (isNeverVisited && isNotFuture) {
-        const sortedLogs = [...currentLogs]
-          .filter(l => l.tasks.some(t => t.isSecond))
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // 사용자가 해당 날짜 로그 자체가 없을 때만 한 번 가져오기 시도
+      if (!log) {
+        console.log(`[Log-Init] Initializing tasks for ${dateStr}...`);
         
-        const lastLogWithSeconds = sortedLogs[0];
-        const carryOverTasks = lastLogWithSeconds 
-          ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ 
-              ...t, 
-              id: Date.now() + Math.random(), 
-              status: 'pending' as const, 
-              actTime: 0, 
-              isTimerOn: false 
-            }))
-          : [];
+        const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
+        let carryOverTasks: Task[] = [];
+        
+        if (isNotFuture) {
+          const sortedLogs = [...currentLogs]
+            .filter(l => l.tasks.some(t => t.isSecond))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          
+          const lastLogWithSeconds = sortedLogs[0];
+          carryOverTasks = lastLogWithSeconds 
+            ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ 
+                ...t, 
+                id: Date.now() + Math.random(), 
+                status: 'pending' as const, 
+                actTime: 0, 
+                isTimerOn: false 
+              }))
+            : [];
+        }
         
         log = { date: dateStr, tasks: carryOverTasks, memo: '' };
         currentLogs.push(log);
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
         
-        if (user) {
+        if (user && carryOverTasks.length > 0) {
           supabase.from('task_logs').upsert({
             user_id: user.id,
             space_id: currentSpace.id,

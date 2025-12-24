@@ -185,7 +185,7 @@ function UnifiedTaskItem({
   onMoveUp?: () => void, 
   onMoveDown?: () => void 
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
   // 기본 패딩 16px (px-4) + depth * 24px
   const basePadding = 16;

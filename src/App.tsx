@@ -223,6 +223,10 @@ function UnifiedTaskItem({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const taskName = task.name || task.text || '';
+    
+    // 디버깅용 로그
+    console.log(`[KeyDown-Debug] Key: ${e.key}, Task: "${taskName}", Cursor: ${textareaRef.current?.selectionStart}`);
+
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
     if (e.key === 'ArrowUp' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
     
@@ -237,17 +241,20 @@ function UnifiedTaskItem({
         const cursorPos = textareaRef.current?.selectionStart || 0;
         const textBefore = taskName.substring(0, cursorPos);
         const textAfter = taskName.substring(cursorPos);
+        console.log(`[Enter-Debug] Splitting task at ${cursorPos}. Before: "${textBefore}", After: "${textAfter}"`);
         onAddTaskAtCursor(task.id, textBefore, textAfter);
       }
       return;
     }
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
+      console.log(`[Backspace-Debug] Merging with previous from "${taskName}"`);
       onMergeWithPrevious(task.id, taskName);
       return;
     }
     if (e.key === 'Delete' && textareaRef.current?.selectionStart === taskName.length && textareaRef.current?.selectionEnd === taskName.length) {
       e.preventDefault();
+      console.log(`[Delete-Debug] Merging with next from "${taskName}"`);
       onMergeWithNext(task.id, taskName);
       return;
     }
@@ -404,7 +411,7 @@ export default function App() {
       }
 
       if (user && currentSpace) {
-        console.log(`[Sync] Scheduling sync for date: ${dateStr}`);
+        console.log(`[Sync-Debug] Requesting sync for ${dateStr}. Task count: ${tasksToSave.length}`);
         syncTimeoutRef.current = setTimeout(async () => {
           const finalLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
           if (!finalLogsStr) return;
@@ -412,7 +419,7 @@ export default function App() {
           const finalLog = finalLogs.find(l => l.date === dateStr);
           
           if (finalLog) {
-            console.log(`[Sync] Sending to Supabase for ${dateStr}... tasks count: ${finalLog.tasks.length}`);
+            console.log(`[Sync-Debug] Sending to server: ${dateStr}, tasks: ${finalLog.tasks.length}`);
             const { error } = await supabase
               .from('task_logs')
               .upsert({
@@ -424,9 +431,10 @@ export default function App() {
               }, { onConflict: 'user_id,space_id,date' });
             
             if (error) {
-              console.error('[Sync] Error:', error.message);
+              console.error('[Sync-Debug] Error:', error.message);
+              alert('서버 동기화 실패: ' + error.message);
             } else {
-              console.log(`[Sync] Success for ${dateStr}`);
+              console.log(`[Sync-Debug] Successfully synced ${dateStr}`);
             }
           }
         }, 500); 
@@ -435,6 +443,7 @@ export default function App() {
   }, [currentSpace, user, viewDate]);
 
   const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
+    console.log(`[Update-Debug] Changing tasks. New count: ${newTasks.length}`);
     setTasks([...newTasks]);
     const dateStr = viewDate.toDateString();
     setLogs(prev => {
@@ -502,42 +511,20 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       
-      // 사용자가 해당 날짜 로그 자체가 없을 때만 한 번 가져오기 시도
       if (!log) {
         console.log(`[Log-Init] Initializing tasks for ${dateStr}...`);
-        
         const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
         let carryOverTasks: Task[] = [];
-        
         if (isNotFuture) {
-          const sortedLogs = [...currentLogs]
-            .filter(l => l.tasks.some(t => t.isSecond))
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          
+          const sortedLogs = [...currentLogs].filter(l => l.tasks.some(t => t.isSecond)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           const lastLogWithSeconds = sortedLogs[0];
-          carryOverTasks = lastLogWithSeconds 
-            ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ 
-                ...t, 
-                id: Date.now() + Math.random(), 
-                status: 'pending' as const, 
-                actTime: 0, 
-                isTimerOn: false 
-              }))
-            : [];
+          carryOverTasks = lastLogWithSeconds ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ ...t, id: Date.now() + Math.random(), status: 'pending' as const, actTime: 0, isTimerOn: false })) : [];
         }
-        
         log = { date: dateStr, tasks: carryOverTasks, memo: '' };
         currentLogs.push(log);
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
-        
         if (user && carryOverTasks.length > 0) {
-          supabase.from('task_logs').upsert({
-            user_id: user.id,
-            space_id: currentSpace.id,
-            date: dateStr,
-            tasks: JSON.stringify(carryOverTasks),
-            memo: ''
-          }, { onConflict: 'user_id,space_id,date' }).then();
+          supabase.from('task_logs').upsert({ user_id: user.id, space_id: currentSpace.id, date: dateStr, tasks: JSON.stringify(carryOverTasks), memo: '' }, { onConflict: 'user_id,space_id,date' }).then();
         }
       }
       
@@ -612,34 +599,29 @@ export default function App() {
             if (existingIdx >= 0) {
               const localDataStr = JSON.stringify(prev[existingIdx].tasks);
               const serverDataStr = JSON.stringify(serverLog.tasks);
-              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) {
-                console.log(`[Sync-Realtime] Identical data for ${dateStr}, skipping.`);
-                return prev;
-              }
+              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) return prev;
+              
+              // 현재 편집 중인 태스크가 있다면 덮어쓰기 방지
               if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
-                console.log(`[Sync-Realtime] Blocking overwrite for ${dateStr} while editing.`);
+                console.log(`[Sync-Realtime] User is editing ${dateStr}, skipping overwrite.`);
                 return prev;
               }
-              console.log(`[Sync-Realtime] Updating local log for ${dateStr}`);
               nextLogs[existingIdx] = serverLog;
             } else {
-              console.log(`[Sync-Realtime] Adding new log for ${dateStr}`);
               nextLogs.push(serverLog);
             }
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
             if (dateStr === viewDate.toDateString()) {
-              console.log(`[Sync-Realtime] Refreshing tasks for current view: ${dateStr}`);
+              console.log(`[Sync-Realtime] Refreshing tasks for ${dateStr}`);
               setTasks(serverLog.tasks);
             }
             return nextLogs;
           });
         }
       })
-      .subscribe((status) => {
-        console.log(`[Sync-Realtime] Subscription status: ${status}`);
-      });
+      .subscribe((status) => { console.log(`[Sync-Realtime] Subscription: ${status}`); });
     return () => { supabase.removeChannel(channel); };
-  }, [user, currentSpace, localLogsLoaded]);
+  }, [user, currentSpace, localLogsLoaded, tasks, focusedTaskId, viewDate]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -856,7 +838,7 @@ export default function App() {
       <DeepFocusOverlay />
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       {showShortcuts && (
-        <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}><div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-start mb-6"><h2 className="text-xl font-bold text-white">Shortcuts</h2><button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button></div><div className="space-y-3 text-sm"><div className="flex justify-between items-center"><span className="text-gray-400">타이머</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Space</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">완료</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">Undo/Redo</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl+Z / Y</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">공간 전환</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + 1~9</kbd></div></div></div></div>
+        <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}><div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-start mb-6"><h2 className="text-xl font-bold text-white">Shortcuts</h2><button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button></div><div className="space-y-3 text-sm"><div className="flex justify-between items-center"><span className="text-gray-400">타이머</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Space</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">완료</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">Undo/Redo</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl+Z / Y</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">공간 전환</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + 1~9</kbd></div></div></div></div>
       )}
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4">
         <div className="mb-4 flex justify-between items-center flex-shrink-0"><SpaceSelector /><div className="flex gap-3 items-center"><button onClick={toggleSecondVisible} className="text-gray-500 hover:text-white p-1 transition-colors"><Clock size={18} /></button><button onClick={() => setShowShortcuts(true)} className="text-gray-500 hover:text-white p-1"><HelpCircle size={18} /></button><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button></div></div>

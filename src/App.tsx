@@ -401,13 +401,10 @@ export default function App() {
       }
       localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
 
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-
       if (user && currentSpace) {
         console.log(`[Sync-Debug] Requesting sync for ${dateStr}. Task count: ${tasksToSave.length}`);
-        syncTimeoutRef.current = setTimeout(async () => {
+        
+        const performSync = async () => {
           const finalLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
           if (!finalLogsStr) return;
           const finalLogs: DailyLog[] = JSON.parse(finalLogsStr);
@@ -431,7 +428,12 @@ export default function App() {
               console.log(`[Sync-Debug] Successfully synced ${dateStr}`);
             }
           }
-        }, 1500); 
+        };
+
+        if (syncTimeoutRef.current) {
+          clearTimeout(syncTimeoutRef.current);
+        }
+        syncTimeoutRef.current = setTimeout(performSync, 300);
       }
     }
   }, [currentSpace, user, viewDate]);

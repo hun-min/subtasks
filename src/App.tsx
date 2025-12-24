@@ -474,13 +474,13 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       
-      // [개선] 사용자가 명시적으로 해당 날짜에 접속한 기록이 없을 때만 자동 생성 시도
-      // log.memo가 있거나 tasks가 이미 존재한다면(비어있더라도) 사용자가 이미 방문한 날짜로 간주
+      // 사용자가 명시적으로 해당 날짜에 접속한 기록이 없을 때만 자동 생성 시도
       const isNeverVisited = !log;
       
       if (isNeverVisited) {
         console.log(`[Log-Init] First visit to ${dateStr}, initializing tasks...`);
         
+        // carry over logic... (생략하거나 단순화)
         const sortedLogs = [...currentLogs]
           .filter(l => l.tasks.some(t => t.isSecond))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -498,7 +498,19 @@ export default function App() {
         
         log = { date: dateStr, tasks: carryOverTasks, memo: '' };
         currentLogs.push(log);
+        
+        // [수정] 새 로그 생성 즉시 localStorage와 Supabase 모두에 반영하여 '좀비' 방지
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
+        
+        if (user) {
+          supabase.from('task_logs').upsert({
+            user_id: user.id,
+            space_id: currentSpace.id,
+            date: dateStr,
+            tasks: JSON.stringify(carryOverTasks),
+            memo: ''
+          }, { onConflict: 'user_id,space_id,date' }).then();
+        }
       }
       
       setLogs(currentLogs);
@@ -626,10 +638,9 @@ export default function App() {
                 return prev;
               }
               
-              // [핵심 해결책] 현재 이 기기에서 편집 중인 태스크(focusedTaskId)가 있는 경우 
-              // 서버 데이터로 로컬을 무작정 덮어쓰지 않고 무시하거나 나중에 동기화하도록 유도
+              // [중요] 사용자가 수동으로 태스크를 조작 중일 때 서버 데이터가 들어오면 무시함
+              // (삭제, 추가, 편집 등 모든 활동 포함)
               if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
-                console.log(`[Sync-Realtime] User is editing, skipping server overwrite for ${dateStr}`);
                 return prev;
               }
               
@@ -640,8 +651,13 @@ export default function App() {
 
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
 
+            // [추가] 렌더링 중인 tasks와 서버에서 온 tasks가 다를 때만 업데이트
             if (dateStr === viewDate.toDateString()) {
-              setTasks(serverLog.tasks);
+              const currentTasksStr = JSON.stringify(tasks);
+              const serverTasksStr = JSON.stringify(serverLog.tasks);
+              if (currentTasksStr !== serverTasksStr) {
+                setTasks(serverLog.tasks);
+              }
             }
             return nextLogs;
           });

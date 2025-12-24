@@ -364,18 +364,15 @@ export default function App() {
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const saveToLocalStorage = useCallback((logsToSave: DailyLog[]) => {
-      // Wrapper for backward compatibility if needed, or replace usages
-      // For now, let's just make it call saveTasks with the tasks from the current day log
       const today = new Date().toDateString();
       const currentLog = logsToSave.find(l => l.date === today);
       if (currentLog) {
-          saveTasks(currentLog.tasks);
+          saveTasks(currentLog.tasks, currentLog.memo);
       }
-  }, []);
+  }, [saveTasks]);
 
-  const saveTasks = useCallback((tasksToSave: Task[]) => {
+  const saveTasks = useCallback((tasksToSave: Task[], memoToSave?: string) => {
     if (currentSpace) {
-      // Still save the whole log structure for now to avoid breaking things
       const today = new Date().toDateString();
       const localData = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let logs: DailyLog[] = [];
@@ -388,8 +385,9 @@ export default function App() {
       const logIndex = logs.findIndex(l => l.date === today);
       if (logIndex > -1) {
         logs[logIndex].tasks = tasksToSave;
+        if (memoToSave !== undefined) logs[logIndex].memo = memoToSave;
       } else {
-        logs.push({ date: today, tasks: tasksToSave, memo: '' });
+        logs.push({ date: today, tasks: tasksToSave, memo: memoToSave || '' });
       }
       localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(logs));
 
@@ -398,7 +396,27 @@ export default function App() {
         clearTimeout(syncTimeoutRef.current);
       }
 
-      // task_logs만 사용
+      if (user && currentSpace) {
+        syncTimeoutRef.current = setTimeout(async () => {
+          const dateStr = new Date().toDateString();
+          const currentLog = logs.find(l => l.date === dateStr);
+          if (currentLog) {
+            console.log('Syncing tasks to Supabase...');
+            const { error } = await supabase
+              .from('task_logs')
+              .upsert({
+                user_id: user.id,
+                space_id: currentSpace.id,
+                date: dateStr,
+                tasks: JSON.stringify(currentLog.tasks),
+                memo: currentLog.memo || ''
+              }, { onConflict: 'user_id,space_id,date' });
+            
+            if (error) console.error('Supabase sync error:', error);
+            else console.log('Supabase sync successful');
+          }
+        }, 2000); // 2초 디바운스
+      }
     }
   }, [currentSpace, user]);
 
@@ -538,8 +556,9 @@ export default function App() {
     setTasks(newTasks);
     const dateStr = viewDate.toDateString();
     setLogs(prev => {
+      const log = prev.find(l => l.date === dateStr);
       const updated = prev.map(l => l.date === dateStr ? { ...l, tasks: newTasks } : l);
-      saveTasks(newTasks);
+      saveTasks(newTasks, log?.memo);
       return updated;
     });
     if (updateHistory && !isInternalUpdate.current) {
@@ -556,7 +575,12 @@ export default function App() {
         const next = prev.map(t => { if (t.isTimerOn && t.timerStartTime) { const elapsed = (now - t.timerStartTime) / 1000; changed = true; return { ...t, actTime: (t.actTime || 0) + elapsed, timerStartTime: now }; } return t; });
         if (changed) {
           const dateStr = viewDate.toDateString();
-          setLogs(prevLogs => { const updated = prevLogs.map(l => l.date === dateStr ? { ...l, tasks: next } : l); saveTasks(next); return updated; });
+          setLogs(prevLogs => { 
+            const updated = prevLogs.map(l => l.date === dateStr ? { ...l, tasks: next } : l); 
+            const currentLog = updated.find(l => l.date === dateStr);
+            saveTasks(next, currentLog?.memo); 
+            return updated; 
+          });
         }
         return changed ? next : prev;
       });

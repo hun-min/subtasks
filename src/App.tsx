@@ -500,7 +500,10 @@ export default function App() {
       let log = currentLogs.find(l => l.date === dateStr);
       const isNeverVisited = !log;
       
-      if (isNeverVisited) {
+      // 미래 날짜 자동 생성 방지
+      const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
+
+      if (isNeverVisited && isNotFuture) {
         const sortedLogs = [...currentLogs]
           .filter(l => l.tasks.some(t => t.isSecond))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -643,7 +646,6 @@ export default function App() {
     const newTasks = [...tasks];
     newTasks[idx] = { ...current, name: textBefore, text: textBefore };
     
-    // 여러 줄 처리 지원
     const lines = textAfter.split('\n');
     const newTasksToAdd: Task[] = lines.map((line, i) => ({
       id: Date.now() + i,
@@ -712,7 +714,6 @@ export default function App() {
     const target = e.target as HTMLElement;
     const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
     
-    // 삭제 키 처리 (다중 선택 상태에서)
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTaskIds.size > 0 && !isInput) {
       e.preventDefault();
       const nextTasks = tasks.filter(t => !selectedTaskIds.has(t.id));
@@ -721,7 +722,6 @@ export default function App() {
       return;
     }
 
-    // 붙여넣기 처리
     if ((e.ctrlKey || e.metaKey) && e.key === 'v' && selectedTaskIds.size > 0 && !isInput) {
       navigator.clipboard.readText().then(text => {
         if (!text) return;

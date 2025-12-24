@@ -389,12 +389,13 @@ export default function App() {
       }
 
       if (user && currentSpace) {
+        console.log(`[Sync] Scheduling sync for space: ${currentSpace.id}, user: ${user.id}`);
         syncTimeoutRef.current = setTimeout(async () => {
           const dateStr = new Date().toDateString();
           const currentLog = logs.find(l => l.date === dateStr);
           if (currentLog) {
-            console.log('Syncing tasks to Supabase...');
-            const { error } = await supabase
+            console.log(`[Sync] Starting sync to Supabase for date: ${dateStr}...`);
+            const { data, error } = await supabase
               .from('task_logs')
               .upsert({
                 user_id: user.id,
@@ -402,12 +403,26 @@ export default function App() {
                 date: dateStr,
                 tasks: JSON.stringify(currentLog.tasks),
                 memo: currentLog.memo || ''
-              }, { onConflict: 'user_id,space_id,date' });
+              }, { onConflict: 'user_id,space_id,date' })
+              .select();
             
-            if (error) console.error('Supabase sync error:', error);
-            else console.log('Supabase sync successful');
+            if (error) {
+              console.error('[Sync] Supabase sync error details:', {
+                message: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint
+              });
+              alert(`동기화 실패: ${error.message}`);
+            } else {
+              console.log('[Sync] Supabase sync successful. Data returned:', data);
+            }
+          } else {
+            console.warn(`[Sync] No log found for date: ${dateStr} to sync.`);
           }
         }, 2000); // 2초 디바운스
+      } else {
+        console.log('[Sync] Sync skipped: User or CurrentSpace missing', { user: !!user, currentSpace: !!currentSpace });
       }
     }
   }, [currentSpace, user]);
@@ -492,16 +507,27 @@ export default function App() {
 
   // Supabase 동기화 (불러오기)
   useEffect(() => {
-    if (!user || !currentSpace || !localLogsLoaded) return;
+    if (!user || !currentSpace || !localLogsLoaded) {
+      console.log('[Sync-Load] Skipping load: Not ready', { user: !!user, currentSpace: !!currentSpace, localLogsLoaded });
+      return;
+    }
     
     const loadFromSupabase = async () => {
       try {
-        const { data } = await supabase
+        console.log(`[Sync-Load] Fetching from Supabase for space: ${currentSpace.id}...`);
+        const { data, error } = await supabase
           .from('task_logs')
           .select('*')
           .eq('user_id', user.id)
           .eq('space_id', currentSpace.id);
           
+        if (error) {
+          console.error('[Sync-Load] Supabase fetch error:', error);
+          return;
+        }
+
+        console.log(`[Sync-Load] Successfully fetched ${data?.length || 0} logs from server.`);
+
         if (data && data.length > 0) {
           const supabaseLogs: DailyLog[] = data.map(item => {
             let parsedTasks: Task[] = [];

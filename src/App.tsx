@@ -245,6 +245,12 @@ function UnifiedTaskItem({
     }
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
+      
+      // [수정] 빈 줄에서 백스페이스 시 그냥 줄 삭제 (병합 로직보다 우선)
+      if (taskName === '') {
+        console.log(`[Backspace-Debug] Empty task ${task.id}, deleting.`);
+      }
+      
       onMergeWithPrevious(task.id, taskName);
       return;
     }
@@ -673,14 +679,30 @@ export default function App() {
 
   const handleMergeWithPrevious = (taskId: number, currentText: string) => {
     const idx = tasks.findIndex(t => t.id === taskId);
-    if (idx <= 0) return;
-    const prev = tasks[idx - 1];
-    if (prev.isSecond !== tasks[idx].isSecond) return;
+    if (idx === -1) return;
+    
+    const current = tasks[idx];
     const newTasks = [...tasks];
-    newTasks[idx - 1] = { ...prev, name: prev.name + currentText, text: prev.text + currentText };
-    newTasks.splice(idx, 1);
-    updateStateAndLogs(newTasks);
-    setFocusedTaskId(prev.id);
+
+    if (idx > 0) {
+      const prev = tasks[idx - 1];
+      // 같은 그룹(세컨드 여부)일 때만 병합, 다르면 그냥 삭제
+      if (prev.isSecond === current.isSecond) {
+        newTasks[idx - 1] = { ...prev, name: prev.name + currentText, text: prev.text + currentText };
+        newTasks.splice(idx, 1);
+        updateStateAndLogs(newTasks);
+        setFocusedTaskId(prev.id);
+      } else {
+        newTasks.splice(idx, 1);
+        updateStateAndLogs(newTasks);
+        setFocusedTaskId(prev.id);
+      }
+    } else {
+      // 첫 번째 항목이면 그냥 삭제
+      newTasks.splice(idx, 1);
+      updateStateAndLogs(newTasks);
+      setFocusedTaskId(null);
+    }
   };
 
   const handleMergeWithNext = (taskId: number, currentText: string) => {

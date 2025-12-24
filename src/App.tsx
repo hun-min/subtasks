@@ -268,7 +268,9 @@ function UnifiedTaskItem({
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { 
       e.preventDefault(); 
-      updateTask({ ...task, status: task.status === 'completed' ? 'pending' : 'completed', isTimerOn: false }); 
+      const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+      console.log(`[Task-Toggle] Task ${task.id} toggling status to: ${newStatus}`);
+      updateTask({ ...task, status: newStatus, isTimerOn: false }); 
     }
   };
 
@@ -295,7 +297,11 @@ function UnifiedTaskItem({
           ))}
 
       <div className="flex flex-col items-center justify-start mt-[7px]">
-        <button onClick={() => updateTask({ ...task, status: task.status === 'completed' ? 'pending' : 'completed', isTimerOn: false })} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
+        <button onClick={() => {
+          const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+          console.log(`[Task-Toggle] Clicked task ${task.id}, new status: ${newStatus}`);
+          updateTask({ ...task, status: newStatus, isTimerOn: false });
+        }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>

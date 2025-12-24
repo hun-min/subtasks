@@ -479,13 +479,13 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       
-      // [핵심] 할 일이 아예 없거나, 'A SECOND' 타입의 할 일이 하나도 없을 때 강제 생성
-      const hasSecondTasks = log && log.tasks.some(t => t.isSecond);
+      // [개선] 사용자가 명시적으로 해당 날짜에 접속한 기록이 없을 때만 자동 생성 시도
+      // log.memo가 있거나 tasks가 이미 존재한다면(비어있더라도) 사용자가 이미 방문한 날짜로 간주
+      const isNeverVisited = !log;
       
-      if (!log || !hasSecondTasks) {
-        console.log(`[Log-Init] Initializing second tasks for ${dateStr}...`);
+      if (isNeverVisited) {
+        console.log(`[Log-Init] First visit to ${dateStr}, initializing tasks...`);
         
-        // 1. 모든 과거 로그에서 가장 최근의 A SECOND 태스크들 찾기
         const sortedLogs = [...currentLogs]
           .filter(l => l.tasks.some(t => t.isSecond))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -501,22 +501,17 @@ export default function App() {
             }))
           : [];
         
-        if (log) {
-          // 날짜 로그는 있는데 세컨만 없는 경우 -> 기존 일반 태스크 유지하며 세컨 추가
-          log.tasks = [...carryOverTasks, ...log.tasks.filter(t => !t.isSecond)];
-        } else {
-          // 날짜 로그 자체가 없는 경우
-          log = { date: dateStr, tasks: carryOverTasks, memo: '' };
-          currentLogs.push(log);
-        }
-        
+        log = { date: dateStr, tasks: carryOverTasks, memo: '' };
+        currentLogs.push(log);
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
       }
       
       setLogs(currentLogs);
-      setTasks(log.tasks);
-      setHistory([log.tasks]);
-      setHistoryIndex(0);
+      if (log) {
+        setTasks(log.tasks);
+        setHistory([log.tasks]);
+        setHistoryIndex(0);
+      }
       const savedVisible = localStorage.getItem(`ultra_tasks_is_second_visible_${currentSpace.id}`);
       setIsSecondVisible(savedVisible !== null ? JSON.parse(savedVisible) : true);
       

@@ -505,7 +505,7 @@ export default function App() {
     }
   }, [currentSpace, viewDate]);
 
-  // Supabase 동기화 (불러오기)
+  // Supabase 동기화 (불러오기 및 실시간 구독)
   useEffect(() => {
     if (!user || !currentSpace || !localLogsLoaded) {
       console.log('[Sync-Load] Skipping load: Not ready', { user: !!user, currentSpace: !!currentSpace, localLogsLoaded });
@@ -547,11 +547,14 @@ export default function App() {
                if (serverLog.date === 'SETTINGS') return;
                const idx = newLogs.findIndex(l => l.date === serverLog.date);
                if (idx >= 0) {
+                 // 단순 문자열 비교로 변경 감지 (더 정확한 병합이 필요할 수 있음)
                  if (JSON.stringify(newLogs[idx]) !== JSON.stringify(serverLog)) {
+                    console.log(`[Sync-Load] Updating log for date: ${serverLog.date}`);
                     newLogs[idx] = serverLog;
                     changed = true;
                  }
                } else {
+                 console.log(`[Sync-Load] Adding new log for date: ${serverLog.date}`);
                  newLogs.push(serverLog);
                  changed = true;
                }
@@ -560,9 +563,12 @@ export default function App() {
             if (changed) {
               localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
               
-              const currentViewLog = newLogs.find(l => l.date === viewDate.toDateString());
+              const currentViewDateStr = viewDate.toDateString();
+              const currentViewLog = newLogs.find(l => l.date === currentViewDateStr);
               if (currentViewLog) {
+                console.log(`[Sync-Load] Updating current tasks from server data for ${currentViewDateStr}`);
                 setTasks(currentViewLog.tasks);
+                // 히스토리 초기화 (선택 사항)
                 setHistory([currentViewLog.tasks]);
                 setHistoryIndex(0);
               }
@@ -575,8 +581,58 @@ export default function App() {
         console.error('Supabase load error:', error);
       }
     };
+    
     loadFromSupabase();
-  }, [user, currentSpace, localLogsLoaded]);
+
+    // 실시간 구독 추가
+    console.log(`[Sync-Realtime] Subscribing to task_logs for space: ${currentSpace.id}`);
+    const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'task_logs',
+        filter: `user_id=eq.${user.id}`
+      }, (payload: any) => {
+        // 현재 공간의 데이터인지 확인
+        if (payload.new && payload.new.space_id === currentSpace.id) {
+          console.log('[Sync-Realtime] Change detected:', payload.eventType);
+          const serverLog = {
+            date: payload.new.date,
+            tasks: migrateTasks(JSON.parse(payload.new.tasks)),
+            memo: payload.new.memo
+          };
+
+          if (serverLog.date === 'SETTINGS') return;
+
+          setLogs(prev => {
+            const dateStr = serverLog.date;
+            const existingIdx = prev.findIndex(l => l.date === dateStr);
+            let nextLogs = [...prev];
+
+            if (existingIdx >= 0) {
+              if (JSON.stringify(prev[existingIdx]) === JSON.stringify(serverLog)) return prev;
+              nextLogs[existingIdx] = serverLog;
+            } else {
+              nextLogs.push(serverLog);
+            }
+
+            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
+
+            if (dateStr === viewDate.toDateString()) {
+              console.log('[Sync-Realtime] Updating current view tasks');
+              setTasks(serverLog.tasks);
+            }
+            return nextLogs;
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      console.log('[Sync-Realtime] Unsubscribing');
+      supabase.removeChannel(channel);
+    };
+  }, [user, currentSpace, localLogsLoaded, viewDate]);
 
   const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
     setTasks(newTasks);

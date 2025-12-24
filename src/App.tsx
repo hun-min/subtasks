@@ -474,13 +474,13 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       
-      // 사용자가 명시적으로 해당 날짜에 접속한 기록이 없을 때만 자동 생성 시도
+      // [개선] 사용자가 명시적으로 해당 날짜에 접속한 기록이 없을 때만 자동 생성 시도
+      // log.memo가 있거나 tasks가 이미 존재한다면(비어있더라도) 사용자가 이미 방문한 날짜로 간주
       const isNeverVisited = !log;
       
       if (isNeverVisited) {
         console.log(`[Log-Init] First visit to ${dateStr}, initializing tasks...`);
         
-        // carry over logic... (생략하거나 단순화)
         const sortedLogs = [...currentLogs]
           .filter(l => l.tasks.some(t => t.isSecond))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -529,25 +529,19 @@ export default function App() {
   // Supabase 동기화 (불러오기 및 실시간 구독)
   useEffect(() => {
     if (!user || !currentSpace || !localLogsLoaded) {
-      console.log('[Sync-Load] Skipping load: Not ready', { user: !!user, currentSpace: !!currentSpace, localLogsLoaded });
       return;
     }
     
+    // 초기 로드 함수
     const loadFromSupabase = async () => {
       try {
-        console.log(`[Sync-Load] Fetching from Supabase for space: ${currentSpace.id}...`);
         const { data, error } = await supabase
           .from('task_logs')
           .select('*')
           .eq('user_id', user.id)
           .eq('space_id', currentSpace.id);
           
-        if (error) {
-          console.error('[Sync-Load] Supabase fetch error:', error);
-          return;
-        }
-
-        console.log(`[Sync-Load] Successfully fetched ${data?.length || 0} logs from server.`);
+        if (error) return;
 
         if (data && data.length > 0) {
           const supabaseLogs: DailyLog[] = data.map(item => {
@@ -568,14 +562,11 @@ export default function App() {
                if (serverLog.date === 'SETTINGS') return;
                const idx = newLogs.findIndex(l => l.date === serverLog.date);
                if (idx >= 0) {
-                 // 단순 문자열 비교로 변경 감지 (더 정확한 병합이 필요할 수 있음)
                  if (JSON.stringify(newLogs[idx]) !== JSON.stringify(serverLog)) {
-                    console.log(`[Sync-Load] Updating log for date: ${serverLog.date}`);
                     newLogs[idx] = serverLog;
                     changed = true;
                  }
                } else {
-                 console.log(`[Sync-Load] Adding new log for date: ${serverLog.date}`);
                  newLogs.push(serverLog);
                  changed = true;
                }
@@ -583,40 +574,29 @@ export default function App() {
 
             if (changed) {
               localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-              
-              const currentViewDateStr = viewDate.toDateString();
-              const currentViewLog = newLogs.find(l => l.date === currentViewDateStr);
+              const currentViewLog = newLogs.find(l => l.date === viewDate.toDateString());
               if (currentViewLog) {
-                console.log(`[Sync-Load] Updating current tasks from server data for ${currentViewDateStr}`);
                 setTasks(currentViewLog.tasks);
-                // 히스토리 초기화 (선택 사항)
-                setHistory([currentViewLog.tasks]);
-                setHistoryIndex(0);
               }
               return newLogs;
             }
             return prev;
           });
         }
-      } catch (error) {
-        console.error('Supabase load error:', error);
-      }
+      } catch (e) {}
     };
     
     loadFromSupabase();
 
-    // 실시간 구독 추가
-    console.log(`[Sync-Realtime] Subscribing to task_logs for space: ${currentSpace.id}`);
+    // 실시간 구독
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', {
-        event: '*',
+        event: 'UPDATE',
         schema: 'public',
         table: 'task_logs',
         filter: `user_id=eq.${user.id}`
       }, (payload: any) => {
-        // 현재 공간의 데이터인지 확인
         if (payload.new && payload.new.space_id === currentSpace.id) {
-          console.log(`[Sync-Realtime] Change detected: ${payload.eventType} for date: ${payload.new.date}`);
           const serverLog = {
             date: payload.new.date,
             tasks: migrateTasks(JSON.parse(payload.new.tasks)),
@@ -633,16 +613,10 @@ export default function App() {
             if (existingIdx >= 0) {
               const localDataStr = JSON.stringify(prev[existingIdx].tasks);
               const serverDataStr = JSON.stringify(serverLog.tasks);
+              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) return prev;
               
-              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) {
-                return prev;
-              }
-              
-              // [중요] 사용자가 수동으로 태스크를 조작 중일 때 서버 데이터가 들어오면 무시함
-              // (삭제, 추가, 편집 등 모든 활동 포함)
-              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
-                return prev;
-              }
+              // 사용자가 이 날짜를 보고 있고 포커스가 있다면 덮어쓰기 방지
+              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) return prev;
               
               nextLogs[existingIdx] = serverLog;
             } else {
@@ -651,30 +625,19 @@ export default function App() {
 
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
 
-            // [추가] 렌더링 중인 tasks와 서버에서 온 tasks가 다를 때만 업데이트
             if (dateStr === viewDate.toDateString()) {
-              const currentTasksStr = JSON.stringify(tasks);
-              const serverTasksStr = JSON.stringify(serverLog.tasks);
-              if (currentTasksStr !== serverTasksStr) {
-                setTasks(serverLog.tasks);
-              }
+              setTasks(serverLog.tasks);
             }
             return nextLogs;
           });
         }
       })
-      .subscribe((status) => {
-        console.log(`[Sync-Realtime] Subscription status: ${status}`);
-        if (status === 'SUBSCRIBED') {
-          console.log('[Sync-Realtime] Successfully subscribed to real-time updates.');
-        }
-      });
+      .subscribe();
 
     return () => {
-      console.log('[Sync-Realtime] Unsubscribing');
       supabase.removeChannel(channel);
     };
-  }, [user, currentSpace, localLogsLoaded, viewDate]);
+  }, [user, currentSpace, localLogsLoaded]); // viewDate 의존성 제거하여 무한 루프 방지
 
   const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
     // console.log('[Update] Updating tasks:', newTasks.length);

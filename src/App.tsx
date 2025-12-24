@@ -293,13 +293,19 @@ function UnifiedTaskItem({
 
   const handleTextChange = (e: any) => {
     const newVal = e.target.value;
+    
+    // Ctrl+Enter 등으로 상태만 바뀔 때 text가 0이 되거나 undefined가 되는 현상 방지
+    if (newVal === undefined) return;
+
     if (newVal.includes('\n')) {
       const lines = newVal.split('\n');
       const textBefore = lines[0];
       const textAfter = lines.slice(1).join('\n');
+      console.log(`[TextChange-Debug] Multi-line detected. Splitting at: "${textBefore}" and "${textAfter}"`);
       onAddTaskAtCursor(task.id, textBefore, textAfter);
     } else {
-      updateTask({ ...task, name: newVal });
+      console.log(`[TextChange-Debug] Single line update for ${task.id}: "${newVal}"`);
+      updateTask({ ...task, name: newVal, text: newVal });
     }
   };
 

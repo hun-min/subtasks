@@ -6,7 +6,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, ArrowRight, ArrowLeft, Calendar, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, List, Clock, ArrowRight, ArrowLeft, Calendar, HelpCircle } from 'lucide-react';
 import { supabase } from './supabase';
 
 // --- 데이터 타입 ---
@@ -186,7 +186,6 @@ const UnifiedTaskItem = React.memo(({
 }) => {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
-  // 기본 패딩 16px (px-4) + depth * 24px
   const basePadding = 16;
   const paddingLeft = basePadding + (currentDepth * 24); 
   const isFocused = focusedTaskId === task.id;
@@ -355,7 +354,7 @@ const migrateTasks = (tasks: any[]): Task[] => {
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
-  const { currentSpace, spaces, setCurrentSpace } = useSpace();
+  const { currentSpace } = useSpace();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
@@ -373,7 +372,6 @@ export default function App() {
   const isInternalUpdate = useRef(false);
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-// Debounce timeout ref
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const saveTasks = useCallback((tasksToSave: Task[], memoToSave?: string) => {
@@ -381,46 +379,24 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       const localData = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let currentLogs: DailyLog[] = [];
-      if (localData) {
-        try { currentLogs = JSON.parse(localData); } catch (e) { console.error(e); }
-      }
-      
+      if (localData) { try { currentLogs = JSON.parse(localData); } catch (e) {} }
       const logIndex = currentLogs.findIndex(l => l.date === dateStr);
       if (logIndex > -1) {
         currentLogs[logIndex].tasks = tasksToSave;
         if (memoToSave !== undefined) currentLogs[logIndex].memo = memoToSave;
-      } else {
-        currentLogs.push({ date: dateStr, tasks: tasksToSave, memo: memoToSave || '' });
-      }
+      } else { currentLogs.push({ date: dateStr, tasks: tasksToSave, memo: memoToSave || '' }); }
       localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
-
       if (user && currentSpace) {
         const performSync = async () => {
           const finalLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
           if (!finalLogsStr) return;
           const finalLogs: DailyLog[] = JSON.parse(finalLogsStr);
           const finalLog = finalLogs.find(l => l.date === dateStr);
-          
           if (finalLog) {
-            const { error } = await supabase
-              .from('task_logs')
-              .upsert({
-                user_id: user.id,
-                space_id: currentSpace.id,
-                date: dateStr,
-                tasks: JSON.stringify(finalLog.tasks),
-                memo: finalLog.memo || ''
-              }, { onConflict: 'user_id,space_id,date' });
-            
-            if (error) {
-              console.error('[Sync-Debug] Error:', error.message);
-            }
+            await supabase.from('task_logs').upsert({ user_id: user.id, space_id: currentSpace.id, date: dateStr, tasks: JSON.stringify(finalLog.tasks), memo: finalLog.memo || '' }, { onConflict: 'user_id,space_id,date' });
           }
         };
-
-        if (syncTimeoutRef.current) {
-          clearTimeout(syncTimeoutRef.current);
-        }
+        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
         syncTimeoutRef.current = setTimeout(performSync, 300);
       }
     }
@@ -444,9 +420,7 @@ export default function App() {
   const saveToLocalStorage = useCallback((logsToSave: DailyLog[]) => {
       const today = new Date().toDateString();
       const currentLog = logsToSave.find(l => l.date === today);
-      if (currentLog) {
-          saveTasks(currentLog.tasks, currentLog.memo);
-      }
+      if (currentLog) saveTasks(currentLog.tasks, currentLog.memo);
   }, [saveTasks]);
 
   useEffect(() => {
@@ -464,35 +438,14 @@ export default function App() {
     }
   }, [currentSpace, user]);
 
-  const toggleSecondVisible = async () => {
-    const newVal = !isSecondVisible;
-    setIsSecondVisible(newVal);
-    if (currentSpace && user) {
-      localStorage.setItem(`ultra_tasks_is_second_visible_${currentSpace.id}`, JSON.stringify(newVal));
-      await supabase.from('task_logs').upsert({ user_id: user.id, space_id: currentSpace.id, date: 'SETTINGS', tasks: '[]', memo: JSON.stringify({ isSecondVisible: newVal }) });
-    }
-  };
-
   useEffect(() => {
     if (currentSpace) {
       setLocalLogsLoaded(false);
       const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let currentLogs: DailyLog[] = [];
-      if (saved) {
-        try {
-           const parsedLogs = JSON.parse(saved);
-           currentLogs = parsedLogs.map((log: any) => ({
-             ...log,
-             tasks: migrateTasks(log.tasks)
-           }));
-        } catch (e) {
-           console.error('Failed to parse logs', e);
-        }
-      }
-
+      if (saved) { try { currentLogs = JSON.parse(saved).map((log: any) => ({ ...log, tasks: migrateTasks(log.tasks) })); } catch (e) {} }
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
-      
       if (!log) {
         const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
         let carryOverTasks: Task[] = [];
@@ -504,40 +457,24 @@ export default function App() {
         log = { date: dateStr, tasks: carryOverTasks, memo: '' };
         currentLogs.push(log);
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
-        if (user && carryOverTasks.length > 0) {
-          supabase.from('task_logs').upsert({ user_id: user.id, space_id: currentSpace.id, date: dateStr, tasks: JSON.stringify(carryOverTasks), memo: '' }, { onConflict: 'user_id,space_id,date' }).then();
-        }
+        if (user && carryOverTasks.length > 0) { supabase.from('task_logs').upsert({ user_id: user.id, space_id: currentSpace.id, date: dateStr, tasks: JSON.stringify(carryOverTasks), memo: '' }, { onConflict: 'user_id,space_id,date' }).then(); }
       }
-      
       setLogs(currentLogs);
-      if (log) {
-        setTasks(log.tasks);
-        setHistory([log.tasks]);
-        setHistoryIndex(0);
-      }
+      if (log) { setTasks(log.tasks); setHistory([log.tasks]); setHistoryIndex(0); }
       const savedVisible = localStorage.getItem(`ultra_tasks_is_second_visible_${currentSpace.id}`);
       setIsSecondVisible(savedVisible !== null ? JSON.parse(savedVisible) : true);
       setLocalLogsLoaded(true);
     }
-  }, [currentSpace, viewDate]);
+  }, [currentSpace, viewDate, user]);
 
   useEffect(() => {
     if (!user || !currentSpace || !localLogsLoaded) return;
-    
     const loadFromSupabase = async () => {
       try {
-        const { data, error } = await supabase
-          .from('task_logs')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('space_id', currentSpace.id);
+        const { data, error } = await supabase.from('task_logs').select('*').eq('user_id', user.id).eq('space_id', currentSpace.id);
         if (error) return;
         if (data && data.length > 0) {
-          const supabaseLogs: DailyLog[] = data.map(item => ({
-            date: item.date,
-            tasks: migrateTasks(JSON.parse(item.tasks)),
-            memo: item.memo
-          }));
+          const supabaseLogs: DailyLog[] = data.map(item => ({ date: item.date, tasks: migrateTasks(JSON.parse(item.tasks)), memo: item.memo }));
           setLogs(prev => {
             const newLogs = [...prev];
             let changed = false;
@@ -545,18 +482,11 @@ export default function App() {
                if (serverLog.date === 'SETTINGS') return;
                const idx = newLogs.findIndex(l => l.date === serverLog.date);
                if (idx >= 0) {
-                 if (JSON.stringify(newLogs[idx].tasks) !== JSON.stringify(serverLog.tasks) || newLogs[idx].memo !== serverLog.memo) {
-                    newLogs[idx] = serverLog;
-                    changed = true;
-                 }
-               } else {
-                 newLogs.push(serverLog);
-                 changed = true;
-               }
+                 if (JSON.stringify(newLogs[idx].tasks) !== JSON.stringify(serverLog.tasks) || newLogs[idx].memo !== serverLog.memo) { newLogs[idx] = serverLog; changed = true; }
+               } else { newLogs.push(serverLog); changed = true; }
             });
             if (changed) {
               localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-              
               if (focusedTaskId === null) {
                 const currentViewLog = newLogs.find(l => l.date === viewDate.toDateString());
                 if (currentViewLog) setTasks(currentViewLog.tasks);
@@ -569,7 +499,6 @@ export default function App() {
       } catch (e) {}
     };
     loadFromSupabase();
-
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
         if (payload.new && payload.new.space_id === currentSpace.id) {
@@ -580,21 +509,12 @@ export default function App() {
             const existingIdx = prev.findIndex(l => l.date === dateStr);
             let nextLogs = [...prev];
             if (existingIdx >= 0) {
-              const localDataStr = JSON.stringify(prev[existingIdx].tasks);
-              const serverDataStr = JSON.stringify(serverLog.tasks);
-              if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) return prev;
-              
-              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
-                return prev;
-              }
+              if (JSON.stringify(prev[existingIdx].tasks) === JSON.stringify(serverLog.tasks) && prev[existingIdx].memo === serverLog.memo) return prev;
+              if (focusedTaskId !== null && dateStr === viewDate.toDateString()) return prev;
               nextLogs[existingIdx] = serverLog;
-            } else {
-              nextLogs.push(serverLog);
-            }
+            } else { nextLogs.push(serverLog); }
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
-            if (dateStr === viewDate.toDateString() && focusedTaskId === null) {
-              setTasks(serverLog.tasks);
-            }
+            if (dateStr === viewDate.toDateString() && focusedTaskId === null) setTasks(serverLog.tasks);
             return nextLogs;
           });
         }
@@ -624,101 +544,83 @@ export default function App() {
     return () => clearInterval(timer);
   }, [viewDate, saveTasks]);
 
-  const handleAddTaskAtCursor = (taskId: number, textBefore: string, textAfter: string) => {
-    const idx = tasks.findIndex(t => t.id === taskId);
-    if (idx === -1) return;
-    const current = tasks[idx];
-    const newTasks = [...tasks];
-    newTasks[idx] = { ...current, name: textBefore, text: textBefore };
-    
-    const lines = textAfter.split('\n');
-    const newTasksToAdd: Task[] = lines.map((line, i) => ({
-      id: Date.now() + i,
-      name: line.trim(),
-      status: 'pending',
-      indent: current.indent,
-      parent: current.parent,
-      text: line.trim(),
-      percent: 0,
-      planTime: 0,
-      actTime: 0,
-      isTimerOn: false,
-      depth: current.depth || 0,
-      isSecond: current.isSecond,
-      space_id: String(currentSpace?.id || ''),
-    }));
-    
-    newTasks.splice(idx + 1, 0, ...newTasksToAdd);
-    updateStateAndLogs(newTasks);
-    if (newTasksToAdd.length > 0) setFocusedTaskId(newTasksToAdd[0].id);
-  };
-
-  const handleMergeWithPrevious = (taskId: number, currentText: string) => {
-    const idx = tasks.findIndex(t => t.id === taskId);
-    if (idx === -1) return;
-    const current = tasks[idx];
-    const newTasks = [...tasks];
-    
-    const sameSectionTasks = tasks.filter(t => t.isSecond === current.isSecond);
-    const inSectionIdx = sameSectionTasks.findIndex(t => t.id === taskId);
-    
-    if (inSectionIdx > 0) {
-      const prev = sameSectionTasks[inSectionIdx - 1];
-      const overallPrevIdx = tasks.findIndex(t => t.id === prev.id);
-      
-      const prevName = prev.name || '';
-      const newCursorPos = prevName.length;
-      
-      newTasks[overallPrevIdx] = { 
-        ...prev, 
-        name: prevName + (currentText || ''), 
-        text: (prev.text || '') + (currentText || '') 
-      };
-      newTasks.splice(idx, 1);
+  const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
+    setTasks(prev => {
+      const idx = prev.findIndex(t => t.id === taskId);
+      if (idx === -1) return prev;
+      const current = prev[idx];
+      const newTasks = [...prev];
+      newTasks[idx] = { ...current, name: textBefore, text: textBefore };
+      const lines = textAfter.split('\n');
+      const newTasksToAdd: Task[] = lines.map((line, i) => ({
+        id: Date.now() + i, name: line.trim(), status: 'pending', indent: current.indent, parent: current.parent, text: line.trim(),
+        percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: current.depth || 0, isSecond: current.isSecond, space_id: String(currentSpace?.id || ''),
+      }));
+      newTasks.splice(idx + 1, 0, ...newTasksToAdd);
+      if (newTasksToAdd.length > 0) setTimeout(() => setFocusedTaskId(newTasksToAdd[0].id), 0);
       updateStateAndLogs(newTasks);
-      
-      setFocusedTaskId(prev.id);
-      setTimeout(() => {
-        const el = document.activeElement as HTMLTextAreaElement;
-        if (el && el.tagName === 'TEXTAREA') {
-          el.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
-    } else {
-      const filtered = tasks.filter(t => t.id !== taskId);
-      updateStateAndLogs(filtered);
-      setFocusedTaskId(null);
-    }
-  };
+      return newTasks;
+    });
+  }, [currentSpace, updateStateAndLogs]);
 
-  const handleMergeWithNext = (taskId: number, _currentText: string) => {
-    const idx = tasks.findIndex(t => t.id === taskId);
-    if (idx === -1) return;
-    const current = tasks[idx];
-    
-    const sameSectionTasks = tasks.filter(t => t.isSecond === current.isSecond);
-    const inSectionIdx = sameSectionTasks.findIndex(t => t.id === taskId);
-    
-    if (inSectionIdx < sameSectionTasks.length - 1) {
-      const next = sameSectionTasks[inSectionIdx + 1];
-      const overallNextIdx = tasks.findIndex(t => t.id === next.id);
-      
-      const newTasks = [...tasks];
-      newTasks[idx] = { 
-        ...current, 
-        name: (current.name || '') + (next.name || ''), 
-        text: (current.text || '') + (next.text || '') 
-      };
-      newTasks.splice(overallNextIdx, 1);
-      updateStateAndLogs(newTasks);
-      setFocusedTaskId(taskId);
-    }
-  };
+  const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
+    setTasks(prev => {
+      const idx = prev.findIndex(t => t.id === taskId);
+      if (idx === -1) return prev;
+      const current = prev[idx];
+      const sameSectionTasks = prev.filter(t => t.isSecond === current.isSecond);
+      const inSectionIdx = sameSectionTasks.findIndex(t => t.id === taskId);
+      if (inSectionIdx > 0) {
+        const prevTask = sameSectionTasks[inSectionIdx - 1];
+        const overallPrevIdx = prev.findIndex(t => t.id === prevTask.id);
+        const newCursorPos = (prevTask.name || '').length;
+        const newTasks = [...prev];
+        newTasks[overallPrevIdx] = { ...prevTask, name: (prevTask.name || '') + (currentText || ''), text: (prevTask.text || '') + (currentText || '') };
+        newTasks.splice(idx, 1);
+        setTimeout(() => {
+          setFocusedTaskId(prevTask.id);
+          setTimeout(() => {
+            const el = document.activeElement as HTMLTextAreaElement;
+            if (el && el.tagName === 'TEXTAREA') el.setSelectionRange(newCursorPos, newCursorPos);
+          }, 0);
+        }, 0);
+        updateStateAndLogs(newTasks);
+        return newTasks;
+      } else {
+        const filtered = prev.filter(t => t.id !== taskId);
+        setFocusedTaskId(null);
+        updateStateAndLogs(filtered);
+        return filtered;
+      }
+    });
+  }, [updateStateAndLogs]);
+
+  const handleMergeWithNext = useCallback((taskId: number) => {
+    setTasks(prev => {
+      const idx = prev.findIndex(t => t.id === taskId);
+      if (idx === -1) return prev;
+      const current = prev[idx];
+      const sameSectionTasks = prev.filter(t => t.isSecond === current.isSecond);
+      const inSectionIdx = sameSectionTasks.findIndex(t => t.id === taskId);
+      if (inSectionIdx < sameSectionTasks.length - 1) {
+        const next = sameSectionTasks[inSectionIdx + 1];
+        const overallNextIdx = prev.findIndex(t => t.id === next.id);
+        const newTasks = [...prev];
+        newTasks[idx] = { ...current, name: (current.name || '') + (next.name || ''), text: (current.text || '') + (next.text || '') };
+        newTasks.splice(overallNextIdx, 1);
+        updateStateAndLogs(newTasks);
+        return newTasks;
+      }
+      return prev;
+    });
+  }, [updateStateAndLogs]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
       isInternalUpdate.current = true;
-      updateStateAndLogs(history[historyIndex - 1], false);
+      const prevHistory = history[historyIndex - 1];
+      setTasks(prevHistory);
+      updateStateAndLogs(prevHistory, false);
       setHistoryIndex(historyIndex - 1);
       setTimeout(() => isInternalUpdate.current = false, 0);
     }
@@ -727,61 +629,31 @@ export default function App() {
   const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       isInternalUpdate.current = true;
-      updateStateAndLogs(history[historyIndex + 1], false);
+      const nextHistory = history[historyIndex + 1];
+      setTasks(nextHistory);
+      updateStateAndLogs(nextHistory, false);
       setHistoryIndex(historyIndex + 1);
       setTimeout(() => isInternalUpdate.current = false, 0);
     }
   }, [history, historyIndex, updateStateAndLogs]);
 
-  const handleGlobalKeyDown = (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement;
-    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
-    
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTaskIds.size > 0 && !isInput) {
-      e.preventDefault();
-      const nextTasks = tasks.filter(t => !selectedTaskIds.has(t.id));
-      updateStateAndLogs(nextTasks);
-      setSelectedTaskIds(new Set());
-      return;
-    }
+  const onIndent = useCallback((taskId: number) => {
+    setTasks(prev => {
+      const next = prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t);
+      updateStateAndLogs(next);
+      return next;
+    });
+  }, [updateStateAndLogs]);
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'v' && selectedTaskIds.size > 0 && !isInput) {
-      navigator.clipboard.readText().then(text => {
-        if (!text) return;
-        const lines = text.split('\n').filter(line => line.trim() !== '');
-        if (lines.length === 0) return;
-        const sortedSelectedIds = Array.from(selectedTaskIds).sort((a, b) => tasks.findIndex(t => t.id === a) - tasks.findIndex(t => t.id === b));
-        const lastId = sortedSelectedIds[sortedSelectedIds.length - 1];
-        const insertIdx = tasks.findIndex(t => t.id === lastId);
-        if (insertIdx === -1) return;
-        const ref = tasks[insertIdx];
-        const newTasksFromPaste: Task[] = lines.map((line, i) => ({
-          id: Date.now() + i, name: line.trim(), status: 'pending', indent: ref.indent, parent: ref.parent, text: line.trim(),
-          percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: ref.depth || 0, isSecond: ref.isSecond, space_id: String(currentSpace?.id || ''),
-        }));
-        const nextTasks = [...tasks];
-        nextTasks.splice(insertIdx + 1, 0, ...newTasksFromPaste);
-        updateStateAndLogs(nextTasks);
-        setSelectedTaskIds(new Set());
-      });
-    }
+  const onOutdent = useCallback((taskId: number) => {
+    setTasks(prev => {
+      const next = prev.map(t => t.id === taskId ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t);
+      updateStateAndLogs(next);
+      return next;
+    });
+  }, [updateStateAndLogs]);
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); handleRedo(); }
-    if (e.key === '?' && !isInput) { e.preventDefault(); setShowShortcuts(true); }
-    if (e.altKey && e.key >= '1' && e.key <= '9') {
-      e.preventDefault();
-      const index = parseInt(e.key) - 1;
-      if (spaces[index]) setCurrentSpace(spaces[index]);
-    }
-  };
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleUndo, handleRedo, spaces, setCurrentSpace, selectedTaskIds, tasks, currentSpace, updateStateAndLogs]);
-
-  const handleDragEnd = (event: DragEndEvent) => {
+  const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
       const oldIndex = tasks.findIndex((t) => t.id === active.id);
@@ -813,90 +685,50 @@ export default function App() {
   const activeTask = useMemo(() => tasks.find(t => t.id === focusedTaskId), [tasks, focusedTaskId]);
   const planTasks = useMemo(() => tasks.filter(t => !t.isSecond), [tasks]);
   const secondTasks = useMemo(() => tasks.filter(t => t.isSecond), [tasks]);
-  
   const getStats = (list: Task[]) => {
     const total = list.length;
     const done = list.filter(t => t.status === 'completed').length;
-    const rate = total > 0 ? Math.round((done / total) * 100) : 0;
-    return { total, done, rate };
+    return { total, done, rate: total > 0 ? Math.round((done / total) * 100) : 0 };
   };
   const secondStats = useMemo(() => getStats(secondTasks), [secondTasks]);
   const flowStats = useMemo(() => getStats(planTasks), [planTasks]);
-  
   const currentLog = logs.find(l => l.date === viewDate.toDateString());
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
 
-  const DeepFocusOverlay = () => {
-    const activeTimerTask = tasks.find(t => t.isTimerOn);
-    
-    if (!activeTimerTask) return null;
-    const title = activeTimerTask.name || activeTimerTask.text || 'Untitled Task';
-    const timeLeft = activeTimerTask.actTime || 0; 
-    return (
-      <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center animate-in fade-in duration-500">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-gray-950 to-gray-950" /><div className="z-10 w-full max-w-2xl px-8 flex flex-col items-center text-center space-y-12"><div className="space-y-2 opacity-80"><span className="text-blue-400 font-medium tracking-[0.3em] uppercase text-xs">Current Objective</span><h2 className="text-xl text-gray-400 font-light">FOCUS MODE</h2></div><div className="space-y-6"><h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">{title}</h1><div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{formatTimeFull(timeLeft)}</div></div><div className="w-full max-w-md h-1 bg-gray-900 rounded-full overflow-hidden"><div className="h-full bg-blue-500/50 animate-pulse w-full" /></div><button onClick={() => { updateStateAndLogs(tasks.map(t => t.id === activeTimerTask.id ? { ...t, isTimerOn: false } : t)); setFocusedTaskId(activeTimerTask.id); }} className="px-8 py-3 border border-white/20 rounded-full text-white hover:bg-white/10 transition-all uppercase tracking-widest text-xs">Complete</button></div>
-      </div>
-    );
-  };
-
-  const onIndent = useCallback((taskId: number) => {
-    setTasks(prev => {
-      const next = prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t);
-      const dateStr = viewDate.toDateString();
-      const currentMemo = logs.find(l => l.date === dateStr)?.memo;
-      saveTasks(next, currentMemo);
-      return next;
-    });
-  }, [viewDate, logs, saveTasks]);
-
-  const onOutdent = useCallback((taskId: number) => {
-    setTasks(prev => {
-      const next = prev.map(t => t.id === taskId ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t);
-      const dateStr = viewDate.toDateString();
-      const currentMemo = logs.find(l => l.date === dateStr)?.memo;
-      saveTasks(next, currentMemo);
-      return next;
-    });
-  }, [viewDate, logs, saveTasks]);
-
   return (
     <div className="min-h-screen bg-[#050505] text-[#e0e0e0] selection:bg-[#7c4dff]/30 font-sans overflow-x-hidden">
-      <DeepFocusOverlay />
-      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
-      {showShortcuts && (
-        <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}><div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-start mb-6"><h2 className="text-xl font-bold text-white">Shortcuts</h2><button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button></div><div className="space-y-3 text-sm"><div className="flex justify-between items-center"><span className="text-gray-400">타이머</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Space</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">완료</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">Undo/Redo</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl+Z / Y</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">공간 전환</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + 1~9</kbd></div></div></div></div>
-      )}
-      <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4">
-        <div className="mb-4 flex justify-between items-center flex-shrink-0"><SpaceSelector /><div className="flex gap-3 items-center"><button onClick={toggleSecondVisible} className="text-gray-500 hover:text-white p-1 transition-colors"><Clock size={18} /></button><button onClick={() => setShowShortcuts(true)} className="text-gray-500 hover:text-white p-1"><HelpCircle size={18} /></button><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button></div></div>
-        <div className="flex-shrink-0">
-          <div className="calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
-             <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400 transition-colors"><ChevronLeft size={22} /></button><div className="text-center group cursor-pointer" onClick={() => setViewDate(new Date())}><div className="text-[11px] text-gray-500 uppercase tracking-widest mb-0.5 font-bold group-hover:text-blue-500 transition-colors">{year}</div><div className="font-black text-xl text-white group-hover:text-[#7c4dff] transition-colors">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400 transition-colors"><ChevronRight size={22} /></button></div>
-             <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); const l = logs.find(log => log.date === d.toDateString()); const hasTasks = l && l.tasks.length > 0; const rate = hasTasks ? Math.round((l!.tasks.filter(t => t.status === 'completed').length / l!.tasks.length) * 100) : 0; const isToday = d.toDateString() === new Date().toDateString(); return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all relative ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white shadow-lg shadow-[#7c4dff]/20' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'} ${isToday && d.toDateString() !== viewDate.toDateString() ? 'ring-1 ring-[#7c4dff]/50' : ''}`}><span className="font-black text-[14px]">{d.getDate()}</span>{hasTasks && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{rate}%</div>}</button>; })}</div>
-          </div>
-          <div className="mb-6 flex justify-around items-center px-4">
-            {isSecondVisible && <div className="text-center"><div className="text-[28px] font-black text-white leading-none">{secondStats.done}<span className="text-[16px] text-gray-600 font-light mx-1">/</span>{secondStats.total}</div><div className="text-[14px] text-pink-500 font-black mt-1">{secondStats.rate}%</div></div>}
-            <div className="text-center"><div className="text-[28px] font-black text-white leading-none">{flowStats.done}<span className="text-[16px] text-gray-600 font-light mx-1">/</span>{flowStats.total}</div><div className="text-[14px] text-[#7c4dff] font-black mt-1">{flowStats.rate}%</div></div>
-          </div>
-          <div className="px-6 mb-6"><AutoResizeTextarea value={currentLog?.memo || ''} onChange={(e: any) => { const newMemo = e.target.value; setLogs(prev => { const updated = prev.map(l => l.date === viewDate.toDateString() ? { ...l, memo: newMemo } : l); saveToLocalStorage(updated); return updated; }); }} placeholder="M E M O" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none" /></div>
+      {tasks.find(t => t.isTimerOn) && (
+        <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center animate-in fade-in duration-500">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-gray-950 to-gray-950" /><div className="z-10 w-full max-w-2xl px-8 flex flex-col items-center text-center space-y-12"><div className="space-y-2 opacity-80"><span className="text-blue-400 font-medium tracking-[0.3em] uppercase text-xs">Current Objective</span><h2 className="text-xl text-gray-400 font-light">FOCUS MODE</h2></div><div className="space-y-6"><h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">{tasks.find(t => t.isTimerOn)?.name || 'Untitled'}</h1><div className="font-mono text-6xl text-gray-500 font-thin tabular-nums">{formatTimeFull(tasks.find(t => t.isTimerOn)?.actTime || 0)}</div></div><button onClick={() => updateStateAndLogs(tasks.map(t => t.isTimerOn ? { ...t, isTimerOn: false } : t))} className="px-8 py-3 border border-white/20 rounded-full text-white hover:bg-white/10 transition-all uppercase tracking-widest text-xs">Complete</button></div>
         </div>
+      )}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4">
+        <div className="mb-4 flex justify-between items-center"><SpaceSelector /><div className="flex gap-3 items-center"><button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-500 hover:text-white p-1"><Clock size={18} /></button><button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1"><HelpCircle size={18} /></button><button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button></div></div>
+        <div className="calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
+           <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button><div className="text-center cursor-pointer" onClick={() => setViewDate(new Date())}><div className="text-[11px] text-gray-500 uppercase tracking-widest font-bold">{year}</div><div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button></div>
+           <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); const l = logs.find(log => log.date === d.toDateString()); const hasTasks = l && l.tasks.length > 0; return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'}`}><span className="font-black text-[14px]">{d.getDate()}</span>{hasTasks && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{Math.round((l!.tasks.filter(t => t.status === 'completed').length / l!.tasks.length) * 100)}%</div>}</button>; })}</div>
+        </div>
+        <div className="mb-6 flex justify-around items-center px-4">
+          {isSecondVisible && <div className="text-center"><div className="text-[28px] font-black text-white leading-none">{secondStats.done}<span className="text-[16px] text-gray-600 font-light mx-1">/</span>{secondStats.total}</div><div className="text-[14px] text-pink-500 font-black mt-1">{secondStats.rate}%</div></div>}
+          <div className="text-center"><div className="text-[28px] font-black text-white leading-none">{flowStats.done}<span className="text-[16px] text-gray-600 font-light mx-1">/</span>{flowStats.total}</div><div className="text-[14px] text-[#7c4dff] font-black mt-1">{flowStats.rate}%</div></div>
+        </div>
+        <div className="px-6 mb-6"><AutoResizeTextarea value={currentLog?.memo || ''} onChange={(e: any) => { const newMemo = e.target.value; setLogs(prev => { const updated = prev.map(l => l.date === viewDate.toDateString() ? { ...l, memo: newMemo } : l); saveToLocalStorage(updated); return updated; }); }} placeholder="M E M O" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none" /></div>
         <div className="flex-1 space-y-8 pb-32">
-          <div className="animate-in fade-in duration-500">
-            {isSecondVisible && (
-              <React.Fragment><div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { const newTask: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || 'default'), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={18} /></button></div></div><div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => onIndent(task.id)} onOutdent={() => onOutdent(task.id)} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}</SortableContext></DndContext></div></React.Fragment>
-            )}
-          </div>
-          <div className="animate-in fade-in duration-700">
-          <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={16} /> FLOW</h2><button onClick={() => { const newTask: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || 'default'), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-[#7c4dff] transition-colors"><Plus size={18} /></button></div></div>
-            <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => onIndent(task.id)} onOutdent={() => onOutdent(task.id)} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}</SortableContext></DndContext></div>
-          </div>
-          {tasks.length === 0 && <button onClick={() => { const newTask: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || 'default'), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="w-full py-2 border border-dashed border-white/5 rounded-2xl text-gray-700 text-xs font-bold mt-2"><Plus size={14} /> NEW FLOW</button>}
+          {isSecondVisible && (
+            <div><div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, n]); setFocusedTaskId(n.id); }} className="text-gray-500 hover:text-pink-500"><Plus size={18} /></button></div></div><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((t, i) => <UnifiedTaskItem key={t.id} task={t} index={i} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(x => x.id === u.id ? u : x))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => onIndent(t.id)} onOutdent={() => onOutdent(t.id)} onMoveUp={() => { const idx = tasks.findIndex(x => x.id === t.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} onMoveDown={() => { const idx = tasks.findIndex(x => x.id === t.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} />)}</SortableContext></DndContext></div>
+          )}
+          <div><div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={16} /> FLOW</h2><button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, n]); setFocusedTaskId(n.id); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button></div></div><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((t, i) => <UnifiedTaskItem key={t.id} task={t} index={i} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(x => x.id === u.id ? u : x))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => onIndent(t.id)} onOutdent={() => onOutdent(t.id)} onMoveUp={() => { const idx = tasks.findIndex(x => x.id === t.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} onMoveDown={() => { const idx = tasks.findIndex(x => x.id === t.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} />)}</SortableContext></DndContext></div>
         </div>
         {activeTask && (
-          <div className="fixed bottom-6 left-0 right-0 z-[500] flex justify-center px-4"><div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-2 max-w-full overflow-x-auto no-scrollbar scroll-smooth"><div className="flex items-center gap-2 flex-shrink-0 pl-1"><button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button><div className="flex flex-col flex-shrink-0 ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull(activeTask.actTime || 0)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 flex-shrink-0"><button onClick={() => onOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button><button onClick={() => onIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 flex-shrink-0"><button onClick={() => { const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowUp size={18} /></button><button onClick={() => { const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowDown size={18} /></button></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 pr-2 flex-shrink-0"><button onClick={() => { const newTasks = tasks.filter(t => t.id !== activeTask.id); updateStateAndLogs(newTasks); setFocusedTaskId(null); }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500"><X size={18} /></button><button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><Calendar size={18} /></button><button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><BarChart2 size={18} /></button><button onClick={() => setFocusedTaskId(null)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white"><Check size={18} /></button></div></div></div>
+          <div className="fixed bottom-6 left-0 right-0 z-[500] flex justify-center px-4"><div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-2 max-w-full overflow-x-auto no-scrollbar scroll-smooth"><div className="flex items-center gap-2 flex-shrink-0 pl-1"><button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button><div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull(activeTask.actTime || 0)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 flex-shrink-0"><button onClick={() => onOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button><button onClick={() => onIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 pr-2 flex-shrink-0"><button onClick={() => updateStateAndLogs(tasks.filter(t => t.id !== activeTask.id))} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500"><X size={18} /></button><button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><Calendar size={18} /></button><button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><BarChart2 size={18} /></button><button onClick={() => setFocusedTaskId(null)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white"><Check size={18} /></button></div></div></div>
         )}
         {showDatePicker && activeTask && <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowDatePicker(false)}><div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button><span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span><button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button></div><div className="grid grid-cols-7 gap-2">{['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); return <button key={i} onClick={() => { const targetDate = d.toDateString(); const currentDate = viewDate.toDateString(); if (targetDate !== currentDate) { const newLogs = logs.map(l => { if (l.date === currentDate) return { ...l, tasks: l.tasks.filter(t => t.id !== activeTask.id) }; if (l.date === targetDate) return { ...l, tasks: [...l.tasks, { ...activeTask, id: Date.now() }] }; return l; }); if (!newLogs.some(l => l.date === targetDate)) newLogs.push({ date: targetDate, tasks: [{ ...activeTask, id: Date.now() }], memo: '' }); setLogs(newLogs); saveToLocalStorage(newLogs); updateStateAndLogs(tasks.filter(t => t.id !== activeTask.id)); setFocusedTaskId(null); } setShowDatePicker(false); }} className={`aspect-square rounded-lg border flex items-center justify-center ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>; })}</div></div></div>}
         {showHistoryTarget && <TaskHistoryModal taskName={showHistoryTarget} logs={logs} onClose={() => setShowHistoryTarget(null)} />}
+        {showShortcuts && (
+          <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}><div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-start mb-6"><h2 className="text-xl font-bold text-white">Shortcuts</h2><button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button></div><div className="space-y-3 text-sm"><div className="flex justify-between items-center"><span className="text-gray-400">타이머</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Space</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">완료</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">Undo/Redo</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl+Z / Y</kbd></div><div className="flex justify-between items-center"><span className="text-gray-400">공간 전환</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + 1~9</kbd></div><div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center"><span className="text-gray-400">Undo/Redo (Direct)</span><div className="flex gap-2"><button onClick={handleUndo} className="p-2 bg-white/5 rounded hover:bg-white/10"><ArrowLeft size={16} /></button><button onClick={handleRedo} className="p-2 bg-white/5 rounded hover:bg-white/10"><ArrowRight size={16} /></button></div></div></div></div></div>
+        )}
       </div>
     </div>
   );

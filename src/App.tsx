@@ -378,12 +378,19 @@ const migrateTasks = (tasks: any[]): Task[] => {
       }
       seenIds.add(id);
 
+      // Status Mapping & Normalization
+      let finalStatus = t.status || (t.done ? 'completed' : 'pending');
+      const upperStatus = String(finalStatus).toUpperCase();
+      if (upperStatus === 'DONE') finalStatus = 'completed';
+      else if (upperStatus === 'LATER') finalStatus = 'icebox';
+      else if (upperStatus === 'TODO') finalStatus = 'pending';
+
       const currentTask: Task = {
           ...t,
           id: id,
           name: t.name || t.text || '', // 이름 유실 방지
-          status: t.status || (t.done ? 'completed' : 'pending'),
-          depth: typeof t.depth === 'number' ? t.depth : depth, // 기존 depth가 있으면 우선하되, 없으면 계층 depth 사용
+          status: finalStatus,
+          depth: depth, // 재귀적으로 계산된 depth 사용 (데이터의 잘못된 depth:0 무시)
           isSecond: t.isSecond === true,
           actTime: Number(t.actTime) || 0,
           planTime: Number(t.planTime) || 0,
@@ -451,8 +458,10 @@ export default function App() {
   const [isSecondVisible, setIsSecondVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const logsRef = useRef(logs);
+  const viewDateRef = useRef(viewDate); // [Date Mismatch Check] Ref to avoid closure staleness
 
   useEffect(() => { logsRef.current = logs; }, [logs]);
+  useEffect(() => { viewDateRef.current = viewDate; }, [viewDate]);
   
   // History 관리
   const [history, setHistory] = useState<Task[][]>([]);
@@ -690,20 +699,25 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       if (!log) {
-        console.log(`[DEBUG] No log found for ${dateStr}, creating new or carrying over`);
-        // 날짜 변경 시 태스크 이월 등의 로직
-        const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
-        let carryOverTasks: Task[] = [];
-        if (isNotFuture) {
-          const sortedLogs = [...currentLogs].filter(l => l.tasks.some(t => t.isSecond)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          const lastLogWithSeconds = sortedLogs[0];
-          carryOverTasks = lastLogWithSeconds ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ ...t, id: Date.now() + Math.random(), status: 'pending' as const, actTime: 0, isTimerOn: false })) : [];
-          console.log(`[DEBUG] Carried over ${carryOverTasks.length} second tasks`);
-        }
-        log = { date: dateStr, tasks: carryOverTasks, memo: '' };
+        console.log(`[DEBUG] No log found for ${dateStr}, creating new empty log`);
+        // 날짜 변경 시 이전 태스크 자동 이월 비활성화 (사용자 피드백 반영: carry-over disabled)
+        // 항상 빈 태스크 목록으로 시작
+        log = { date: dateStr, tasks: [], memo: '' };
         currentLogs.push(log);
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
       }
+      
+      // [DIAGNOSTIC] Check for data corruption on load
+      const corrupted = log.tasks.filter(t => !t.name && !t.text);
+      if (corrupted.length > 0) {
+          console.warn('[DIAGNOSTIC] Found potential corrupted tasks on load:', corrupted);
+          // Auto-repair attempting to restore text if missing
+          log.tasks = log.tasks.map(t => {
+              if (!t.name && !t.text) return { ...t, name: '(Recovered empty task)', text: '(Recovered empty task)' };
+              return t;
+          });
+      }
+
       setLogs(currentLogs);
       if (log) { 
           console.log(`[DEBUG] Setting initial tasks from log: ${log.tasks.length} tasks`);
@@ -728,9 +742,9 @@ export default function App() {
     
     // 데이터 복구 및 초기 로드 로직
     const loadFromSupabase = async () => {
-      console.log(`[DEBUG] loadFromSupabase started for date: ${viewDate.toDateString()}`);
-      // 이미 로컬에서 로딩 중이거나 막 로딩된 상태라면 로딩 표시를 유지할 수도 있음
-      // 여기서는 백그라운드 동기화 개념이므로 isLoading을 true로 강제하지 않고 조용히 업데이트
+      const targetDateStr = viewDateRef.current.toDateString(); // Capture date at start of load
+      console.log(`[DEBUG] loadFromSupabase started for date: ${targetDateStr}`);
+      
       try {
         const { data, error } = await supabase
           .from('task_logs')
@@ -741,6 +755,12 @@ export default function App() {
         if (error) {
           console.error('[DEBUG] Error loading from Supabase:', error);
           return;
+        }
+
+        // [Date Mismatch Check] Early Guard
+        if (targetDateStr !== viewDateRef.current.toDateString()) {
+             console.warn(`[Date Mismatch Check] Aborting loadFromSupabase result. Requested for ${targetDateStr}, but current view is ${viewDateRef.current.toDateString()}`);
+             return;
         }
 
         console.log(`[DEBUG] loadFromSupabase: fetched ${data?.length} logs`);
@@ -784,10 +804,6 @@ export default function App() {
                       console.log(`[DEBUG] Diff detected for ${serverLog.date}:`);
                       console.log('Local:', localLog.tasks.length, 'items');
                       console.log('Server:', serverLog.tasks.length, 'items');
-                      // 여기서 강제로 서버 데이터로 덮어쓰지 않고, 사용자에게 알리거나 병합해야 하지만
-                      // 현재 정책은 로컬 우선(입력 중 보호)이므로 로그만 상세히 남김.
-                      // 단, 사용자가 "데이터가 이상하다"고 느낄 때는 서버 데이터가 맞을 확률이 높으므로
-                      // 로컬 데이터가 "너무 오래된" 경우 덮어쓰는 로직 등을 고려할 수 있음.
                   }
               }
             });
@@ -802,11 +818,22 @@ export default function App() {
             // 로컬 스토리지도 최신화
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(mergedLogs));
             
+            // [Date Mismatch Check] Final Guard before UI Update
+            if (targetDateStr !== viewDateRef.current.toDateString()) {
+                 console.warn(`[Date Mismatch Check] Aborting UI update. Data loaded for ${targetDateStr}, but view is now ${viewDateRef.current.toDateString()}`);
+                 return prevLogs; // Do not update state if date changed
+            }
+
             // 현재 보고 있는 날짜의 데이터가 복구되었다면 화면에도 반영
-            const currentViewLog = mergedLogs.find(l => l.date === viewDate.toDateString());
+            const currentViewLog = mergedLogs.find(l => l.date === viewDateRef.current.toDateString());
             if (currentViewLog) {
                // 현재 tasks가 비어있고 복구된 데이터가 있다면 적용
                setTasks(currentTasks => {
+                   // Double check date again inside setState to be absolutely sure
+                   if (targetDateStr !== viewDateRef.current.toDateString()) {
+                       return currentTasks;
+                   }
+
                    // ID 중복 방지 및 병합 로직 강화
                    if (currentTasks.length === 0 && currentViewLog.tasks.length > 0) {
                        console.log('[DEBUG] Updating current tasks from server log (local was empty)');
@@ -814,12 +841,6 @@ export default function App() {
                        setTimeout(() => isInternalUpdate.current = false, 100);
                        return currentViewLog.tasks;
                    }
-                   
-                   // 만약 이미 데이터가 있는데 서버 데이터와 다르다면? 
-                   // 지금은 사용자 경험을 해치지 않기 위해(입력 중 날라가는 것 방지)
-                   // 로컬에 데이터가 있으면 서버 데이터로 덮어쓰지 않음.
-                   // 다만, "동기화" 관점에서는 서버 데이터가 우선순위일 수도 있음.
-                   // 여기서는 "데이터 유실 방지"에 초점을 맞춤.
                    return currentTasks;
                });
             }
@@ -849,11 +870,17 @@ export default function App() {
           if (serverLog.date === 'SETTINGS') return;
           
           // 현재 보고 있는 날짜면 tasks 상태 업데이트
-          if (serverLog.date === viewDate.toDateString()) {
+          if (serverLog.date === viewDateRef.current.toDateString()) {
               console.log('[DEBUG] Realtime update matches current view date');
               isInternalUpdate.current = true;
               
               setTasks(prev => {
+                  // [Date Mismatch Check] Realtime Guard
+                  if (serverLog.date !== viewDateRef.current.toDateString()) {
+                      console.warn('[Date Mismatch Check] Realtime update aborted due to date mismatch');
+                      return prev;
+                  }
+                  
                   // 중복 ID 방지: 서버에서 온 데이터의 ID들이 기존과 겹치는지 확인하고,
                   // 완전히 새로운 세트라면 교체.
                   // 단순 교체 시 기존 로컬 변경사항이 날아갈 수 있으므로 주의.
@@ -1008,7 +1035,27 @@ export default function App() {
         {/* 달력 영역 */}
         <div className={`calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`} onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
            <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button><div className="text-center cursor-pointer" onClick={() => setViewDate(new Date())}><div className="text-[11px] text-gray-500 uppercase tracking-widest font-bold">{year}</div><div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button></div>
-           <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); const l = logs.find(log => log.date === d.toDateString()); return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'}`}><span className="font-black text-[14px]">{d.getDate()}</span>{l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}</button>; })}</div>
+           <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { 
+               const d = new Date(year, month, 1); 
+               d.setDate(d.getDate() + (i - d.getDay())); 
+               const l = logs.find(log => log.date === d.toDateString());
+               
+               // [DIAGNOSTIC] Check task integrity for calendar dates
+               const hasError = l?.tasks.some(t => (!t.name && !t.text) || t.id === undefined);
+               
+               return <button key={i} onClick={() => {
+                   console.log('[DIAGNOSTIC] Clicking date:', d.toDateString());
+                   if (l) {
+                       console.log('[DIAGNOSTIC] Log data for this date:', JSON.parse(JSON.stringify(l)));
+                       const corrupted = l.tasks.filter(t => !t.name && !t.text);
+                       if (corrupted.length > 0) {
+                           console.warn('[DIAGNOSTIC] Found corrupted tasks in target date:', corrupted);
+                           alert(`[진단 알림] 선택하신 날짜(${d.toLocaleDateString()})에 내용이 비어있는 태스크가 ${corrupted.length}개 발견되었습니다. 콘솔(F12)을 확인해주세요.`);
+                       }
+                   }
+                   setViewDate(d);
+               }} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'} ${hasError ? 'ring-1 ring-red-500' : ''}`}><span className="font-black text-[14px]">{d.getDate()}</span>{l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}</button>; 
+           })}</div>
         </div>
 
         <div className="mb-6 flex justify-around items-center px-4">

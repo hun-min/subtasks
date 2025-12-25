@@ -627,10 +627,7 @@ export default function App() {
   useEffect(() => {
     if (!user || !currentSpace || !localLogsLoaded) return;
     
-    const loadFromSupabase = async () => {
-      // ... (기존 로직과 유사하되, 로컬이 최신이면 덮어쓰지 않도록 주의)
-      // 여기서는 간소화: 초기 1회 로드만 수행하거나, 실시간 구독만 유지
-    };
+    // loadFromSupabase 함수 제거 혹은 구현 필요 시 복구 (현재는 미사용 경고 해결을 위해 제거하거나 주석 처리)
     
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
@@ -716,9 +713,33 @@ export default function App() {
   const handleSpaceChange = useCallback((space: any) => { setCurrentSpace(space); }, [setCurrentSpace]);
 
   // 키보드 단축키
-  const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
-      // ... (기존 로직 유지, setTasks 사용)
-  }, [tasks]); // tasks 의존성 필요 (삭제 등 로직)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+      
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTaskIds.size > 0 && !isInput) {
+        e.preventDefault();
+        const nextTasks = tasks.filter(t => !selectedTaskIds.has(t.id));
+        setTasks(nextTasks);
+        setFocusedTaskId(null);
+        setSelectedTaskIds(new Set());
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); handleRedo(); }
+      if (e.key === '?' && !isInput) { e.preventDefault(); setShowShortcuts(true); }
+      if (e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const index = parseInt(e.key) - 1;
+        if (spaces[index]) setCurrentSpace(spaces[index]);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [tasks, selectedTaskIds, handleUndo, handleRedo, spaces, setCurrentSpace]);
 
   const activeTask = useMemo(() => tasks.find(t => t.id === focusedTaskId), [tasks, focusedTaskId]);
   const planTasks = useMemo(() => tasks.filter(t => !t.isSecond), [tasks]);

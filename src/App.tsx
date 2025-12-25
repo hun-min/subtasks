@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useSpace } from './contexts/SpaceContext';
 import { AuthModal } from './components/AuthModal';
@@ -67,23 +67,26 @@ const parseTimeToSeconds = (timeStr: string) => {
 };
 
 // --- [컴포넌트] 자동 높이 조절 Textarea ---
+// useLayoutEffect로 변경하여 깜빡임 없이 즉시 높이 조절 및 포커스 유지
 const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, onBlur, placeholder, autoFocus, className, inputRef }: any) => {
   const localRef = useRef<HTMLTextAreaElement>(null);
   const combinedRef = inputRef || localRef;
 
-  useEffect(() => {
+  // useLayoutEffect: DOM 업데이트 직후 동기적으로 실행
+  useLayoutEffect(() => {
     if (combinedRef.current) {
       combinedRef.current.style.height = 'auto';
       combinedRef.current.style.height = combinedRef.current.scrollHeight + 'px';
     }
   }, [value]);
 
-  useEffect(() => {
+  // useLayoutEffect: 포커스 유지 보장
+  useLayoutEffect(() => {
     if (autoFocus && combinedRef.current) {
-      // 모바일에서 키보드 유지를 위해 requestAnimationFrame 사용
-      requestAnimationFrame(() => {
-        combinedRef.current?.focus();
-      });
+      combinedRef.current.focus();
+      // 커서를 맨 끝으로 이동 (선택적)
+      // const len = combinedRef.current.value.length;
+      // combinedRef.current.setSelectionRange(len, len);
     }
   }, [autoFocus]);
 
@@ -341,7 +344,7 @@ export default function App() {
   const [history, setHistory] = useState<Task[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isInternalUpdate = useRef(false);
-  const lastLocalChange = useRef(Date.now()); // 로컬 변경 시간 추적
+  const lastLocalChange = useRef(Date.now()); 
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -374,7 +377,7 @@ export default function App() {
   }, [currentSpace, user, viewDate]);
 
   const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
-    lastLocalChange.current = Date.now(); // 로컬 변경 마킹
+    lastLocalChange.current = Date.now(); 
     setTasks(newTasks);
     const dateStr = viewDate.toDateString();
     setLogs(prev => {
@@ -464,7 +467,6 @@ export default function App() {
     loadFromSupabase();
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
-        // 로컬 변경 후 2초 동안은 서버 업데이트 무시 (좀비 태스크 방지)
         if (Date.now() - lastLocalChange.current < 2000) return;
 
         if (payload.new && payload.new.space_id === currentSpace.id) {
@@ -476,7 +478,6 @@ export default function App() {
             let nextLogs = [...prev];
             if (existingIdx >= 0) {
               if (JSON.stringify(prev[existingIdx].tasks) === JSON.stringify(serverLog.tasks) && prev[existingIdx].memo === serverLog.memo) return prev;
-              // 편집 중이면 서버 업데이트 무시 (추가 안전장치)
               if (focusedTaskId !== null && dateStr === viewDate.toDateString()) return prev;
               nextLogs[existingIdx] = serverLog;
             } else { nextLogs.push(serverLog); }

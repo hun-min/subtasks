@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useSpace } from './contexts/SpaceContext';
 import { AuthModal } from './components/AuthModal';
@@ -69,7 +69,7 @@ const parseTimeToSeconds = (timeStr: string) => {
 };
 
 // --- [컴포넌트] 자동 높이 조절 Textarea ---
-const AutoResizeTextarea = ({ value, onChange, onKeyDown, onFocus, onBlur, placeholder, autoFocus, className, inputRef }: any) => {
+const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, onBlur, placeholder, autoFocus, className, inputRef }: any) => {
   const localRef = useRef<HTMLTextAreaElement>(null);
   const combinedRef = inputRef || localRef;
 
@@ -100,10 +100,10 @@ const AutoResizeTextarea = ({ value, onChange, onKeyDown, onFocus, onBlur, place
       style={{ minHeight: '18px' }}
     />
   );
-};
+});
 
 // --- [컴포넌트] 태스크 히스토리 모달 ---
-function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs: DailyLog[], onClose: () => void }) {
+const TaskHistoryModal = React.memo(({ taskName, logs, onClose }: { taskName: string, logs: DailyLog[], onClose: () => void }) => {
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date());
   const historyMap = useMemo(() => {
@@ -146,10 +146,10 @@ function TaskHistoryModal({ taskName, logs, onClose }: { taskName: string, logs:
       </div>
     </div>
   );
-}
+});
 
 // --- [컴포넌트] 통합 할 일 아이템 ---
-function UnifiedTaskItem({ 
+const UnifiedTaskItem = React.memo(({ 
   task, 
   index,
   allTasks,
@@ -183,7 +183,7 @@ function UnifiedTaskItem({
   onOutdent?: () => void, 
   onMoveUp?: () => void, 
   onMoveDown?: () => void 
-}) {
+}) => {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
   // 기본 패딩 16px (px-4) + depth * 24px
@@ -222,8 +222,7 @@ function UnifiedTaskItem({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const taskName = task.name || task.text || '';
-    console.log(`[KeyDown-Debug] Key: ${e.key}, Task: "${taskName}", Cursor: ${textareaRef.current?.selectionStart}`);
-
+    
     if (e.key === 'ArrowDown' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
     if (e.key === 'ArrowUp' && suggestions.length > 0) { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
     
@@ -252,7 +251,6 @@ function UnifiedTaskItem({
       onMergeWithNext(task.id, taskName);
       return;
     }
-    // Tab 키: 무조건 들여쓰기/내어쓰기 동작
     if (e.key === 'Tab') { 
       e.preventDefault(); 
       if (e.shiftKey) onOutdent?.(); 
@@ -337,7 +335,7 @@ function UnifiedTaskItem({
       </div>
     </div>
   );
-}
+});
 
 // --- 유틸리티: 데이터 마이그레이션 ---
 const migrateTasks = (tasks: any[]): Task[] => {
@@ -434,8 +432,7 @@ export default function App() {
   }, [currentSpace, user, viewDate]);
 
   const updateStateAndLogs = useCallback((newTasks: Task[], updateHistory = true) => {
-    console.log(`[Update-Debug] Changing tasks. New count: ${newTasks.length}`);
-    setTasks([...newTasks]);
+    setTasks(newTasks);
     const dateStr = viewDate.toDateString();
     setLogs(prev => {
       const log = prev.find(l => l.date === dateStr);

@@ -351,59 +351,29 @@ const UnifiedTaskItem = React.memo(({
   );
 });
 
-// --- 유틸리티: 데이터 마이그레이션 및 평탄화 ---
+// --- 유틸리티: 데이터 마이그레이션 ---
 const migrateTasks = (tasks: any[]): Task[] => {
   if (!Array.isArray(tasks)) {
     console.warn('migrateTasks: tasks is not an array', tasks);
     return [];
   }
-  
-  const flattened: Task[] = [];
-  const seenIds = new Set();
-
-  const processTask = (t: any, depth: number = 0) => {
-      if (!t || typeof t !== 'object') return;
-
-      let id = t.id;
-      // ID 보정
-      if (!id) {
-          id = Date.now() + Math.random(); 
-      }
+  return tasks.map(t => {
+      // 필수 필드 체크 및 기본값 보장
+      if (!t || typeof t !== 'object') return null;
       
-      // ID 중복 방지 (데이터 오염 시 복구)
-      if (seenIds.has(id)) {
-          const newId = Date.now() + Math.random();
-          // console.warn('[DEBUG] migrateTasks: Found duplicate ID', id, 'replacing with', newId, 'for task', t.name);
-          id = newId;
-      }
-      seenIds.add(id);
-
-      const currentTask: Task = {
-          ...t,
-          id: id,
-          name: t.name || t.text || '', // 이름 유실 방지
-          status: t.status || (t.done ? 'completed' : 'pending'),
-          depth: typeof t.depth === 'number' ? t.depth : depth, // 기존 depth가 있으면 우선하되, 없으면 계층 depth 사용
-          isSecond: t.isSecond === true,
-          actTime: Number(t.actTime) || 0,
-          planTime: Number(t.planTime) || 0,
-          percent: Number(t.percent) || 0,
-          space_id: t.space_id || '',
-          // subtasks 필드는 평탄화 후 제거
-          subtasks: undefined 
+      return {
+        ...t,
+        id: t.id || Date.now() + Math.random(), // ID가 없으면 임시 생성
+        name: t.name || t.text || '', // 이름 유실 방지
+        status: t.status || (t.done ? 'completed' : 'pending'),
+        depth: typeof t.depth === 'number' ? t.depth : 0,
+        isSecond: t.isSecond === true, // 명시적 불리언 변환
+        actTime: Number(t.actTime) || 0,
+        planTime: Number(t.planTime) || 0,
+        percent: Number(t.percent) || 0,
+        space_id: t.space_id || '' // space_id 보장
       };
-
-      flattened.push(currentTask);
-
-      // 재귀적으로 subtasks 처리
-      if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
-          t.subtasks.forEach((sub: any) => processTask(sub, depth + 1));
-      }
-  };
-
-  tasks.forEach(task => processTask(task, task.depth || 0));
-
-  return flattened;
+  }).filter(Boolean) as Task[]; // null 제거
 };
 
 // --- 메인 앱 ---
@@ -416,34 +386,7 @@ export default function App() {
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
-  
-  // Debug: Monitor tasks for duplicates
-  useEffect(() => {
-      const ids = tasks.map(t => t.id);
-      const uniqueIds = new Set(ids);
-      if (ids.length !== uniqueIds.size) {
-          console.error('[CRITICAL] Duplicate IDs detected in tasks state!', ids);
-          // 긴급 복구: 중복 제거
-          const seen = new Set();
-          const deduped: Task[] = [];
-          tasks.forEach(t => {
-              if (!seen.has(t.id)) {
-                  seen.add(t.id);
-                  deduped.push(t);
-              } else {
-                  console.warn('[CRITICAL] Removing duplicate task:', t);
-                  // 혹은 ID를 재생성해서 유지할 수도 있음
-              }
-          });
-          // 무한 루프 방지를 위해 바로 set하지 않고, 다음 렌더링 사이클에 영향주거나
-          // 여기서 강제로 고치면 또 useEffect 트리거 되므로 주의.
-          // 일단 로그만 찍고, 심각하면 고치는 로직 추가.
-      }
-      console.log(`[DEBUG] tasks updated. Count: ${tasks.length}, ViewDate: ${viewDate.toDateString()}`);
-  }, [tasks, viewDate]);
-
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
-
   const [showHistoryTarget, setShowHistoryTarget] = useState<string | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
@@ -461,6 +404,7 @@ export default function App() {
   const lastLocalChange = useRef(Date.now()); 
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- Explicit Save Function ---
   const saveToSupabase = useCallback(async (tasksToSave: Task[]) => {
@@ -674,23 +618,14 @@ export default function App() {
 
   useEffect(() => {
     if (currentSpace) {
-      console.log('[DEBUG] Initial local load started');
       setIsLoading(true);
       setLocalLogsLoaded(false);
       const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let currentLogs: DailyLog[] = [];
-      if (saved) { 
-          try { 
-              currentLogs = JSON.parse(saved).map((log: any) => ({ ...log, tasks: migrateTasks(log.tasks) })); 
-              console.log(`[DEBUG] Loaded ${currentLogs.length} logs from localStorage`);
-          } catch (e) {
-              console.error('[DEBUG] Failed to parse localStorage', e);
-          } 
-      }
+      if (saved) { try { currentLogs = JSON.parse(saved).map((log: any) => ({ ...log, tasks: migrateTasks(log.tasks) })); } catch (e) {} }
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       if (!log) {
-        console.log(`[DEBUG] No log found for ${dateStr}, creating new or carrying over`);
         // 날짜 변경 시 태스크 이월 등의 로직
         const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
         let carryOverTasks: Task[] = [];
@@ -698,7 +633,6 @@ export default function App() {
           const sortedLogs = [...currentLogs].filter(l => l.tasks.some(t => t.isSecond)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           const lastLogWithSeconds = sortedLogs[0];
           carryOverTasks = lastLogWithSeconds ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ ...t, id: Date.now() + Math.random(), status: 'pending' as const, actTime: 0, isTimerOn: false })) : [];
-          console.log(`[DEBUG] Carried over ${carryOverTasks.length} second tasks`);
         }
         log = { date: dateStr, tasks: carryOverTasks, memo: '' };
         currentLogs.push(log);
@@ -706,7 +640,6 @@ export default function App() {
       }
       setLogs(currentLogs);
       if (log) { 
-          console.log(`[DEBUG] Setting initial tasks from log: ${log.tasks.length} tasks`);
           isInternalUpdate.current = true; // 초기 로딩 시 히스토리 중복 방지
           setTasks(log.tasks); 
           setHistory([log.tasks]); 
@@ -728,7 +661,6 @@ export default function App() {
     
     // 데이터 복구 및 초기 로드 로직
     const loadFromSupabase = async () => {
-      console.log(`[DEBUG] loadFromSupabase started for date: ${viewDate.toDateString()}`);
       // 이미 로컬에서 로딩 중이거나 막 로딩된 상태라면 로딩 표시를 유지할 수도 있음
       // 여기서는 백그라운드 동기화 개념이므로 isLoading을 true로 강제하지 않고 조용히 업데이트
       try {
@@ -739,11 +671,9 @@ export default function App() {
           .eq('space_id', currentSpace.id);
 
         if (error) {
-          console.error('[DEBUG] Error loading from Supabase:', error);
+          console.error('Error loading from Supabase:', error);
           return;
         }
-
-        console.log(`[DEBUG] loadFromSupabase: fetched ${data?.length} logs`);
 
         if (data && data.length > 0) {
           const serverLogs = data.map((row: any) => ({
@@ -763,39 +693,17 @@ export default function App() {
               
               // 1. 로컬에 없는 데이터면 추가
               if (!localLog) {
-                console.log(`[DEBUG] Adding new log from server for date: ${serverLog.date}`);
                 logMap.set(serverLog.date, serverLog);
                 hasChanges = true;
               } 
               // 2. 로컬 데이터가 비어있는데 서버 데이터는 있다면 복구 (유실 방지)
               else if (localLog.tasks.length === 0 && serverLog.tasks.length > 0) {
-                console.log(`[DEBUG] Restoring empty local log from server for date: ${serverLog.date}`);
                 logMap.set(serverLog.date, serverLog);
                 hasChanges = true;
               }
-              // 3. Diff Checking (내용 비교)
-              else {
-                  // 단순 길이 비교가 아니라 실제 내용 비교 (ID, 이름, 상태, depth 등 중요 필드만)
-                  const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth, isSecond: t.isSecond }));
-                  const localSimple = JSON.stringify(simplify(localLog.tasks));
-                  const serverSimple = JSON.stringify(simplify(serverLog.tasks));
-                  
-                  if (localSimple !== serverSimple) {
-                      console.log(`[DEBUG] Diff detected for ${serverLog.date}:`);
-                      console.log('Local:', localLog.tasks.length, 'items');
-                      console.log('Server:', serverLog.tasks.length, 'items');
-                      // 여기서 강제로 서버 데이터로 덮어쓰지 않고, 사용자에게 알리거나 병합해야 하지만
-                      // 현재 정책은 로컬 우선(입력 중 보호)이므로 로그만 상세히 남김.
-                      // 단, 사용자가 "데이터가 이상하다"고 느낄 때는 서버 데이터가 맞을 확률이 높으므로
-                      // 로컬 데이터가 "너무 오래된" 경우 덮어쓰는 로직 등을 고려할 수 있음.
-                  }
-              }
             });
 
-            if (!hasChanges) {
-                console.log('[DEBUG] No changes from server logs');
-                return prevLogs;
-            }
+            if (!hasChanges) return prevLogs;
 
             const mergedLogs = Array.from(logMap.values());
             
@@ -807,19 +715,11 @@ export default function App() {
             if (currentViewLog) {
                // 현재 tasks가 비어있고 복구된 데이터가 있다면 적용
                setTasks(currentTasks => {
-                   // ID 중복 방지 및 병합 로직 강화
                    if (currentTasks.length === 0 && currentViewLog.tasks.length > 0) {
-                       console.log('[DEBUG] Updating current tasks from server log (local was empty)');
                        isInternalUpdate.current = true;
                        setTimeout(() => isInternalUpdate.current = false, 100);
                        return currentViewLog.tasks;
                    }
-                   
-                   // 만약 이미 데이터가 있는데 서버 데이터와 다르다면? 
-                   // 지금은 사용자 경험을 해치지 않기 위해(입력 중 날라가는 것 방지)
-                   // 로컬에 데이터가 있으면 서버 데이터로 덮어쓰지 않음.
-                   // 다만, "동기화" 관점에서는 서버 데이터가 우선순위일 수도 있음.
-                   // 여기서는 "데이터 유실 방지"에 초점을 맞춤.
                    return currentTasks;
                });
             }
@@ -828,7 +728,7 @@ export default function App() {
           });
         }
       } catch (e) {
-        console.error("[DEBUG] Supabase load failed:", e);
+        console.error("Supabase load failed:", e);
       }
     };
 
@@ -837,12 +737,7 @@ export default function App() {
     // ... (realtime subscription logic remains similar)
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
-        if (Date.now() - lastLocalChange.current < 2000) {
-            console.log('[DEBUG] Realtime update ignored (local change recently)');
-            return; // 내가 방금 수정했으면 무시
-        }
-
-        console.log('[DEBUG] Realtime update received:', payload);
+        if (Date.now() - lastLocalChange.current < 2000) return; // 내가 방금 수정했으면 무시
 
         if (payload.new && payload.new.space_id === currentSpace.id) {
           const serverLog = { date: payload.new.date, tasks: migrateTasks(JSON.parse(payload.new.tasks)), memo: payload.new.memo };
@@ -850,18 +745,8 @@ export default function App() {
           
           // 현재 보고 있는 날짜면 tasks 상태 업데이트
           if (serverLog.date === viewDate.toDateString()) {
-              console.log('[DEBUG] Realtime update matches current view date');
               isInternalUpdate.current = true;
-              
-              setTasks(prev => {
-                  // 중복 ID 방지: 서버에서 온 데이터의 ID들이 기존과 겹치는지 확인하고,
-                  // 완전히 새로운 세트라면 교체.
-                  // 단순 교체 시 기존 로컬 변경사항이 날아갈 수 있으므로 주의.
-                  // 여기서는 서버 데이터가 "최신 진실"이라고 가정하고 교체하되 로그 남김.
-                  console.log(`[DEBUG] Replacing tasks with server data. Prev count: ${prev.length}, New count: ${serverLog.tasks.length}`);
-                  return serverLog.tasks;
-              });
-              
+              setTasks(serverLog.tasks);
               setTimeout(() => isInternalUpdate.current = false, 100);
           }
           
@@ -880,10 +765,7 @@ export default function App() {
         }
       }).subscribe();
       
-    return () => { 
-        console.log('[DEBUG] Unsubscribing channel');
-        supabase.removeChannel(channel); 
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [user, currentSpace, viewDate]);
 
   // 타이머 틱

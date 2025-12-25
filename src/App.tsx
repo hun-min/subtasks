@@ -395,8 +395,6 @@ export default function App() {
       localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
 
       if (user && currentSpace) {
-        console.log(`[Sync-Debug] Requesting sync for ${dateStr}. Task count: ${tasksToSave.length}`);
-        
         const performSync = async () => {
           const finalLogsStr = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
           if (!finalLogsStr) return;
@@ -404,7 +402,6 @@ export default function App() {
           const finalLog = finalLogs.find(l => l.date === dateStr);
           
           if (finalLog) {
-            console.log(`[Sync-Debug] Sending to server: ${dateStr}, tasks: ${finalLog.tasks.length}`);
             const { error } = await supabase
               .from('task_logs')
               .upsert({
@@ -417,8 +414,6 @@ export default function App() {
             
             if (error) {
               console.error('[Sync-Debug] Error:', error.message);
-            } else {
-              console.log(`[Sync-Debug] Successfully synced ${dateStr}`);
             }
           }
         };
@@ -499,7 +494,6 @@ export default function App() {
       let log = currentLogs.find(l => l.date === dateStr);
       
       if (!log) {
-        console.log(`[Log-Init] Initializing tasks for ${dateStr}...`);
         const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
         let carryOverTasks: Task[] = [];
         if (isNotFuture) {
@@ -579,7 +573,6 @@ export default function App() {
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
         if (payload.new && payload.new.space_id === currentSpace.id) {
-          console.log(`[Sync-Realtime] UPDATE detected for ${payload.new.date}`);
           const serverLog = { date: payload.new.date, tasks: migrateTasks(JSON.parse(payload.new.tasks)), memo: payload.new.memo };
           if (serverLog.date === 'SETTINGS') return;
           setLogs(prev => {
@@ -592,7 +585,6 @@ export default function App() {
               if (localDataStr === serverDataStr && prev[existingIdx].memo === serverLog.memo) return prev;
               
               if (focusedTaskId !== null && dateStr === viewDate.toDateString()) {
-                console.warn(`[Sync-Realtime] BLOCKING overwrite during active edit for ${dateStr}`);
                 return prev;
               }
               nextLogs[existingIdx] = serverLog;
@@ -601,14 +593,13 @@ export default function App() {
             }
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nextLogs));
             if (dateStr === viewDate.toDateString() && focusedTaskId === null) {
-              console.log(`[Sync-Realtime] Refreshing tasks for ${dateStr}`);
               setTasks(serverLog.tasks);
             }
             return nextLogs;
           });
         }
       })
-      .subscribe((status) => { console.log(`[Sync-Realtime] Subscription: ${status}`); });
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, currentSpace, localLogsLoaded, focusedTaskId, viewDate]);
 
@@ -849,6 +840,26 @@ export default function App() {
     );
   };
 
+  const onIndent = useCallback((taskId: number) => {
+    setTasks(prev => {
+      const next = prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t);
+      const dateStr = viewDate.toDateString();
+      const currentMemo = logs.find(l => l.date === dateStr)?.memo;
+      saveTasks(next, currentMemo);
+      return next;
+    });
+  }, [viewDate, logs, saveTasks]);
+
+  const onOutdent = useCallback((taskId: number) => {
+    setTasks(prev => {
+      const next = prev.map(t => t.id === taskId ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t);
+      const dateStr = viewDate.toDateString();
+      const currentMemo = logs.find(l => l.date === dateStr)?.memo;
+      saveTasks(next, currentMemo);
+      return next;
+    });
+  }, [viewDate, logs, saveTasks]);
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#e0e0e0] selection:bg-[#7c4dff]/30 font-sans overflow-x-hidden">
       <DeepFocusOverlay />
@@ -872,17 +883,17 @@ export default function App() {
         <div className="flex-1 space-y-8 pb-32">
           <div className="animate-in fade-in duration-500">
             {isSecondVisible && (
-              <React.Fragment><div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { const newTask: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || 'default'), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={18} /></button></div></div><div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}</SortableContext></DndContext></div></React.Fragment>
+              <React.Fragment><div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-pink-500 uppercase flex items-center gap-2"><Clock size={16} /> A SECOND</h2><button onClick={() => { const newTask: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || 'default'), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: true }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-pink-500 transition-colors"><Plus size={18} /></button></div></div><div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={secondTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{secondTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={secondTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => onIndent(task.id)} onOutdent={() => onOutdent(task.id)} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}</SortableContext></DndContext></div></React.Fragment>
             )}
           </div>
           <div className="animate-in fade-in duration-700">
           <div className="flex items-center justify-between mb-2 px-3"><div className="flex items-center gap-3"><h2 className="text-[11px] font-black tracking-[0.2em] text-[#7c4dff] uppercase flex items-center gap-2"><List size={16} /> FLOW</h2><button onClick={() => { const newTask: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || 'default'), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="text-gray-500 hover:text-[#7c4dff] transition-colors"><Plus size={18} /></button></div></div>
-            <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} onOutdent={() => updateStateAndLogs(tasks.map(t => t.id === task.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}</SortableContext></DndContext></div>
+            <div className="space-y-0"><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={planTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>{planTasks.map((task, idx) => <UnifiedTaskItem key={task.id} task={task} index={idx} allTasks={planTasks} updateTask={(u) => updateStateAndLogs(tasks.map(t => t.id === u.id ? u : t))} setFocusedTaskId={setFocusedTaskId} focusedTaskId={focusedTaskId} selectedTaskIds={selectedTaskIds} onTaskClick={onTaskClick} logs={logs} onAddTaskAtCursor={handleAddTaskAtCursor} onMergeWithPrevious={handleMergeWithPrevious} onMergeWithNext={handleMergeWithNext} onIndent={() => onIndent(task.id)} onOutdent={() => onOutdent(task.id)} onMoveUp={() => { const i = tasks.findIndex(t => t.id === task.id); if (i > 0) updateStateAndLogs(arrayMove(tasks, i, i - 1)); }} onMoveDown={() => { const i = tasks.findIndex(t => t.id === task.id); if (i < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, i, i + 1)); }} />)}</SortableContext></DndContext></div>
           </div>
           {tasks.length === 0 && <button onClick={() => { const newTask: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || 'default'), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0, isSecond: false }; updateStateAndLogs([...tasks, newTask]); setFocusedTaskId(newTask.id); }} className="w-full py-2 border border-dashed border-white/5 rounded-2xl text-gray-700 text-xs font-bold mt-2"><Plus size={14} /> NEW FLOW</button>}
         </div>
         {activeTask && (
-          <div className="fixed bottom-6 left-0 right-0 z-[500] flex justify-center px-4"><div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-2 max-w-full overflow-x-auto no-scrollbar scroll-smooth"><div className="flex items-center gap-2 flex-shrink-0 pl-1"><button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button><div className="flex flex-col flex-shrink-0 ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull(activeTask.actTime || 0)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 flex-shrink-0"><button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t))} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button><button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, depth: (t.depth || 0) + 1 } : t))} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 flex-shrink-0"><button onClick={() => { const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowUp size={18} /></button><button onClick={() => { const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowDown size={18} /></button></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 pr-2 flex-shrink-0"><button onClick={() => { const newTasks = tasks.filter(t => t.id !== activeTask.id); updateStateAndLogs(newTasks); setFocusedTaskId(null); }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500"><X size={18} /></button><button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><Calendar size={18} /></button><button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><BarChart2 size={18} /></button><button onClick={() => setFocusedTaskId(null)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white"><Check size={18} /></button></div></div></div>
+          <div className="fixed bottom-6 left-0 right-0 z-[500] flex justify-center px-4"><div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-2 max-w-full overflow-x-auto no-scrollbar scroll-smooth"><div className="flex items-center gap-2 flex-shrink-0 pl-1"><button onClick={() => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, isTimerOn: !t.isTimerOn, timerStartTime: !t.isTimerOn ? Date.now() : undefined } : t))} className={`p-3.5 rounded-2xl transition-all flex-shrink-0 ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button><div className="flex flex-col flex-shrink-0 ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull(activeTask.actTime || 0)} onChange={(e) => updateStateAndLogs(tasks.map(t => t.id === activeTask.id ? { ...t, actTime: parseTimeToSeconds(e.target.value) } : t))} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 flex-shrink-0"><button onClick={() => onOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button><button onClick={() => onIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 flex-shrink-0"><button onClick={() => { const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx > 0) updateStateAndLogs(arrayMove(tasks, idx, idx - 1)); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowUp size={18} /></button><button onClick={() => { const idx = tasks.findIndex(t => t.id === activeTask.id); if (idx < tasks.length - 1) updateStateAndLogs(arrayMove(tasks, idx, idx + 1)); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowDown size={18} /></button></div><div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" /><div className="flex items-center gap-0.5 pr-2 flex-shrink-0"><button onClick={() => { const newTasks = tasks.filter(t => t.id !== activeTask.id); updateStateAndLogs(newTasks); setFocusedTaskId(null); }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500"><X size={18} /></button><button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><Calendar size={18} /></button><button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><BarChart2 size={18} /></button><button onClick={() => setFocusedTaskId(null)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white"><Check size={18} /></button></div></div></div>
         )}
         {showDatePicker && activeTask && <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowDatePicker(false)}><div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button><span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span><button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button></div><div className="grid grid-cols-7 gap-2">{['S','M','T','W','T','F','S'].map((d, idx) => <div key={`day-${idx}`} className="text-center text-[10px] text-gray-600">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); return <button key={i} onClick={() => { const targetDate = d.toDateString(); const currentDate = viewDate.toDateString(); if (targetDate !== currentDate) { const newLogs = logs.map(l => { if (l.date === currentDate) return { ...l, tasks: l.tasks.filter(t => t.id !== activeTask.id) }; if (l.date === targetDate) return { ...l, tasks: [...l.tasks, { ...activeTask, id: Date.now() }] }; return l; }); if (!newLogs.some(l => l.date === targetDate)) newLogs.push({ date: targetDate, tasks: [{ ...activeTask, id: Date.now() }], memo: '' }); setLogs(newLogs); saveToLocalStorage(newLogs); updateStateAndLogs(tasks.filter(t => t.id !== activeTask.id)); setFocusedTaskId(null); } setShowDatePicker(false); }} className={`aspect-square rounded-lg border flex items-center justify-center ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>; })}</div></div></div>}
         {showHistoryTarget && <TaskHistoryModal taskName={showHistoryTarget} logs={logs} onClose={() => setShowHistoryTarget(null)} />}

@@ -353,17 +353,42 @@ const UnifiedTaskItem = React.memo(({
 
 // --- 유틸리티: 데이터 마이그레이션 ---
 const migrateTasks = (tasks: any[]): Task[] => {
-  if (!Array.isArray(tasks)) return [];
-  return tasks.map(t => ({
-    ...t,
-    name: t.name || t.text || '',
-    status: t.status || (t.done ? 'completed' : 'pending'),
-    depth: t.depth || 0,
-    isSecond: t.isSecond || false,
-    actTime: t.actTime || 0,
-    planTime: t.planTime || 0,
-    percent: t.percent || 0
-  }));
+  if (!Array.isArray(tasks)) {
+    console.warn('migrateTasks: tasks is not an array', tasks);
+    return [];
+  }
+  const seenIds = new Set();
+  return tasks.map(t => {
+      // 필수 필드 체크 및 기본값 보장
+      if (!t || typeof t !== 'object') return null;
+      
+      let id = t.id;
+      if (!id) {
+          id = Date.now() + Math.random();
+          console.log('[DEBUG] migrateTasks: Generated new ID for task', t.name, id);
+      }
+      
+      // ID 중복 방지 (데이터 오염 시 복구)
+      if (seenIds.has(id)) {
+          const newId = Date.now() + Math.random();
+          console.warn('[DEBUG] migrateTasks: Found duplicate ID', id, 'replacing with', newId, 'for task', t.name);
+          id = newId;
+      }
+      seenIds.add(id);
+
+      return {
+        ...t,
+        id: id,
+        name: t.name || t.text || '', // 이름 유실 방지
+        status: t.status || (t.done ? 'completed' : 'pending'),
+        depth: typeof t.depth === 'number' ? t.depth : 0,
+        isSecond: t.isSecond === true, // 명시적 불리언 변환
+        actTime: Number(t.actTime) || 0,
+        planTime: Number(t.planTime) || 0,
+        percent: Number(t.percent) || 0,
+        space_id: t.space_id || '' // space_id 보장
+      };
+  }).filter(Boolean) as Task[]; // null 제거
 };
 
 // --- 메인 앱 ---
@@ -376,12 +401,43 @@ export default function App() {
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
+  
+  // Debug: Monitor tasks for duplicates
+  useEffect(() => {
+      const ids = tasks.map(t => t.id);
+      const uniqueIds = new Set(ids);
+      if (ids.length !== uniqueIds.size) {
+          console.error('[CRITICAL] Duplicate IDs detected in tasks state!', ids);
+          // 긴급 복구: 중복 제거
+          const seen = new Set();
+          const deduped: Task[] = [];
+          tasks.forEach(t => {
+              if (!seen.has(t.id)) {
+                  seen.add(t.id);
+                  deduped.push(t);
+              } else {
+                  console.warn('[CRITICAL] Removing duplicate task:', t);
+                  // 혹은 ID를 재생성해서 유지할 수도 있음
+              }
+          });
+          // 무한 루프 방지를 위해 바로 set하지 않고, 다음 렌더링 사이클에 영향주거나
+          // 여기서 강제로 고치면 또 useEffect 트리거 되므로 주의.
+          // 일단 로그만 찍고, 심각하면 고치는 로직 추가.
+      }
+      console.log(`[DEBUG] tasks updated. Count: ${tasks.length}, ViewDate: ${viewDate.toDateString()}`);
+  }, [tasks, viewDate]);
+
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
+
   const [showHistoryTarget, setShowHistoryTarget] = useState<string | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const lastClickedIndex = useRef<number | null>(null);
   const [isSecondVisible, setIsSecondVisible] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const logsRef = useRef(logs);
+
+  useEffect(() => { logsRef.current = logs; }, [logs]);
   
   // History 관리
   const [history, setHistory] = useState<Task[][]>([]);
@@ -390,23 +446,39 @@ export default function App() {
   const lastLocalChange = useRef(Date.now()); 
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // --- Explicit Save Function ---
+  const saveToSupabase = useCallback(async (tasksToSave: Task[]) => {
+    if (!user || !currentSpace) return;
+    const dateStr = viewDate.toDateString();
+    const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
+    
+    try {
+      await supabase.from('task_logs').upsert({ 
+          user_id: user.id, 
+          space_id: currentSpace.id, 
+          date: dateStr, 
+          tasks: JSON.stringify(tasksToSave), 
+          memo: currentMemo
+      }, { onConflict: 'user_id,space_id,date' });
+    } catch (error) {
+      console.error("Failed to save to Supabase:", error);
+    }
+  }, [user, currentSpace, viewDate]);
 
   // --- 핵심: 안정적인 데이터 저장 로직 ---
-  // tasks 상태가 변경되면 이 useEffect가 감지하여 로그를 업데이트하고 저장한다.
-  // 불필요한 저장을 막기 위해 isInternalUpdate 체크.
+  // tasks 상태가 변경되면 이 useEffect가 감지하여 로그를 업데이트하고 로컬 스토리지에만 저장한다.
+  // 서버 저장은 명시적인 핸들러에서 수행한다.
   useEffect(() => {
     if (!localLogsLoaded || !currentSpace) return;
     
     const dateStr = viewDate.toDateString();
     
-    // 로그 상태 동기화
+    // 로그 상태 동기화 및 로컬 저장
     setLogs(prevLogs => {
         const existingLogIndex = prevLogs.findIndex(l => l.date === dateStr);
         const currentTasks = tasks;
         
-        // 변경사항이 없으면 리턴 (Deep check는 성능상 생략하고, 레퍼런스나 간단한 길이 체크 정도만 가능하나, 
-        // 여기서는 tasks 자체가 변경되었다는 것은 의미있는 변화로 간주)
         if (existingLogIndex >= 0 && prevLogs[existingLogIndex].tasks === currentTasks) {
             return prevLogs;
         }
@@ -420,24 +492,6 @@ export default function App() {
 
         // 로컬 스토리지 저장 (동기)
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-        
-        // 서버 저장 (비동기, 디바운스)
-        if (user) {
-            if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-            syncTimeoutRef.current = setTimeout(async () => {
-                const logToSave = newLogs.find(l => l.date === dateStr);
-                if (logToSave) {
-                    await supabase.from('task_logs').upsert({ 
-                        user_id: user.id, 
-                        space_id: currentSpace.id, 
-                        date: dateStr, 
-                        tasks: JSON.stringify(logToSave.tasks), 
-                        memo: logToSave.memo || '' 
-                    }, { onConflict: 'user_id,space_id,date' });
-                }
-            }, 1000);
-        }
-
         return newLogs;
     });
 
@@ -445,22 +499,30 @@ export default function App() {
     if (!isInternalUpdate.current) {
         setHistory(prev => {
             const newHistory = [...prev.slice(0, historyIndex + 1), tasks];
-            // 히스토리 너무 길어지면 자르기 (선택사항)
+            // 히스토리 너무 길어지면 자르기
             if (newHistory.length > 50) return newHistory.slice(newHistory.length - 50);
             return newHistory;
         });
-        setHistoryIndex(prev => Math.min(prev + 1, 49)); // 인덱스 조정
+        setHistoryIndex(prev => Math.min(prev + 1, 49));
     }
 
     lastLocalChange.current = Date.now();
 
-  }, [tasks, viewDate, currentSpace, user, localLogsLoaded]); // tasks가 의존성의 핵심
+  }, [tasks, viewDate, currentSpace, localLogsLoaded]); // user 의존성 제거, saveToSupabase 호출 제거
 
   // --- 안정적인 핸들러 정의 (App 리렌더링 시에도 재생성되지 않도록 useCallback + 함수형 업데이트 사용) ---
 
   const handleUpdateTask = useCallback((taskId: number, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
-  }, []);
+    setTasks(prev => {
+        const next = prev.map(t => t.id === taskId ? { ...t, ...updates } : t);
+        // 서버 저장 (디바운싱 없이 즉시 저장하거나, 필요시 디바운스 적용 가능)
+        // 여기서는 중요 업데이트(완료 등)가 많으므로 즉시 저장을 시도하되, 
+        // 잦은 입력(텍스트)에 대해서는 상위에서 처리하거나 디바운스가 필요할 수 있음.
+        // 현재 구조상 모든 업데이트에 대해 저장을 수행.
+        saveToSupabase(next);
+        return next;
+    });
+  }, [saveToSupabase]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
     setTasks(prev => {
@@ -475,13 +537,13 @@ export default function App() {
       next[idx] = { ...current, name: textBefore, text: textBefore };
       next.splice(idx + 1, 0, ...newTasksToAdd);
       
-      // 포커스 이동 예약
       if (newTasksToAdd.length > 0) {
         requestAnimationFrame(() => setFocusedTaskId(newTasksToAdd[0].id));
       }
+      saveToSupabase(next);
       return next;
     });
-  }, [currentSpace]);
+  }, [currentSpace, saveToSupabase]);
 
   const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
     setTasks(prev => {
@@ -497,19 +559,15 @@ export default function App() {
         const next = [...prev];
         const newPos = (prevTask.name || '').length;
         
-        // 내용 합치기
         next[overallPrevIdx] = { 
             ...prevTask, 
             name: (prevTask.name || '') + (currentText || ''), 
             text: (prevTask.text || '') + (currentText || '') 
         };
-        // 현재 태스크 삭제 (좀비 태스크 방지를 위해 확실히 제거)
         next.splice(idx, 1);
         
-        // 포커스 설정
         setFocusedTaskId(prevTask.id);
         
-        // 커서 위치 복원 (DOM 업데이트 후)
         requestAnimationFrame(() => {
             const el = document.activeElement as HTMLTextAreaElement;
             if (el && el.tagName === 'TEXTAREA') {
@@ -517,15 +575,16 @@ export default function App() {
             }
         });
         
+        saveToSupabase(next);
         return next;
       } else {
-        // 맨 위 항목이면 그냥 삭제하지 않고 내용만 비우거나 유지? 
-        // 여기서는 삭제 로직 유지
         setFocusedTaskId(null);
-        return prev.filter(t => t.id !== taskId);
+        const next = prev.filter(t => t.id !== taskId);
+        saveToSupabase(next);
+        return next;
       }
     });
-  }, []);
+  }, [saveToSupabase]);
 
   const handleMergeWithNext = useCallback((taskId: number) => {
     setTasks(prev => {
@@ -541,20 +600,28 @@ export default function App() {
         const next = [...prev];
         next[idx] = { ...current, name: (current.name || '') + (nextTask.name || ''), text: (current.text || '') + (nextTask.text || '') };
         next.splice(overallNextIdx, 1);
+        saveToSupabase(next);
         return next;
       }
       return prev;
     });
-  }, []);
+  }, [saveToSupabase]);
 
   const handleIndent = useCallback((taskId: number) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t));
-    // 포커스 유지는 AutoResizeTextarea의 autoFocus나 상위 상태 유지로 처리됨
-  }, []);
+    setTasks(prev => {
+        const next = prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t);
+        saveToSupabase(next);
+        return next;
+    });
+  }, [saveToSupabase]);
 
   const handleOutdent = useCallback((taskId: number) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t));
-  }, []);
+    setTasks(prev => {
+        const next = prev.map(t => t.id === taskId ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t);
+        saveToSupabase(next);
+        return next;
+    });
+  }, [saveToSupabase]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
@@ -563,8 +630,9 @@ export default function App() {
       setTasks(prevTasks);
       setHistoryIndex(historyIndex - 1);
       setTimeout(() => isInternalUpdate.current = false, 100);
+      saveToSupabase(prevTasks);
     }
-  }, [history, historyIndex]);
+  }, [history, historyIndex, saveToSupabase]);
 
   const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
@@ -573,8 +641,9 @@ export default function App() {
       setTasks(nextTasks);
       setHistoryIndex(historyIndex + 1);
       setTimeout(() => isInternalUpdate.current = false, 100);
+      saveToSupabase(nextTasks);
     }
-  }, [history, historyIndex]);
+  }, [history, historyIndex, saveToSupabase]);
 
   // --- 초기 로딩 및 데이터 동기화 ---
 
@@ -590,13 +659,23 @@ export default function App() {
 
   useEffect(() => {
     if (currentSpace) {
+      console.log('[DEBUG] Initial local load started');
+      setIsLoading(true);
       setLocalLogsLoaded(false);
       const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let currentLogs: DailyLog[] = [];
-      if (saved) { try { currentLogs = JSON.parse(saved).map((log: any) => ({ ...log, tasks: migrateTasks(log.tasks) })); } catch (e) {} }
+      if (saved) { 
+          try { 
+              currentLogs = JSON.parse(saved).map((log: any) => ({ ...log, tasks: migrateTasks(log.tasks) })); 
+              console.log(`[DEBUG] Loaded ${currentLogs.length} logs from localStorage`);
+          } catch (e) {
+              console.error('[DEBUG] Failed to parse localStorage', e);
+          } 
+      }
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       if (!log) {
+        console.log(`[DEBUG] No log found for ${dateStr}, creating new or carrying over`);
         // 날짜 변경 시 태스크 이월 등의 로직
         const isNotFuture = new Date(viewDate.toDateString()).getTime() <= new Date(new Date().toDateString()).getTime();
         let carryOverTasks: Task[] = [];
@@ -604,6 +683,7 @@ export default function App() {
           const sortedLogs = [...currentLogs].filter(l => l.tasks.some(t => t.isSecond)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           const lastLogWithSeconds = sortedLogs[0];
           carryOverTasks = lastLogWithSeconds ? lastLogWithSeconds.tasks.filter(t => t.isSecond).map(t => ({ ...t, id: Date.now() + Math.random(), status: 'pending' as const, actTime: 0, isTimerOn: false })) : [];
+          console.log(`[DEBUG] Carried over ${carryOverTasks.length} second tasks`);
         }
         log = { date: dateStr, tasks: carryOverTasks, memo: '' };
         currentLogs.push(log);
@@ -611,6 +691,7 @@ export default function App() {
       }
       setLogs(currentLogs);
       if (log) { 
+          console.log(`[DEBUG] Setting initial tasks from log: ${log.tasks.length} tasks`);
           isInternalUpdate.current = true; // 초기 로딩 시 히스토리 중복 방지
           setTasks(log.tasks); 
           setHistory([log.tasks]); 
@@ -620,27 +701,137 @@ export default function App() {
       const savedVisible = localStorage.getItem(`ultra_tasks_is_second_visible_${currentSpace.id}`);
       setIsSecondVisible(savedVisible !== null ? JSON.parse(savedVisible) : true);
       setLocalLogsLoaded(true);
+      
+      // 로컬 로딩 완료 후 잠시 대기 후 로딩 해제 (깜빡임 방지)
+      setTimeout(() => setIsLoading(false), 50);
     }
   }, [currentSpace, viewDate]); // user 의존성 제거 (로컬 우선)
 
-  // Supabase 실시간 동기화 및 로딩
+  // Supabase 실시간 동기화 및 데이터 복구
   useEffect(() => {
-    if (!user || !currentSpace || !localLogsLoaded) return;
+    if (!user || !currentSpace) return;
     
-    // loadFromSupabase 함수 제거 혹은 구현 필요 시 복구 (현재는 미사용 경고 해결을 위해 제거하거나 주석 처리)
+    // 데이터 복구 및 초기 로드 로직
+    const loadFromSupabase = async () => {
+      console.log(`[DEBUG] loadFromSupabase started for date: ${viewDate.toDateString()}`);
+      // 이미 로컬에서 로딩 중이거나 막 로딩된 상태라면 로딩 표시를 유지할 수도 있음
+      // 여기서는 백그라운드 동기화 개념이므로 isLoading을 true로 강제하지 않고 조용히 업데이트
+      try {
+        const { data, error } = await supabase
+          .from('task_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('space_id', currentSpace.id);
+
+        if (error) {
+          console.error('[DEBUG] Error loading from Supabase:', error);
+          return;
+        }
+
+        console.log(`[DEBUG] loadFromSupabase: fetched ${data?.length} logs`);
+
+        if (data && data.length > 0) {
+          const serverLogs = data.map((row: any) => ({
+            date: row.date,
+            tasks: migrateTasks(typeof row.tasks === 'string' ? JSON.parse(row.tasks) : row.tasks),
+            memo: row.memo
+          }));
+
+          setLogs(prevLogs => {
+            const logMap = new Map(prevLogs.map(l => [l.date, l]));
+            let hasChanges = false;
+
+            serverLogs.forEach(serverLog => {
+              if (serverLog.date === 'SETTINGS') return;
+
+              const localLog = logMap.get(serverLog.date);
+              
+              // 1. 로컬에 없는 데이터면 추가
+              if (!localLog) {
+                console.log(`[DEBUG] Adding new log from server for date: ${serverLog.date}`);
+                logMap.set(serverLog.date, serverLog);
+                hasChanges = true;
+              } 
+              // 2. 로컬 데이터가 비어있는데 서버 데이터는 있다면 복구 (유실 방지)
+              else if (localLog.tasks.length === 0 && serverLog.tasks.length > 0) {
+                console.log(`[DEBUG] Restoring empty local log from server for date: ${serverLog.date}`);
+                logMap.set(serverLog.date, serverLog);
+                hasChanges = true;
+              }
+              // 3. (옵션) 병합 로직 - 지금은 단순 덮어쓰기/복구만 수행하고 있음. 
+              // 필요하다면 여기서 ID 기반 병합을 수행해야 함.
+            });
+
+            if (!hasChanges) {
+                console.log('[DEBUG] No changes from server logs');
+                return prevLogs;
+            }
+
+            const mergedLogs = Array.from(logMap.values());
+            
+            // 로컬 스토리지도 최신화
+            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(mergedLogs));
+            
+            // 현재 보고 있는 날짜의 데이터가 복구되었다면 화면에도 반영
+            const currentViewLog = mergedLogs.find(l => l.date === viewDate.toDateString());
+            if (currentViewLog) {
+               // 현재 tasks가 비어있고 복구된 데이터가 있다면 적용
+               setTasks(currentTasks => {
+                   // ID 중복 방지 및 병합 로직 강화
+                   if (currentTasks.length === 0 && currentViewLog.tasks.length > 0) {
+                       console.log('[DEBUG] Updating current tasks from server log (local was empty)');
+                       isInternalUpdate.current = true;
+                       setTimeout(() => isInternalUpdate.current = false, 100);
+                       return currentViewLog.tasks;
+                   }
+                   
+                   // 만약 이미 데이터가 있는데 서버 데이터와 다르다면? 
+                   // 지금은 사용자 경험을 해치지 않기 위해(입력 중 날라가는 것 방지)
+                   // 로컬에 데이터가 있으면 서버 데이터로 덮어쓰지 않음.
+                   // 다만, "동기화" 관점에서는 서버 데이터가 우선순위일 수도 있음.
+                   // 여기서는 "데이터 유실 방지"에 초점을 맞춤.
+                   return currentTasks;
+               });
+            }
+
+            return mergedLogs;
+          });
+        }
+      } catch (e) {
+        console.error("[DEBUG] Supabase load failed:", e);
+      }
+    };
+
+    loadFromSupabase();
     
+    // ... (realtime subscription logic remains similar)
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
-        if (Date.now() - lastLocalChange.current < 2000) return; // 내가 방금 수정했으면 무시
+        if (Date.now() - lastLocalChange.current < 2000) {
+            console.log('[DEBUG] Realtime update ignored (local change recently)');
+            return; // 내가 방금 수정했으면 무시
+        }
+
+        console.log('[DEBUG] Realtime update received:', payload);
 
         if (payload.new && payload.new.space_id === currentSpace.id) {
           const serverLog = { date: payload.new.date, tasks: migrateTasks(JSON.parse(payload.new.tasks)), memo: payload.new.memo };
           if (serverLog.date === 'SETTINGS') return;
           
+          // 현재 보고 있는 날짜면 tasks 상태 업데이트
           if (serverLog.date === viewDate.toDateString()) {
-              // 현재 보고 있는 날짜면 tasks 상태 업데이트
+              console.log('[DEBUG] Realtime update matches current view date');
               isInternalUpdate.current = true;
-              setTasks(serverLog.tasks);
+              
+              setTasks(prev => {
+                  // 중복 ID 방지: 서버에서 온 데이터의 ID들이 기존과 겹치는지 확인하고,
+                  // 완전히 새로운 세트라면 교체.
+                  // 단순 교체 시 기존 로컬 변경사항이 날아갈 수 있으므로 주의.
+                  // 여기서는 서버 데이터가 "최신 진실"이라고 가정하고 교체하되 로그 남김.
+                  console.log(`[DEBUG] Replacing tasks with server data. Prev count: ${prev.length}, New count: ${serverLog.tasks.length}`);
+                  return serverLog.tasks;
+              });
+              
               setTimeout(() => isInternalUpdate.current = false, 100);
           }
           
@@ -649,15 +840,21 @@ export default function App() {
              if (idx >= 0) {
                  const newLogs = [...prev];
                  newLogs[idx] = serverLog;
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
                  return newLogs;
              }
-             return [...prev, serverLog];
+             const newLogs = [...prev, serverLog];
+             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+             return newLogs;
           });
         }
       }).subscribe();
       
-    return () => { supabase.removeChannel(channel); };
-  }, [user, currentSpace, localLogsLoaded, viewDate]);
+    return () => { 
+        console.log('[DEBUG] Unsubscribing channel');
+        supabase.removeChannel(channel); 
+    };
+  }, [user, currentSpace, viewDate]);
 
   // 타이머 틱
   useEffect(() => {
@@ -685,7 +882,9 @@ export default function App() {
       setTasks(prev => {
           const oldIndex = prev.findIndex((t) => t.id === active.id);
           const newIndex = prev.findIndex((t) => t.id === over.id);
-          return arrayMove(prev, oldIndex, newIndex);
+          const next = arrayMove(prev, oldIndex, newIndex);
+          saveToSupabase(next);
+          return next;
       });
     }
   };
@@ -722,6 +921,7 @@ export default function App() {
         e.preventDefault();
         const nextTasks = tasks.filter(t => !selectedTaskIds.has(t.id));
         setTasks(nextTasks);
+        saveToSupabase(nextTasks);
         setFocusedTaskId(null);
         setSelectedTaskIds(new Set());
         return;
@@ -768,6 +968,7 @@ export default function App() {
         <div className="mb-4 flex justify-between items-center">
             <SpaceSelector onSpaceChange={handleSpaceChange} />
             <div className="flex gap-3 items-center">
+                {isLoading && <div className="text-xs text-blue-500 animate-pulse font-bold">LOADING...</div>}
                 <button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-500 hover:text-white p-1"><Clock size={18} /></button>
                 <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1"><HelpCircle size={18} /></button>
                 <button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button>
@@ -775,7 +976,7 @@ export default function App() {
         </div>
         
         {/* 달력 영역 */}
-        <div className="calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl" onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
+        <div className={`calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`} onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
            <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button><div className="text-center cursor-pointer" onClick={() => setViewDate(new Date())}><div className="text-[11px] text-gray-500 uppercase tracking-widest font-bold">{year}</div><div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button></div>
            <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map(d => <div key={d} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { const d = new Date(year, month, 1); d.setDate(d.getDate() + (i - d.getDay())); const l = logs.find(log => log.date === d.toDateString()); return <button key={i} onClick={() => setViewDate(d)} className={`h-11 rounded-xl text-xs flex flex-col items-center justify-center transition-all ${d.toDateString() === viewDate.toDateString() ? 'bg-[#7c4dff] text-white' : d.getMonth() === month ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700'}`}><span className="font-black text-[14px]">{d.getDate()}</span>{l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${d.toDateString() === viewDate.toDateString() ? 'text-white/80' : 'text-[#7c4dff]'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}</button>; })}</div>
         </div>
@@ -789,7 +990,7 @@ export default function App() {
             <AutoResizeTextarea value={currentLog?.memo || ''} onChange={(e: any) => { const newMemo = e.target.value; setLogs(prev => prev.map(l => l.date === viewDate.toDateString() ? { ...l, memo: newMemo } : l)); }} placeholder="M E M O" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none" />
         </div>
 
-        <div className="flex-1 space-y-8 pb-32">
+        <div className={`flex-1 space-y-8 pb-32 transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
           {isSecondVisible && (
             <div>
                 <div className="flex items-center justify-between mb-2 px-3">

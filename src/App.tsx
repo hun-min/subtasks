@@ -180,8 +180,6 @@ const UnifiedTaskItem = React.memo(({
 }) => {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
-  const basePadding = 16;
-  const paddingLeft = basePadding + (currentDepth * 24); 
   const isFocused = focusedTaskId === task.id;
   const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -190,7 +188,7 @@ const UnifiedTaskItem = React.memo(({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    paddingLeft: `${paddingLeft}px`
+    paddingLeft: `${16 + (currentDepth * 24)}px`
   };
 
   const [suggestions, setSuggestions] = useState<Task[]>([]);
@@ -226,9 +224,7 @@ const UnifiedTaskItem = React.memo(({
       } else if (!e.shiftKey) {
         e.preventDefault();
         const cursorPos = textareaRef.current?.selectionStart || 0;
-        const textBefore = taskName.substring(0, cursorPos);
-        const textAfter = taskName.substring(cursorPos);
-        onAddTaskAtCursor(task.id, textBefore, textAfter);
+        onAddTaskAtCursor(task.id, taskName.substring(0, cursorPos), taskName.substring(cursorPos));
       }
       return;
     }
@@ -283,7 +279,7 @@ const UnifiedTaskItem = React.memo(({
   return (
     <div ref={setNodeRef} style={style} onClick={(e) => onTaskClick(e, task.id, index)} className={`relative group flex items-start gap-2 py-0 px-4 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-[#7c4dff]/10 border-l-2 border-[#7c4dff]' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
           {currentDepth > 0 && Array.from({ length: currentDepth }).map((_, i) => (
-            <div key={i} className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${basePadding + i * 24 + 11}px` }} />
+            <div key={i} className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${16 + i * 24 + 11}px` }} />
           ))}
       <div className="flex flex-col items-center justify-start mt-[7px]">
         <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask({ ...task, status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
@@ -500,17 +496,16 @@ export default function App() {
       const idx = prev.findIndex(t => t.id === taskId);
       if (idx === -1) return prev;
       const current = prev[idx];
-      const newTasks = [...prev];
-      newTasks[idx] = { ...current, name: textBefore, text: textBefore };
-      const lines = textAfter.split('\n');
-      const newTasksToAdd: Task[] = lines.map((line, i) => ({
+      const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
         id: Date.now() + i, name: line.trim(), status: 'pending', indent: current.indent, parent: current.parent, text: line.trim(),
         percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: current.depth || 0, isSecond: current.isSecond, space_id: String(currentSpace?.id || ''),
       }));
-      newTasks.splice(idx + 1, 0, ...newTasksToAdd);
+      const next = [...prev];
+      next[idx] = { ...current, name: textBefore, text: textBefore };
+      next.splice(idx + 1, 0, ...newTasksToAdd);
       if (newTasksToAdd.length > 0) setTimeout(() => setFocusedTaskId(newTasksToAdd[0].id), 0);
-      updateStateAndLogs(newTasks);
-      return newTasks;
+      updateStateAndLogs(next);
+      return next;
     });
   }, [currentSpace, updateStateAndLogs]);
 
@@ -524,13 +519,13 @@ export default function App() {
       if (inSectionIdx > 0) {
         const prevTask = sameSectionTasks[inSectionIdx - 1];
         const overallPrevIdx = prev.findIndex(t => t.id === prevTask.id);
-        const newCursorPos = (prevTask.name || '').length;
-        const newTasks = [...prev];
-        newTasks[overallPrevIdx] = { ...prevTask, name: (prevTask.name || '') + (currentText || ''), text: (prevTask.text || '') + (currentText || '') };
-        newTasks.splice(idx, 1);
-        setTimeout(() => { setFocusedTaskId(prevTask.id); setTimeout(() => { const el = document.activeElement as HTMLTextAreaElement; if (el && el.tagName === 'TEXTAREA') el.setSelectionRange(newCursorPos, newCursorPos); }, 0); }, 0);
-        updateStateAndLogs(newTasks);
-        return newTasks;
+        const next = [...prev];
+        const newPos = (prevTask.name || '').length;
+        next[overallPrevIdx] = { ...prevTask, name: (prevTask.name || '') + (currentText || ''), text: (prevTask.text || '') + (currentText || '') };
+        next.splice(idx, 1);
+        setTimeout(() => { setFocusedTaskId(prevTask.id); setTimeout(() => { const el = document.activeElement as HTMLTextAreaElement; if (el && el.tagName === 'TEXTAREA') el.setSelectionRange(newPos, newPos); }, 0); }, 0);
+        updateStateAndLogs(next);
+        return next;
       } else {
         const filtered = prev.filter(t => t.id !== taskId);
         setFocusedTaskId(null);
@@ -548,24 +543,24 @@ export default function App() {
       const sameSectionTasks = prev.filter(t => t.isSecond === current.isSecond);
       const inSectionIdx = sameSectionTasks.findIndex(t => t.id === taskId);
       if (inSectionIdx < sameSectionTasks.length - 1) {
-        const next = sameSectionTasks[inSectionIdx + 1];
-        const overallNextIdx = prev.findIndex(t => t.id === next.id);
-        const newTasks = [...prev];
-        newTasks[idx] = { ...current, name: (current.name || '') + (next.name || ''), text: (current.text || '') + (next.text || '') };
-        newTasks.splice(overallNextIdx, 1);
-        updateStateAndLogs(newTasks);
-        return newTasks;
+        const nextTask = sameSectionTasks[inSectionIdx + 1];
+        const overallNextIdx = prev.findIndex(t => t.id === nextTask.id);
+        const next = [...prev];
+        next[idx] = { ...current, name: (current.name || '') + (nextTask.name || ''), text: (current.text || '') + (nextTask.text || '') };
+        next.splice(overallNextIdx, 1);
+        updateStateAndLogs(next);
+        return next;
       }
       return prev;
     });
   }, [updateStateAndLogs]);
 
   const handleUndo = useCallback(() => {
-    if (historyIndex > 0) { isInternalUpdate.current = true; const prevHistory = history[historyIndex - 1]; setTasks(prevHistory); updateStateAndLogs(prevHistory, false); setHistoryIndex(historyIndex - 1); setTimeout(() => isInternalUpdate.current = false, 0); }
+    if (historyIndex > 0) { isInternalUpdate.current = true; const h = history[historyIndex - 1]; setTasks(h); updateStateAndLogs(h, false); setHistoryIndex(historyIndex - 1); setTimeout(() => isInternalUpdate.current = false, 0); }
   }, [history, historyIndex, updateStateAndLogs]);
 
   const handleRedo = useCallback(() => {
-    if (historyIndex < history.length - 1) { isInternalUpdate.current = true; const nextHistory = history[historyIndex + 1]; setTasks(nextHistory); updateStateAndLogs(nextHistory, false); setHistoryIndex(historyIndex + 1); setTimeout(() => isInternalUpdate.current = false, 0); }
+    if (historyIndex < history.length - 1) { isInternalUpdate.current = true; const h = history[historyIndex + 1]; setTasks(h); updateStateAndLogs(h, false); setHistoryIndex(historyIndex + 1); setTimeout(() => isInternalUpdate.current = false, 0); }
   }, [history, historyIndex, updateStateAndLogs]);
 
   const onIndent = useCallback((taskId: number) => { setTasks(prev => { const next = prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t); updateStateAndLogs(next); return next; }); }, [updateStateAndLogs]);

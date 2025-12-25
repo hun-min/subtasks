@@ -804,6 +804,11 @@ export default function App() {
                       console.log(`[DEBUG] Diff detected for ${serverLog.date}:`);
                       console.log('Local:', localLog.tasks.length, 'items');
                       console.log('Server:', serverLog.tasks.length, 'items');
+                      
+                      // [Fix] Diff 감지 시 서버 데이터로 덮어쓰기
+                      console.log('[DEBUG] Overwriting local log with server log due to diff');
+                      logMap.set(serverLog.date, serverLog);
+                      hasChanges = true;
                   }
               }
             });
@@ -835,6 +840,18 @@ export default function App() {
                    }
 
                    // ID 중복 방지 및 병합 로직 강화
+                   // [Fix] 서버 데이터와 로컬 데이터가 다르면(Diff) 서버 데이터로 동기화
+                   const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth, isSecond: t.isSecond }));
+                   const localSimple = JSON.stringify(simplify(currentTasks));
+                   const serverSimple = JSON.stringify(simplify(currentViewLog.tasks));
+
+                   if (localSimple !== serverSimple) {
+                       console.log('[DEBUG] Updating current tasks from server log (sync mismatch)');
+                       isInternalUpdate.current = true;
+                       setTimeout(() => isInternalUpdate.current = false, 100);
+                       return currentViewLog.tasks;
+                   }
+
                    if (currentTasks.length === 0 && currentViewLog.tasks.length > 0) {
                        console.log('[DEBUG] Updating current tasks from server log (local was empty)');
                        isInternalUpdate.current = true;

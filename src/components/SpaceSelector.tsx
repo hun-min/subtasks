@@ -2,7 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useSpace } from '../contexts/SpaceContext';
 import { Plus, ChevronDown, Check, Layout, Settings, Trash2 } from 'lucide-react';
 
-export function SpaceSelector({ onSpaceChange }: { onSpaceChange?: (space: any) => void }) {
+interface SpaceSelectorProps {
+  onSpaceChange?: (space: any) => void;
+}
+
+export function SpaceSelector({ onSpaceChange }: SpaceSelectorProps) {
   const { spaces, currentSpace, setCurrentSpace, addSpace, deleteSpace, updateSpace } = useSpace();
   const [isOpen, setIsOpen] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');

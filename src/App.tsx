@@ -67,12 +67,10 @@ const parseTimeToSeconds = (timeStr: string) => {
 };
 
 // --- [컴포넌트] 자동 높이 조절 Textarea ---
-// useLayoutEffect로 변경하여 깜빡임 없이 즉시 높이 조절 및 포커스 유지
 const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, onBlur, placeholder, autoFocus, className, inputRef }: any) => {
   const localRef = useRef<HTMLTextAreaElement>(null);
   const combinedRef = inputRef || localRef;
 
-  // useLayoutEffect: DOM 업데이트 직후 동기적으로 실행
   useLayoutEffect(() => {
     if (combinedRef.current) {
       combinedRef.current.style.height = 'auto';
@@ -80,13 +78,10 @@ const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, on
     }
   }, [value]);
 
-  // useLayoutEffect: 포커스 유지 보장
   useLayoutEffect(() => {
     if (autoFocus && combinedRef.current) {
-      combinedRef.current.focus();
-      // 커서를 맨 끝으로 이동 (선택적)
-      // const len = combinedRef.current.value.length;
-      // combinedRef.current.setSelectionRange(len, len);
+      // 포커스를 강제로 잃지 않도록 preventScroll 옵션 사용 가능성 고려
+      combinedRef.current.focus({ preventScroll: true });
     }
   }, [autoFocus]);
 

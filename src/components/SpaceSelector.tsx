@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSpace } from '../contexts/SpaceContext';
 import { Plus, ChevronDown, Check, Layout, Settings, Trash2 } from 'lucide-react';
 
-export function SpaceSelector() {
+export function SpaceSelector({ onSpaceChange }: { onSpaceChange?: (space: any) => void }) {
   const { spaces, currentSpace, setCurrentSpace, addSpace, deleteSpace, updateSpace } = useSpace();
   const [isOpen, setIsOpen] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
@@ -67,7 +67,7 @@ export function SpaceSelector() {
                   </form>
                 ) : (
                   <>
-                    <button onClick={() => { setCurrentSpace(space); setIsOpen(false); }} className={`flex-1 text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors ${currentSpace?.id === space.id ? 'bg-blue-600/10 text-blue-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}>
+                    <button onClick={() => { setCurrentSpace(space); if (onSpaceChange) onSpaceChange(space); setIsOpen(false); }} className={`flex-1 text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors ${currentSpace?.id === space.id ? 'bg-blue-600/10 text-blue-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}>
                       <span className="truncate">{space.title}</span>
                       {currentSpace?.id === space.id && <Check size={14} />}
                     </button>

@@ -80,8 +80,13 @@ const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, on
   }, [value]);
 
   useLayoutEffect(() => {
+    // autoFocus가 true일 때만 포커스 설정
+    // preventScroll 옵션을 사용하여 모바일 키보드가 내려가는 현상 방지
     if (autoFocus && combinedRef.current) {
-      combinedRef.current.focus({ preventScroll: true });
+        // 이미 포커스가 있다면 다시 설정하지 않음 (중복 실행 방지)
+        if (document.activeElement !== combinedRef.current) {
+             combinedRef.current.focus({ preventScroll: true });
+        }
     }
   }, [autoFocus]);
 
@@ -510,12 +515,14 @@ export default function App() {
       const next = [...prev];
       next[idx] = { ...current, name: textBefore, text: textBefore };
       next.splice(idx + 1, 0, ...newTasksToAdd);
+      
+      // 상태 업데이트 후 강제로 포커스 설정 (requestAnimationFrame + useLayoutEffect 조합)
       if (newTasksToAdd.length > 0) {
-          // 상태 업데이트 후 requestAnimationFrame을 사용하여 포커스 설정
-          requestAnimationFrame(() => {
-            setFocusedTaskId(newTasksToAdd[0].id);
-          });
+        requestAnimationFrame(() => {
+           setFocusedTaskId(newTasksToAdd[0].id);
+        });
       }
+      
       updateStateAndLogs(next);
       return next;
     });
@@ -536,19 +543,19 @@ export default function App() {
         next[overallPrevIdx] = { ...prevTask, name: (prevTask.name || '') + (currentText || ''), text: (prevTask.text || '') + (currentText || '') };
         next.splice(idx, 1);
         
-        // 상태 업데이트 전에 포커스 ID 설정
+        // 상태 업데이트 직전에 포커스 ID 설정
         setFocusedTaskId(prevTask.id);
         
         updateStateAndLogs(next);
         
-        // DOM 업데이트 이후 커서 위치 조정
+        // DOM 업데이트 후 커서 위치 복원
         requestAnimationFrame(() => {
-             const el = document.activeElement as HTMLTextAreaElement;
-             if (el && el.tagName === 'TEXTAREA') {
-                 el.setSelectionRange(newPos, newPos);
-             }
+            const el = document.activeElement as HTMLTextAreaElement;
+            if (el && el.tagName === 'TEXTAREA') {
+                el.setSelectionRange(newPos, newPos);
+            }
         });
-
+        
         return next;
       } else {
         const filtered = prev.filter(t => t.id !== taskId);
@@ -591,7 +598,7 @@ export default function App() {
       setTasks(prev => { 
           const next = prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t); 
           updateStateAndLogs(next); 
-          // 들여쓰기 후에도 포커스 유지를 위해 명시적으로 설정
+          // 포커스 강제 유지 (불필요한 blur 방지)
           setFocusedTaskId(taskId);
           return next; 
       }); 
@@ -601,7 +608,7 @@ export default function App() {
       setTasks(prev => { 
           const next = prev.map(t => t.id === taskId ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t); 
           updateStateAndLogs(next); 
-          // 내어쓰기 후에도 포커스 유지를 위해 명시적으로 설정
+          // 포커스 강제 유지
           setFocusedTaskId(taskId);
           return next; 
       }); 

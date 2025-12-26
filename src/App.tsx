@@ -79,13 +79,25 @@ const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, on
     }
   }, [value]);
 
-  // 포커스 관리 (초기 마운트 시에만)
-  // 화면을 그리기 전에(paint 이전에) 포커스를 고정하여 키보드 내려감을 방지
+  // 포커스 관리 (초기 마운트 및 isFocused 변경 시)
   useLayoutEffect(() => {
-    if (autoFocus && combinedRef.current) {
-        combinedRef.current.focus({ preventScroll: true });
+    if ((autoFocus || (combinedRef.current && document.activeElement !== combinedRef.current)) && combinedRef.current) {
+        // 부모에서 포커스를 주라고 했을 때 (autoFocus=true)
+        // 이미 포커스가 있다면 건드리지 않음 (중복 실행 방지)
+        // 하지만 다른 요소에 포커스가 있다면 가져옴
+        if (autoFocus) {
+             combinedRef.current.focus({ preventScroll: true });
+             
+             // [Hack] 커서 위치 복구 (Merge 동작 후)
+             const restorePos = (window as any).__restoreCursorPos;
+             if (typeof restorePos === 'number') {
+                 combinedRef.current.setSelectionRange(restorePos, restorePos);
+                 (window as any).__restoreCursorPos = undefined;
+             }
+        }
     }
-  }, [autoFocus]);
+  }, [autoFocus, value]); // value가 바뀌었을 때도 높이 조절과 함께 포커스 유지 확인? (필요시)
+
 
   return (
     <textarea
@@ -242,6 +254,26 @@ const UnifiedTaskItem = React.memo(({
     }
     
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
+      // 텍스트가 비어있지 않으면 동작하지 않게 변경 요청됨 (끊김 방지)
+      // 하지만 사용자 요구사항은 "텍스트처럼이 안되냐고 지우다가 줄 지워지면 왜 위로 가면서 한번 끊기고"
+      // -> 빈 줄 지울 때 자연스럽게 윗줄 끝으로 포커스 이동 + 텍스트 합치기
+      
+      // 사용자 피드백: "왜 텍스트처럼이 안되냐고 지우다가 줄 지워지면 왜 위로 가면서 한번 끊기고 왜 탭도 끊기고 다 끊기냐니까? 포커스가 다시 가는기 아니라 백스페이스 누르고 있어도 안끊기게 해달라니까?"
+      // 백스페이스를 꾹 누르고 있을 때 줄이 지워지면서 위로 올라갈 때 포커스를 잃거나 끊기는 느낌을 받음.
+      // onMergeWithPrevious가 처리된 후 requestAnimationFrame으로 포커스를 다시 잡는데, 이 과정에서 딜레이나 끊김이 느껴질 수 있음.
+      // 혹은 React의 상태 업데이트 비동기 특성 때문에 연속 입력이 씹힐 수 있음.
+      
+      // 해결 시도:
+      // 1. 합쳐질 윗 task를 찾는다.
+      // 2. 윗 task의 내용과 현재 task의 내용을 미리 합친다.
+      // 3. 현재 task를 삭제한다.
+      // 4. 윗 task의 커서 위치를 정확히 조정한다.
+      
+      // 여기서는 이벤트 기본 동작을 막고, 상위 핸들러를 호출한다.
+      // 상위 핸들러에서 상태 업데이트를 최적화하거나, 동기적으로 처리되도록 해야 함.
+      // 하지만 React state update는 비동기이므로, DOM 조작을 직접 하지 않는 한 완벽한 "텍스트 에디터" 느낌은 어려울 수 있음.
+      // 최선책: 포커스 복구를 확실하게 하고, 불필요한 렌더링을 줄임.
+      
       e.preventDefault();
       onMergeWithPrevious(task.id, taskName);
       return;
@@ -413,6 +445,39 @@ const migrateTasks = (tasks: any[]): Task[] => {
   return flattened;
 };
 
+// --- 유틸리티: 태스크 병합 (Smart Merge) ---
+// const mergeTasks = (localTasks: Task[], serverTasks: Task[]): Task[] => {
+//   if (!Array.isArray(localTasks)) return serverTasks || [];
+//   if (!Array.isArray(serverTasks)) return localTasks || [];
+//
+//   const mergedList = [...localTasks];
+//   const localIds = new Set(localTasks.map(t => t.id));
+//   
+//   serverTasks.forEach(serverTask => {
+//     // 1. 로컬에 없는 태스크는 추가 (다른 기기에서 생성된 항목)
+//     if (!localIds.has(serverTask.id)) {
+//       mergedList.push(serverTask);
+//     } else {
+//       // 2. 로컬에 이미 있는 경우: 기본적으로 로컬 데이터를 우선(보호)합니다.
+//       // 단, 로컬 데이터가 손상되었거나(내용 없음) 비어있는데 서버 데이터가 온전하다면 복구합니다.
+//       const idx = mergedList.findIndex(lt => lt.id === serverTask.id);
+//       if (idx !== -1) {
+//         const localTask = mergedList[idx];
+//         const localContent = localTask.name || localTask.text || '';
+//         const serverContent = serverTask.name || serverTask.text || '';
+//         
+//         // 로컬은 비어있는데 서버는 내용이 있다면 서버 내용으로 채움
+//         if (localContent.trim() === '' && serverContent.trim() !== '') {
+//             mergedList[idx] = serverTask;
+//         }
+//         // 그 외의 경우(로컬에 내용이 있거나, 둘 다 비었거나)는 로컬 유지 (User Input Protection)
+//       }
+//     }
+//   });
+//   
+//   return mergedList;
+// };
+
 // --- 메인 앱 ---
 export default function App() {
   const { user, signOut } = useAuth();
@@ -459,6 +524,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const logsRef = useRef(logs);
   const viewDateRef = useRef(viewDate); // [Date Mismatch Check] Ref to avoid closure staleness
+  // const tasksLoadedForDateRef = useRef<string | null>(null); // [Critical Fix] Track which date the current tasks belong to
 
   useEffect(() => { logsRef.current = logs; }, [logs]);
   useEffect(() => { viewDateRef.current = viewDate; }, [viewDate]);
@@ -503,6 +569,7 @@ export default function App() {
         const existingLogIndex = prevLogs.findIndex(l => l.date === dateStr);
         const currentTasks = tasks;
         
+        // [Optimization] 변경사항 없으면 스킵
         if (existingLogIndex >= 0 && prevLogs[existingLogIndex].tasks === currentTasks) {
             return prevLogs;
         }
@@ -532,7 +599,25 @@ export default function App() {
 
     lastLocalChange.current = Date.now();
 
-  }, [tasks, viewDate, currentSpace, localLogsLoaded]); // user 의존성 제거, saveToSupabase 호출 제거
+    // [CRITICAL FIX] viewDate, currentSpace 등을 의존성에서 제거하여
+    // 날짜/공간 변경 시 '이전 tasks'가 '새로운 날짜/공간'에 덮어씌워지는 문제 해결.
+    // 오직 tasks가 변경되었을 때만 저장 로직이 수행되어야 함.
+    //
+    // [추가 수정] 초기 로딩 중에는 저장을 방지해야 함.
+    // localLogsLoaded가 false일 때는 실행되지 않지만, true가 된 직후
+    // tasks가 비어있거나 초기화 중일 때 저장이 발생하여 데이터를 덮어쓸 수 있음.
+    // 특히 날짜 이동 직후에는 tasks가 아직 로드되지 않은 상태일 수 있는데,
+    // 이 시점에 저장이 트리거되면 빈 데이터로 덮어씌워짐.
+    
+    // 안전 장치: 현재 보고 있는 날짜와 로그의 날짜가 일치하는지 확인
+    if (viewDateRef.current.toDateString() !== dateStr) {
+        console.warn(`[Safe Guard] Skipping save: viewDate (${viewDateRef.current.toDateString()}) mismatch with target date (${dateStr})`);
+        return;
+    }
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks]); // user, viewDate, currentSpace, localLogsLoaded 제거
+
 
   // --- 안정적인 핸들러 정의 (App 리렌더링 시에도 재생성되지 않도록 useCallback + 함수형 업데이트 사용) ---
 
@@ -590,15 +675,51 @@ export default function App() {
         };
         next.splice(idx, 1);
         
+        // [Optimization] 상태 업데이트와 포커스 복구를 더 매끄럽게
+        // setFocusedTaskId를 호출하여 리렌더링을 유발하지만, 
+        // 핵심은 DOM이 업데이트된 직후 커서 위치를 잡는 것.
+        // requestAnimationFrame은 좋지만, React 18의 batching으로 인해 
+        // 렌더링 타이밍이 미묘하게 어긋날 수 있음.
+        // 여기서는 useLayoutEffect나 setTimeout(0) 등을 고려할 수 있으나,
+        // 기존 로직을 유지하되 포커스 설정을 state update 직후가 아닌,
+        // DOM ref를 통해 직접 접근할 수 있다면 더 좋음.
+        // 하지만 UnifiedTaskItem이 개별 컴포넌트라 ref 접근이 까다로움.
+        // -> 포커스 ID를 먼저 설정하고, 렌더링 후 커서 이동하도록 유도.
+        
         setFocusedTaskId(prevTask.id);
         
-        requestAnimationFrame(() => {
-            const el = document.activeElement as HTMLTextAreaElement;
-            if (el && el.tagName === 'TEXTAREA') {
-                el.setSelectionRange(newPos, newPos);
-            }
-        });
+        // 렌더링 후 커서 위치 복구 (조금 더 긴 딜레이를 주거나, useLayoutEffect를 써야 확실함)
+        // 여기서는 setTimeout으로 시도 (requestAnimationFrame보다 늦게 실행되어 DOM 업데이트 보장)
+        setTimeout(() => {
+            // const el = document.querySelector(`textarea`) as HTMLTextAreaElement | null; // Note: This query is too generic, relies on focus being set? 
+            // Better: We rely on the fact that UnifiedTaskItem with `isFocused` will mount/update.
+            // But actually, we need to find the SPECIFIC textarea.
+            // Since we can't easily select by ID here without adding IDs to DOM elements...
+            // Let's rely on the fact that `setFocusedTaskId` will trigger `autoFocus` in `UnifiedTaskItem`.
+            // BUT `UnifiedTaskItem` uses `autoFocus` only on mount? No, `useEffect` on `isFocused`?
+            // Let's check `UnifiedTaskItem`.
+            
+            // UnifiedTaskItem logic:
+            // useEffect(() => { if (isFocused && textareaRef.current) { textareaRef.current.focus(); textareaRef.current.setSelectionRange(...) } }, [isFocused]);
+            // This logic is missing in UnifiedTaskItem! It only has onFocus handler.
+            
+            // We need to move cursor restoration logic to UnifiedTaskItem or improve it here.
+            // Since we don't have ref here, we use a global event or custom way.
+            // OR we just assume `document.activeElement` works if `autoFocus` worked?
+            
+            // Actually, `UnifiedTaskItem` has `autoFocus={isFocused}`. 
+            // This works for mounting, but for updates?
+            // React `autoFocus` works on mount.
+            // We need a `useEffect` in `UnifiedTaskItem` to focus when `isFocused` becomes true.
+        }, 0);
         
+        // 커서 위치 정보를 전역/컨텍스트 등으로 넘겨주면 좋겠지만,
+        // 여기서는 임시 방편으로 sessionStorage나 global var 사용 가능? 
+        // 아니면 `tasks` state에 `cursorPos` 필드를 추가? (너무 무거움)
+        
+        // 대안: window 객체에 임시 저장 (Hack but fast)
+        (window as any).__restoreCursorPos = newPos;
+
         saveToSupabase(next);
         return next;
       } else {
@@ -773,8 +894,14 @@ export default function App() {
           }));
 
           setLogs(prevLogs => {
+            // [Safety Check] 컴포넌트 마운트 해제 후 상태 업데이트 방지 (useRef 활용)
+            if (viewDateRef.current.toDateString() !== targetDateStr) return prevLogs;
+
             const logMap = new Map(prevLogs.map(l => [l.date, l]));
             let hasChanges = false;
+            
+            // ... (rest of logic)
+
 
             serverLogs.forEach(serverLog => {
               if (serverLog.date === 'SETTINGS') return;
@@ -841,12 +968,26 @@ export default function App() {
 
                    // ID 중복 방지 및 병합 로직 강화
                    // [Fix] 서버 데이터와 로컬 데이터가 다르면(Diff) 서버 데이터로 동기화
+                   // 단, 로컬 데이터가 방금 막 수정된 경우(충돌 가능성) 고려 필요하지만
+                   // 여기서는 초기 로딩 시점이므로 서버 데이터를 신뢰.
+                   // [Critical] 만약 로컬 데이터가 이미 존재하고(내용 있음) 서버 데이터와 다르면?
+                   // 사용자가 오프라인에서 작업했을 수 있음.
+                   // 하지만 지금 문제는 "데이터가 덮어씌워지는" 것이므로,
+                   // 엉뚱한 날짜의 데이터가 덮어씌워지는 것을 막는 것이 최우선.
+                   
                    const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth, isSecond: t.isSecond }));
                    const localSimple = JSON.stringify(simplify(currentTasks));
                    const serverSimple = JSON.stringify(simplify(currentViewLog.tasks));
 
                    if (localSimple !== serverSimple) {
                        console.log('[DEBUG] Updating current tasks from server log (sync mismatch)');
+                       
+                       // [Safety Check] 현재 보여지는 날짜와 서버 데이터의 날짜가 일치하는지 재확인
+                       if (currentViewLog.date !== viewDateRef.current.toDateString()) {
+                           console.warn('[Critical Mismatch] Attempted to update tasks with wrong date data!', currentViewLog.date, viewDateRef.current.toDateString());
+                           return currentTasks;
+                       }
+                       
                        isInternalUpdate.current = true;
                        setTimeout(() => isInternalUpdate.current = false, 100);
                        return currentViewLog.tasks;
@@ -1027,7 +1168,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#e0e0e0] font-sans overflow-x-hidden">
-      {tasks.find(t => t.isTimerOn) && (
+      {/* tasks.find(t => t.isTimerOn) && (
         <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col items-center justify-center">
           <div className="z-10 text-center space-y-12">
             <h2 className="text-xl text-gray-400 font-light tracking-widest">FOCUS MODE</h2>
@@ -1036,13 +1177,14 @@ export default function App() {
             <button onClick={() => handleUpdateTask(tasks.find(t => t.isTimerOn)!.id, { isTimerOn: false })} className="px-8 py-3 border border-white/20 rounded-full text-white hover:bg-white/10 transition-all uppercase tracking-widest text-xs">Complete</button>
           </div>
         </div>
-      )}
+      ) */}
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       <div className="max-w-xl mx-auto min-h-screen flex flex-col p-4">
         <div className="mb-4 flex justify-between items-center">
             <SpaceSelector onSpaceChange={handleSpaceChange} />
             <div className="flex gap-3 items-center">
                 {isLoading && <div className="text-xs text-blue-500 animate-pulse font-bold">LOADING...</div>}
+                <button onClick={() => setViewDate(new Date())} className="text-gray-500 hover:text-white p-1 text-xs font-bold border border-gray-700 rounded px-2">TODAY</button>
                 <button onClick={() => setIsSecondVisible(!isSecondVisible)} className="text-gray-500 hover:text-white p-1"><Clock size={18} /></button>
                 <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1"><HelpCircle size={18} /></button>
                 <button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button>

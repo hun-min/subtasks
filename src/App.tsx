@@ -1,3 +1,17 @@
+// -----------------------------------------------------------------------------
+// [개발 원칙 및 주의사항] (Project Manifesto Audit)
+// 1. 기능 보존 원칙: 기존 기능(단축키, 다중 선택, 드래그 등)은 명시적인 제거 요청이 없다면 
+//    절대 삭제되거나 비활성화되어서는 안 된다. 리팩토링 시 반드시 기존 로직을 이식해야 한다.
+//    - 특히 Shift+Click, Alt+Arrow 등의 파워 유저 기능은 필수적으로 유지되어야 함.
+// 2. UX 연속성: 텍스트 입력, 포커스 이동, 커서 위치 등 미세한 UX는 
+//    사용자의 '근육 기억'과 연결되므로 함부로 변경하지 않는다. (예: 백스페이스 병합 시 포커스)
+// 3. 데이터 무결성: 날짜 이동, 동기화 과정에서 데이터가 유실되거나 덮어씌워지지 않도록 
+//    이중, 삼중의 안전 장치(Date Guard)를 유지한다.
+// 4. 컴포넌트 분리 주의: 컴포넌트를 분리하거나 최적화(React.memo 등)할 때 
+//    상위 상태 의존성(props)이 누락되지 않도록 철저히 검토한다. 
+//    (예: onTaskClick이 tasks 상태를 참조해야 한다면 의존성 배열에 포함하거나 함수형 업데이트 사용)
+// -----------------------------------------------------------------------------
+
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useSpace } from './contexts/SpaceContext';
@@ -81,22 +95,21 @@ const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, on
 
   // 포커스 관리 (초기 마운트 및 isFocused 변경 시)
   useLayoutEffect(() => {
-    if ((autoFocus || (combinedRef.current && document.activeElement !== combinedRef.current)) && combinedRef.current) {
-        // 부모에서 포커스를 주라고 했을 때 (autoFocus=true)
-        // 이미 포커스가 있다면 건드리지 않음 (중복 실행 방지)
-        // 하지만 다른 요소에 포커스가 있다면 가져옴
-        if (autoFocus) {
-             combinedRef.current.focus({ preventScroll: true });
-             
-             // [Hack] 커서 위치 복구 (Merge 동작 후)
-             const restorePos = (window as any).__restoreCursorPos;
-             if (typeof restorePos === 'number') {
-                 combinedRef.current.setSelectionRange(restorePos, restorePos);
-                 (window as any).__restoreCursorPos = undefined;
-             }
+    if (autoFocus && combinedRef.current) {
+        // [Optimization] 이미 포커스되어 있다면 불필요한 호출 방지
+        // 하지만 커서 위치 복구가 필요할 수 있으므로 강제 포커스 시도
+        combinedRef.current.focus({ preventScroll: true });
+        
+        // [Hack] 커서 위치 복구 (Merge 동작 후)
+        const restorePos = (window as any).__restoreCursorPos;
+        if (typeof restorePos === 'number') {
+            // 약간의 지연 없이 바로 설정하면 일부 브라우저에서 씹힐 수 있으나, 
+            // useLayoutEffect는 DOM 업데이트 직후 동기적으로 실행되므로 안전.
+            combinedRef.current.setSelectionRange(restorePos, restorePos);
+            (window as any).__restoreCursorPos = undefined;
         }
     }
-  }, [autoFocus, value]); // value가 바뀌었을 때도 높이 조절과 함께 포커스 유지 확인? (필요시)
+  }, [autoFocus, value]); // value가 바뀔 때도(타이핑) 포커스 유지/커서 복구 로직이 돌 수 있음
 
 
   return (
@@ -209,6 +222,14 @@ const UnifiedTaskItem = React.memo(({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  // [UX Fix] 탭(들여쓰기) 등 구조 변경 시 포커스 유지
+  // task.depth가 바뀌어도 isFocused가 true라면 포커스를 강제로 다시 준다.
+  useLayoutEffect(() => {
+    if (isFocused && textareaRef.current) {
+       textareaRef.current.focus({ preventScroll: true });
+    }
+  }, [task.depth, isFocused]);
+
   const [suggestions, setSuggestions] = useState<Task[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
@@ -258,26 +279,8 @@ const UnifiedTaskItem = React.memo(({
     }
     
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
-      // 텍스트가 비어있지 않으면 동작하지 않게 변경 요청됨 (끊김 방지)
-      // 하지만 사용자 요구사항은 "텍스트처럼이 안되냐고 지우다가 줄 지워지면 왜 위로 가면서 한번 끊기고"
-      // -> 빈 줄 지울 때 자연스럽게 윗줄 끝으로 포커스 이동 + 텍스트 합치기
-      
-      // 사용자 피드백: "왜 텍스트처럼이 안되냐고 지우다가 줄 지워지면 왜 위로 가면서 한번 끊기고 왜 탭도 끊기고 다 끊기냐니까? 포커스가 다시 가는기 아니라 백스페이스 누르고 있어도 안끊기게 해달라니까?"
-      // 백스페이스를 꾹 누르고 있을 때 줄이 지워지면서 위로 올라갈 때 포커스를 잃거나 끊기는 느낌을 받음.
-      // onMergeWithPrevious가 처리된 후 requestAnimationFrame으로 포커스를 다시 잡는데, 이 과정에서 딜레이나 끊김이 느껴질 수 있음.
-      // 혹은 React의 상태 업데이트 비동기 특성 때문에 연속 입력이 씹힐 수 있음.
-      
-      // 해결 시도:
-      // 1. 합쳐질 윗 task를 찾는다.
-      // 2. 윗 task의 내용과 현재 task의 내용을 미리 합친다.
-      // 3. 현재 task를 삭제한다.
-      // 4. 윗 task의 커서 위치를 정확히 조정한다.
-      
-      // 여기서는 이벤트 기본 동작을 막고, 상위 핸들러를 호출한다.
-      // 상위 핸들러에서 상태 업데이트를 최적화하거나, 동기적으로 처리되도록 해야 함.
-      // 하지만 React state update는 비동기이므로, DOM 조작을 직접 하지 않는 한 완벽한 "텍스트 에디터" 느낌은 어려울 수 있음.
-      // 최선책: 포커스 복구를 확실하게 하고, 불필요한 렌더링을 줄임.
-      
+      // 텍스트가 비어있지 않아도 앞 태스크와 병합
+      // [UX Fix] 끊김 없는 병합을 위해 preventDefault 후 즉시 처리
       e.preventDefault();
       onMergeWithPrevious(task.id, taskName);
       return;
@@ -291,39 +294,11 @@ const UnifiedTaskItem = React.memo(({
     
     if (e.key === 'Tab') { 
       e.preventDefault(); 
-      // Tab 키 누를 때 포커스 유지하면서 들여쓰기/내어쓰기 수행
-      // textarea의 포커스를 잃지 않도록 preventDefault는 이미 되어 있음.
-      // 하지만 상태 업데이트로 인해 리렌더링되면 포커스를 잃을 수 있음.
-      // UnifiedTaskItem은 key가 id이므로 id가 바뀌지 않으면 컴포넌트는 유지됨.
-      // 다만 autoFocus 로직이나 다른 useEffect가 간섭할 수 있음.
-      
-      // 들여쓰기/내어쓰기 동작
       if (e.shiftKey) onOutdent(task.id); else onIndent(task.id); 
-      
-      // 포커스 유지를 위해 현재 커서 위치 저장?
-      // 사실 탭 동작은 텍스트 내용을 바꾸지 않고 depth만 바꾸므로 커서 위치는 그대로여야 함.
-      // 리렌더링 후에도 포커스를 유지하도록 상위 컴포넌트(App)에서 setFocusedTaskId를 확실히 호출해야 함.
-      // -> handleIndent/Outdent 내부에서 처리 필요?
-      // 현재 handleIndent는 setTasks만 하고 있음.
-      
-      // 여기서 강제로 포커스 설정 (안전 장치)
-      setFocusedTaskId(task.id);
+      // 여기서 setFocusedTaskId를 호출하지 않아도, 상위에서 상태 변경 후 리렌더링 시 
+      // UnifiedTaskItem의 useLayoutEffect가 포커스를 복구하도록 함.
+      // 다만 확실하게 하기 위해 호출할 수도 있음 (하지만 상위에서 처리 권장)
       return; 
-    }
-    
-    // 커서 이동 대신 포커스 이동 (리스트 네비게이션)
-    // 주의: 텍스트 에리어 내에서 상하 이동은 커서 이동이 우선이어야 할 수 있음.
-    // 여기서는 alt 키 조합이나 텍스트 처음/끝일 때만 이동하는 로직이 더 자연스러울 수 있으나,
-    // 기존 로직(ArrowUp/Down으로 태스크 이동)을 유지.
-    if (e.key === 'ArrowUp' && !e.altKey) { 
-        // 상위 컴포넌트에서 인덱스 처리가 필요하므로 여기서는 이벤트 버블링을 허용하거나 별도 처리가 필요.
-        // 하지만 UnifiedTaskItem은 index를 알고 있음.
-        // 단, allTasks에 접근 권한이 제한적이므로 부모에게 위임하는 것이 좋으나
-        // 여기서는 간단히 구현하지 않고 패스 (기존 로직이 index 의존적이었음).
-        // *수정*: 부모에서 키보드 센서를 사용하므로 dnd-kit의 네비게이션을 따를 수도 있음.
-        // 여기서는 커스텀 네비게이션을 위해 이벤트를 전파하지 않거나, 별도 핸들러 필요.
-        // -> 기존 코드의 index 기반 로직은 allTasks 의존성을 가지므로 제거하고,
-        // 필요하다면 부모 레벨에서 KeyboardSensor로 처리하는 것이 옳음.
     }
     
     // [FIX] Alt + 화살표로 태스크 순서 변경 (이동)
@@ -380,8 +355,8 @@ const UnifiedTaskItem = React.memo(({
   }, [task.id, onAddTaskAtCursor, updateTask]);
 
   return (
-    <div ref={setNodeRef} style={style} onClick={(e) => onTaskClick(e, task.id, index)} className={`relative group flex items-start gap-2 py-0 px-4 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-[#7c4dff]/10 border-l-2 border-[#7c4dff]' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
-      <div className="flex flex-shrink-0" style={{ width: `${currentDepth * 24}px` }}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0 px-4 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-[#7c4dff]/10 border-l-2 border-[#7c4dff]' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
+      <div className="flex flex-shrink-0" style={{ width: `${currentDepth * 24}px` }} onClick={(e) => onTaskClick(e, task.id, index)}>
         {Array.from({ length: currentDepth }).map((_, i) => (
           <div key={i} className="h-full border-r border-white/10" style={{ width: '24px' }} />
         ))}
@@ -392,7 +367,7 @@ const UnifiedTaskItem = React.memo(({
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>
       </div>
-      <div className="flex-1 relative">
+      <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
         <AutoResizeTextarea 
             inputRef={textareaRef} 
             value={task.name || task.text || ''} 
@@ -513,16 +488,25 @@ const migrateTasks = (tasks: any[]): Task[] => {
 // };
 
 // --- 메인 앱 ---
+// [Critical] onTaskClick 핸들러는 자주 재생성되지 않아야 하지만, 
+// Shift Click 범위 선택 로직은 '현재 tasks 목록'을 정확히 알고 있어야 함.
+// 의존성 배열에 tasks를 넣으면 tasks 변경 시마다 모든 Item이 리렌더링됨 (성능 이슈).
+// 해결책: tasks를 ref로 관리하여 핸들러 재생성 없이 최신 tasks에 접근하거나,
+// useCallback 내부에서 함수형 업데이트를 통해 최신 state에 접근해야 함.
+// 하지만 setSelectedTaskIds의 함수형 업데이트는 'prevSet'만 주므로 'tasks' 리스트를 모름.
+// 따라서 tasksRef를 사용하여 최신 tasks에 접근하는 것이 가장 안전하고 성능 효율적임.
+
 export default function App() {
   const { user, signOut } = useAuth();
-  const { currentSpace, spaces, setCurrentSpace } = useSpace();
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const [viewDate, setViewDate] = useState(new Date());
-  const [logs, setLogs] = useState<DailyLog[]>([]);
-  const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
+  // ... (기존 hooks)
   const [tasks, setTasks] = useState<Task[]>([]);
+  const tasksRef = useRef(tasks); // [Fix] tasks 최신 상태 유지를 위한 ref 추가
+
+  // tasks 변경 시 ref 동기화
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   
+  const [viewDate, setViewDate] = useState(new Date());
+
   // Debug: Monitor tasks for duplicates
   useEffect(() => {
       const ids = tasks.map(t => t.id);
@@ -556,6 +540,12 @@ export default function App() {
   const lastClickedIndex = useRef<number | null>(null);
   const [isSecondVisible, setIsSecondVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const { currentSpace, spaces, setCurrentSpace } = useSpace();
+  const [logs, setLogs] = useState<DailyLog[]>([]);
+
   const logsRef = useRef(logs);
   const viewDateRef = useRef(viewDate); // [Date Mismatch Check] Ref to avoid closure staleness
   // const tasksLoadedForDateRef = useRef<string | null>(null); // [Critical Fix] Track which date the current tasks belong to
@@ -680,8 +670,10 @@ export default function App() {
       next[idx] = { ...current, name: textBefore, text: textBefore };
       next.splice(idx + 1, 0, ...newTasksToAdd);
       
+      // [Optimized] 신규 태스크 포커싱: requestAnimationFrame 제거하고 동기적 상태 업데이트 기대
+      // 하지만 렌더링 후 DOM이 있어야 포커스 가능하므로 useEffect/useLayoutEffect가 처리
       if (newTasksToAdd.length > 0) {
-        requestAnimationFrame(() => setFocusedTaskId(newTasksToAdd[0].id));
+        setFocusedTaskId(newTasksToAdd[0].id);
       }
       saveToSupabase(next);
       return next;
@@ -709,49 +701,9 @@ export default function App() {
         };
         next.splice(idx, 1);
         
-        // [Optimization] 상태 업데이트와 포커스 복구를 더 매끄럽게
-        // setFocusedTaskId를 호출하여 리렌더링을 유발하지만, 
-        // 핵심은 DOM이 업데이트된 직후 커서 위치를 잡는 것.
-        // requestAnimationFrame은 좋지만, React 18의 batching으로 인해 
-        // 렌더링 타이밍이 미묘하게 어긋날 수 있음.
-        // 여기서는 useLayoutEffect나 setTimeout(0) 등을 고려할 수 있으나,
-        // 기존 로직을 유지하되 포커스 설정을 state update 직후가 아닌,
-        // DOM ref를 통해 직접 접근할 수 있다면 더 좋음.
-        // 하지만 UnifiedTaskItem이 개별 컴포넌트라 ref 접근이 까다로움.
-        // -> 포커스 ID를 먼저 설정하고, 렌더링 후 커서 이동하도록 유도.
-        
+        // [Optimized] 끊김 없는 병합을 위한 동기적 처리 시도
+        // 포커스 ID를 먼저 설정하고, 커서 위치를 전역 해킹으로 넘김
         setFocusedTaskId(prevTask.id);
-        
-        // 렌더링 후 커서 위치 복구 (조금 더 긴 딜레이를 주거나, useLayoutEffect를 써야 확실함)
-        // 여기서는 setTimeout으로 시도 (requestAnimationFrame보다 늦게 실행되어 DOM 업데이트 보장)
-        setTimeout(() => {
-            // const el = document.querySelector(`textarea`) as HTMLTextAreaElement | null; // Note: This query is too generic, relies on focus being set? 
-            // Better: We rely on the fact that UnifiedTaskItem with `isFocused` will mount/update.
-            // But actually, we need to find the SPECIFIC textarea.
-            // Since we can't easily select by ID here without adding IDs to DOM elements...
-            // Let's rely on the fact that `setFocusedTaskId` will trigger `autoFocus` in `UnifiedTaskItem`.
-            // BUT `UnifiedTaskItem` uses `autoFocus` only on mount? No, `useEffect` on `isFocused`?
-            // Let's check `UnifiedTaskItem`.
-            
-            // UnifiedTaskItem logic:
-            // useEffect(() => { if (isFocused && textareaRef.current) { textareaRef.current.focus(); textareaRef.current.setSelectionRange(...) } }, [isFocused]);
-            // This logic is missing in UnifiedTaskItem! It only has onFocus handler.
-            
-            // We need to move cursor restoration logic to UnifiedTaskItem or improve it here.
-            // Since we don't have ref here, we use a global event or custom way.
-            // OR we just assume `document.activeElement` works if `autoFocus` worked?
-            
-            // Actually, `UnifiedTaskItem` has `autoFocus={isFocused}`. 
-            // This works for mounting, but for updates?
-            // React `autoFocus` works on mount.
-            // We need a `useEffect` in `UnifiedTaskItem` to focus when `isFocused` becomes true.
-        }, 0);
-        
-        // 커서 위치 정보를 전역/컨텍스트 등으로 넘겨주면 좋겠지만,
-        // 여기서는 임시 방편으로 sessionStorage나 global var 사용 가능? 
-        // 아니면 `tasks` state에 `cursorPos` 필드를 추가? (너무 무거움)
-        
-        // 대안: window 객체에 임시 저장 (Hack but fast)
         (window as any).__restoreCursorPos = newPos;
 
         saveToSupabase(next);
@@ -792,8 +744,8 @@ export default function App() {
         saveToSupabase(next);
         return next;
     });
-    // [UX Fix] 탭 키 사용 시 포커스 유지
-    requestAnimationFrame(() => setFocusedTaskId(taskId));
+    // [UX Fix] 상태 업데이트와 함께 포커스 갱신 (리렌더링 유발하여 useLayoutEffect 트리거)
+    setFocusedTaskId(taskId);
   }, [saveToSupabase]);
 
   const handleOutdent = useCallback((taskId: number) => {
@@ -802,8 +754,8 @@ export default function App() {
         saveToSupabase(next);
         return next;
     });
-    // [UX Fix] 탭 키 사용 시 포커스 유지
-    requestAnimationFrame(() => setFocusedTaskId(taskId));
+    // [UX Fix] 상태 업데이트와 함께 포커스 갱신
+    setFocusedTaskId(taskId);
   }, [saveToSupabase]);
 
   const handleUndo = useCallback(() => {
@@ -1182,25 +1134,46 @@ export default function App() {
     }
   };
 
-  const onTaskClick = useCallback((e: React.MouseEvent, taskId: number, index: number) => {
-    if (e.shiftKey && lastClickedIndex.current !== null) {
-      // Shift Click 로직 (단순화: 현재 보이는 리스트 기준)
-      // 정확한 구현을 위해 tasks 상태 참조 필요하나, 여기서는 selectedTaskIds 갱신만 수행
-      // 전체 tasks 접근을 위해 함수형 업데이트 사용 불가 (tasks 필요)
-      // -> useCallback 의존성에 tasks 추가 불가피, but 클릭은 빈번하지 않으므로 OK
-      // 다만 최적화를 위해 여기서는 로직을 단순화하거나 생략
-    } else if (e.ctrlKey || e.metaKey) {
-      setSelectedTaskIds(prev => {
-          const newSet = new Set(prev);
-          if (newSet.has(taskId)) newSet.delete(taskId); else newSet.add(taskId);
-          return newSet;
-      });
-      lastClickedIndex.current = index;
-    } else { 
-        setSelectedTaskIds(new Set([taskId])); 
-        lastClickedIndex.current = index; 
-    }
-  }, []);
+  // Re-implementing with 'tasks' dependency for correct range selection
+  const onTaskClickWithRange = useCallback((e: React.MouseEvent, taskId: number, index: number) => {
+      // tasksRef.current를 통해 최신 tasks에 접근
+      const currentTasks = tasksRef.current;
+      
+      if (e.shiftKey && selectedTaskIds.size > 0) {
+          const allIds = currentTasks.map(t => t.id);
+          const endIdx = allIds.indexOf(taskId);
+          // Find the closest selected task index
+          // This is a simple approximation
+          // let startIdx = -1;
+          
+          // Try to find the last clicked index from current selected items
+          // Assuming the user wants to extend selection from *some* selected item.
+          // Let's find the min and max index of currently selected items
+          const selectedIndices = allIds.map((id, idx) => selectedTaskIds.has(id) ? idx : -1).filter(i => i !== -1);
+          
+          if (selectedIndices.length > 0) {
+              // Determine direction? 
+              // Just take the min and max of (all selected + current)
+              const min = Math.min(...selectedIndices, endIdx);
+              const max = Math.max(...selectedIndices, endIdx);
+              
+              const rangeIds = allIds.slice(min, max + 1);
+              setSelectedTaskIds(new Set(rangeIds));
+          } else {
+              setSelectedTaskIds(new Set([taskId]));
+          }
+      } else if (e.ctrlKey || e.metaKey) {
+          setSelectedTaskIds(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(taskId)) newSet.delete(taskId); else newSet.add(taskId);
+              return newSet;
+          });
+          lastClickedIndex.current = index;
+      } else {
+          setSelectedTaskIds(new Set([taskId]));
+          lastClickedIndex.current = index;
+      }
+  }, [selectedTaskIds]); // tasks 의존성 제거 (tasksRef 사용)
 
   const handleSpaceChange = useCallback((space: any) => { setCurrentSpace(space); }, [setCurrentSpace]);
 
@@ -1321,7 +1294,7 @@ export default function App() {
                                 setFocusedTaskId={setFocusedTaskId} 
                                 focusedTaskId={focusedTaskId} 
                                 selectedTaskIds={selectedTaskIds} 
-                                onTaskClick={onTaskClick} 
+                                onTaskClick={onTaskClickWithRange} 
                                 logs={logs} 
                                 onAddTaskAtCursor={handleAddTaskAtCursor} 
                                 onMergeWithPrevious={handleMergeWithPrevious} 
@@ -1351,7 +1324,7 @@ export default function App() {
                               setFocusedTaskId={setFocusedTaskId} 
                               focusedTaskId={focusedTaskId} 
                               selectedTaskIds={selectedTaskIds} 
-                              onTaskClick={onTaskClick} 
+                              onTaskClick={onTaskClickWithRange} 
                               logs={logs} 
                               onAddTaskAtCursor={handleAddTaskAtCursor} 
                               onMergeWithPrevious={handleMergeWithPrevious} 

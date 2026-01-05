@@ -428,7 +428,7 @@ const UnifiedTaskItem = React.memo(({
   }, [task.id, updateTask]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'ring-2 ring-[#7c4dff] ring-inset bg-transparent' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'ring-2 ring-purple-500 bg-transparent' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
        {/* Selection Border Indicator (Absolute to avoid layout shift) - Removed left bar as we have ring now, or keep it? User said "Outline ONLY". Let's hide the left bar if selected to avoid visual clutter, or keep it. I'll remove the left bar logic if selected, or just let it be. Let's keep it simple. */ }
        <div className={`absolute left-0 top-0 bottom-0 w-[2px] transition-colors ${isSelected ? 'bg-[#7c4dff]' : 'bg-transparent'}`} />
        
@@ -1067,58 +1067,210 @@ export default function App() {
 
   const handleSpaceChange = useCallback((space: any) => { setCurrentSpace(space); }, [setCurrentSpace]);
 
+  // --- Flow View Handlers ---
+
+  const updateLogTasks = useCallback((dateStr: string, updater: (tasks: Task[]) => Task[]) => {
+      setLogs(prevLogs => {
+          const logIndex = prevLogs.findIndex(l => l.date === dateStr);
+          if (logIndex === -1) return prevLogs;
+
+          const oldTasks = prevLogs[logIndex].tasks;
+          const newTasks = updater(oldTasks);
+          
+          if (oldTasks === newTasks) return prevLogs;
+
+          const newLogs = [...prevLogs];
+          newLogs[logIndex] = { ...newLogs[logIndex], tasks: newTasks };
+
+          if (currentSpace) {
+              localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+          }
+
+          saveToSupabase(newTasks, dateStr);
+
+          // Sync current view if needed
+          if (dateStr === viewDateRef.current.toDateString()) {
+              setTasks(newTasks);
+          }
+
+          return newLogs;
+      });
+  }, [currentSpace, saveToSupabase]);
+
+  const handleLogAddTaskAtCursor = useCallback((dateStr: string, taskId: number, textBefore: string, textAfter: string) => {
+      updateLogTasks(dateStr, (prev) => {
+          const idx = prev.findIndex(t => t.id === taskId);
+          if (idx === -1) return prev;
+          const current = prev[idx];
+          const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
+              id: Date.now() + i, name: line.trim(), status: 'pending', indent: current.indent, parent: current.parent, text: line.trim(),
+              percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: current.depth || 0, space_id: String(currentSpace?.id || ''),
+          }));
+          const next = [...prev];
+          next[idx] = { ...current, name: textBefore, text: textBefore };
+          next.splice(idx + 1, 0, ...newTasksToAdd);
+          if (newTasksToAdd.length > 0) setFocusedTaskId(newTasksToAdd[0].id);
+          return next;
+      });
+  }, [updateLogTasks, currentSpace]);
+
+  const handleLogMergeWithPrevious = useCallback((dateStr: string, taskId: number, currentText: string) => {
+      updateLogTasks(dateStr, (prev) => {
+          const idx = prev.findIndex(t => t.id === taskId);
+          if (idx <= 0) return prev;
+          const prevTask = prev[idx - 1];
+          const next = [...prev];
+          const newPos = (prevTask.name || '').length;
+          next[idx - 1] = { ...prevTask, name: (prevTask.name || '') + (currentText || ''), text: (prevTask.text || '') + (currentText || '') };
+          next.splice(idx, 1);
+          setFocusedTaskId(prevTask.id);
+          (window as any).__restoreCursorPos = newPos;
+          return next;
+      });
+  }, [updateLogTasks]);
+
+  const handleLogMergeWithNext = useCallback((dateStr: string, taskId: number) => {
+      updateLogTasks(dateStr, (prev) => {
+          const idx = prev.findIndex(t => t.id === taskId);
+          if (idx === -1 || idx >= prev.length - 1) return prev;
+          const current = prev[idx];
+          const nextTask = prev[idx + 1];
+          const next = [...prev];
+          next[idx] = { ...current, name: (current.name || '') + (nextTask.name || ''), text: (current.text || '') + (nextTask.text || '') };
+          next.splice(idx + 1, 1);
+          return next;
+      });
+  }, [updateLogTasks]);
+
+  const handleLogIndent = useCallback((dateStr: string, taskId: number) => {
+      updateLogTasks(dateStr, (prev) => prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t));
+      setFocusedTaskId(taskId);
+  }, [updateLogTasks]);
+
+  const handleLogOutdent = useCallback((dateStr: string, taskId: number) => {
+      updateLogTasks(dateStr, (prev) => prev.map(t => t.id === taskId ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t));
+      setFocusedTaskId(taskId);
+  }, [updateLogTasks]);
+
+  const handleLogMoveUp = useCallback((dateStr: string, taskId: number) => {
+      updateLogTasks(dateStr, (prev) => {
+          const index = prev.findIndex(t => t.id === taskId);
+          if (index <= 0) return prev;
+          const newTasks = [...prev];
+          [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
+          return newTasks;
+      });
+  }, [updateLogTasks]);
+
+  const handleLogMoveDown = useCallback((dateStr: string, taskId: number) => {
+      updateLogTasks(dateStr, (prev) => {
+          const index = prev.findIndex(t => t.id === taskId);
+          if (index < 0 || index >= prev.length - 1) return prev;
+          const newTasks = [...prev];
+          [newTasks[index + 1], newTasks[index]] = [newTasks[index], newTasks[index + 1]];
+          return newTasks;
+      });
+  }, [updateLogTasks]);
+
+  const handleLogFocusPrev = useCallback((dateStr: string, index: number) => {
+      const log = logsRef.current.find(l => l.date === dateStr);
+      if (log && index > 0) setFocusedTaskId(log.tasks[index - 1].id);
+  }, []);
+
+  const handleLogFocusNext = useCallback((dateStr: string, index: number) => {
+      const log = logsRef.current.find(l => l.date === dateStr);
+      if (log && index < log.tasks.length - 1) setFocusedTaskId(log.tasks[index + 1].id);
+  }, []);
+
+  const handleDeleteSelected = useCallback((withConfirm = false) => {
+      if (selectedTaskIds.size === 0) return;
+      if (withConfirm && !window.confirm(`Delete ${selectedTaskIds.size} tasks?`)) return;
+
+      if (viewMode === 'day') {
+          setTasks(prev => {
+              const next = prev.filter(t => !selectedTaskIds.has(t.id));
+              saveToSupabase(next);
+              return next;
+          });
+      } else {
+          setLogs(prevLogs => {
+              let hasChanges = false;
+              const newLogs = prevLogs.map(log => {
+                  const hasSelected = log.tasks.some(t => selectedTaskIds.has(t.id));
+                  if (hasSelected) {
+                      hasChanges = true;
+                      return { ...log, tasks: log.tasks.filter(t => !selectedTaskIds.has(t.id)) };
+                  }
+                  return log;
+              });
+
+              if (hasChanges) {
+                  if (currentSpace) {
+                      localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                  }
+                  newLogs.forEach((l, i) => {
+                      if (l !== prevLogs[i]) saveToSupabase(l.tasks, l.date);
+                  });
+                  const currentLog = newLogs.find(l => l.date === viewDateRef.current.toDateString());
+                  if (currentLog) setTasks(currentLog.tasks);
+              }
+              return newLogs;
+          });
+      }
+      setFocusedTaskId(null);
+      setSelectedTaskIds(new Set());
+  }, [selectedTaskIds, viewMode, currentSpace, saveToSupabase]);
+
+  const handleFlowTaskClick = useCallback((e: React.MouseEvent, taskId: number) => {
+      if (e.shiftKey && selectedTaskIds.size > 0) {
+          const sortedLogs = logsRef.current.slice().sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          const allTasks = sortedLogs.flatMap(l => l.tasks);
+          const allIds = allTasks.map(t => t.id);
+          const endIdx = allIds.indexOf(taskId);
+          
+          const selectedIndices = allIds.map((id, idx) => selectedTaskIds.has(id) ? idx : -1).filter(i => i !== -1);
+          
+          if (selectedIndices.length > 0) {
+              const min = Math.min(...selectedIndices, endIdx);
+              const max = Math.max(...selectedIndices, endIdx);
+              const rangeIds = allIds.slice(min, max + 1);
+              setSelectedTaskIds(new Set(rangeIds));
+          } else {
+              setSelectedTaskIds(new Set([taskId]));
+          }
+      } else if (e.ctrlKey || e.metaKey) {
+          setSelectedTaskIds(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(taskId)) newSet.delete(taskId); else newSet.add(taskId);
+              return newSet;
+          });
+      } else {
+          if (selectedTaskIds.size > 1) {
+              setSelectedTaskIds(new Set([taskId]));
+          } else if (selectedTaskIds.size === 1 && selectedTaskIds.has(taskId)) {
+             // do nothing
+          } else {
+              setSelectedTaskIds(new Set([taskId]));
+          }
+      }
+  }, [selectedTaskIds]);
+
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
       
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTaskIds.size > 0) {
-        // Allow text deleting if only 1 item is selected and we are editing it
-        if (selectedTaskIds.size === 1 && isInput) return;
-
+      if ((e.key === 'Delete') && selectedTaskIds.size > 0) {
+        if (selectedTaskIds.size === 1 && isInput && !e.shiftKey) return;
         e.preventDefault();
-        
-        if (viewMode === 'day') {
-            setTasks(prev => {
-                const next = prev.filter(t => !selectedTaskIds.has(t.id));
-                saveToSupabase(next);
-                return next;
-            });
-        } else {
-            setLogs(prevLogs => {
-                let hasChanges = false;
-                const newLogs = prevLogs.map(log => {
-                    const hasSelected = log.tasks.some(t => selectedTaskIds.has(t.id));
-                    if (hasSelected) {
-                        hasChanges = true;
-                        return { ...log, tasks: log.tasks.filter(t => !selectedTaskIds.has(t.id)) };
-                    }
-                    return log;
-                });
-
-                if (hasChanges) {
-                    if (currentSpace) {
-                        localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-                    }
-                    
-                    // Sync changed logs to Supabase
-                    newLogs.forEach((l, i) => {
-                        if (l !== prevLogs[i]) {
-                            saveToSupabase(l.tasks, l.date);
-                        }
-                    });
-
-                    // Update current view tasks if needed
-                    const currentLog = newLogs.find(l => l.date === viewDate.toDateString());
-                    if (currentLog) setTasks(currentLog.tasks);
-                }
-                
-                return newLogs;
-            });
-        }
-        setFocusedTaskId(null);
-        setSelectedTaskIds(new Set());
+        handleDeleteSelected(true);
         return;
+      }
+
+      if ((e.key === 'Backspace') && selectedTaskIds.size > 0 && !isInput) {
+          e.preventDefault();
+          handleDeleteSelected(true);
+          return;
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
@@ -1239,6 +1391,12 @@ export default function App() {
                 <div key={i} className="relative">
                   <button onClick={() => {
                    setViewDate(d);
+                   if (viewMode === 'flow') {
+                       setTimeout(() => {
+                           const el = document.getElementById(`date-section-${d.toDateString()}`);
+                           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                       }, 100);
+                   }
                   }} className={btnClass}>
                     <span className="font-black text-[14px]">{d.getDate()}</span>
                     {hasCompleted && streakCount > 1 && (
@@ -1308,10 +1466,11 @@ export default function App() {
                 <div className="flow-view space-y-12 pb-32">
                   {logs.slice().sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((log) => (
                       <div key={log.date} id={`date-section-${log.date}`} className="day-section">
-                          <div className="sticky top-0 bg-[#050505]/95 backdrop-blur z-20 py-2 border-b border-white/5 mb-2 flex items-center justify-between px-6">
-                              <h3 className={`text-sm font-black tracking-tight ${log.date === viewDate.toDateString() ? 'text-[#7c4dff]' : 'text-gray-600'}`}>{log.date}</h3>
+                          <div className="sticky top-0 bg-[#050505]/95 backdrop-blur z-20 py-2 border-b border-white/5 mb-2 flex items-center justify-between px-6 transition-colors duration-500">
+                              <h3 className={`text-sm font-black tracking-tight ${log.date === viewDate.toDateString() ? 'text-[#7c4dff] scale-105' : 'text-gray-600'}`}>{log.date}</h3>
+                              {log.date === new Date().toDateString() && <span className="text-[9px] font-bold text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded">TODAY</span>}
                           </div>
-                          <div className="pl-0">
+                          <div className="pl-0 pb-8">
                               {log.tasks.length === 0 && <div className="text-gray-800 text-[10px] uppercase font-bold tracking-widest px-6 py-4">No tasks</div>}
                               {log.tasks.map((t, i) => (
                                   <UnifiedTaskItem
@@ -1322,17 +1481,17 @@ export default function App() {
                                       setFocusedTaskId={setFocusedTaskId}
                                       focusedTaskId={focusedTaskId}
                                       selectedTaskIds={selectedTaskIds}
-                                      onTaskClick={onTaskClickWithRange}
+                                      onTaskClick={handleFlowTaskClick}
                                       logs={logs}
-                                      onAddTaskAtCursor={() => {}}
-                                      onMergeWithPrevious={() => {}}
-                                      onMergeWithNext={() => {}}
-                                      onIndent={() => {}}
-                                      onOutdent={() => {}}
-                                      onMoveUp={() => {}}
-                                      onMoveDown={() => {}}
-                                      onFocusPrev={() => {}}
-                                      onFocusNext={() => {}}
+                                      onAddTaskAtCursor={(id, b, a) => handleLogAddTaskAtCursor(log.date, id, b, a)}
+                                      onMergeWithPrevious={(id, t) => handleLogMergeWithPrevious(log.date, id, t)}
+                                      onMergeWithNext={(id) => handleLogMergeWithNext(log.date, id)}
+                                      onIndent={(id) => handleLogIndent(log.date, id)}
+                                      onOutdent={(id) => handleLogOutdent(log.date, id)}
+                                      onMoveUp={(id) => handleLogMoveUp(log.date, id)}
+                                      onMoveDown={(id) => handleLogMoveDown(log.date, id)}
+                                      onFocusPrev={(idx) => handleLogFocusPrev(log.date, idx)}
+                                      onFocusNext={(idx) => handleLogFocusNext(log.date, idx)}
                                   />
                               ))}
                           </div>

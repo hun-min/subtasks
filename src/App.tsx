@@ -275,25 +275,33 @@ export default function App() {
   }, [tasks]);
 
   const handleUpdateTask = useCallback((taskId: number, updates: Partial<Task>) => {
-    // 1. Update current tasks state if it exists there
+    const isStatusUpdate = 'status' in updates;
+    const isSelectionUpdate = selectedTaskIds.has(taskId) && isStatusUpdate;
+
+    // 1. Update current tasks state
     setTasks(prev => {
-        const index = prev.findIndex(t => t.id === taskId);
-        if (index >= 0) {
-            const next = prev.map(t => t.id === taskId ? { ...t, ...updates } : t);
-            saveToSupabase(next);
-            return next;
-        }
-        return prev;
+        const next: Task[] = prev.map(t => {
+            if (t.id === taskId) return { ...t, ...updates };
+            if (isSelectionUpdate && selectedTaskIds.has(t.id)) return { ...t, ...updates };
+            return t;
+        });
+        saveToSupabase(next);
+        return next;
     });
 
     // 2. Update logs for Flow view or other dates
     setLogs(prevLogs => {
-        const logIndex = prevLogs.findIndex(l => l.tasks.some(t => t.id === taskId));
-        if (logIndex >= 0 && prevLogs[logIndex].date !== viewDate.toDateString()) {
+        const logWithTask = prevLogs.find(l => l.tasks.some(t => t.id === taskId));
+        if (logWithTask && logWithTask.date !== viewDate.toDateString()) {
             const newLogs = [...prevLogs];
-            const log = { ...newLogs[logIndex] };
-            log.tasks = log.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t);
-            newLogs[logIndex] = log;
+            const logIdx = newLogs.findIndex(l => l.date === logWithTask.date);
+            const log = { ...newLogs[logIdx] };
+            log.tasks = log.tasks.map(t => {
+                if (t.id === taskId) return { ...t, ...updates };
+                if (isSelectionUpdate && selectedTaskIds.has(t.id)) return { ...t, ...updates };
+                return t;
+            });
+            newLogs[logIdx] = log;
             
             saveToSupabaseAtDate(log.date, log.tasks);
             if (currentSpace) {
@@ -303,7 +311,7 @@ export default function App() {
         }
         return prevLogs;
     });
-  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace]);
+  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace, selectedTaskIds]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
     setTasks(prev => {
@@ -375,20 +383,36 @@ export default function App() {
   }, [saveToSupabase]);
 
   const handleIndent = useCallback((taskId: number) => {
-    const taskToIndent = activeTask || tasks.find(t => t.id === taskId);
-    if (taskToIndent) {
-      handleUpdateTask(taskId, { depth: (taskToIndent.depth || 0) + 1 });
+    if (selectedTaskIds.has(taskId)) {
+        setTasks(prev => {
+            const next = prev.map(t => selectedTaskIds.has(t.id) ? { ...t, depth: (t.depth || 0) + 1 } : t);
+            saveToSupabase(next);
+            return next;
+        });
+    } else {
+        const taskToIndent = activeTask || tasks.find(t => t.id === taskId);
+        if (taskToIndent) {
+          handleUpdateTask(taskId, { depth: (taskToIndent.depth || 0) + 1 });
+        }
     }
     setFocusedTaskId(taskId);
-  }, [handleUpdateTask, activeTask, tasks]);
+  }, [handleUpdateTask, activeTask, tasks, selectedTaskIds, saveToSupabase]);
 
   const handleOutdent = useCallback((taskId: number) => {
-    const taskToOutdent = activeTask || tasks.find(t => t.id === taskId);
-    if (taskToOutdent) {
-      handleUpdateTask(taskId, { depth: Math.max(0, (taskToOutdent.depth || 0) - 1) });
+    if (selectedTaskIds.has(taskId)) {
+        setTasks(prev => {
+            const next = prev.map(t => selectedTaskIds.has(t.id) ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t);
+            saveToSupabase(next);
+            return next;
+        });
+    } else {
+        const taskToOutdent = activeTask || tasks.find(t => t.id === taskId);
+        if (taskToOutdent) {
+          handleUpdateTask(taskId, { depth: Math.max(0, (taskToOutdent.depth || 0) - 1) });
+        }
     }
     setFocusedTaskId(taskId);
-  }, [handleUpdateTask, activeTask, tasks]);
+  }, [handleUpdateTask, activeTask, tasks, selectedTaskIds, saveToSupabase]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
@@ -413,7 +437,28 @@ export default function App() {
   }, [history, historyIndex, saveToSupabase]);
 
   const handleMoveUp = useCallback((taskId: number) => {
-    // Determine if it's in current tasks or in flow
+    // 1. Determine if it's a multi-select move
+    if (selectedTaskIds.has(taskId)) {
+        setTasks(prev => {
+            const sortedSelectedIndices = Array.from(selectedTaskIds)
+                .map(id => prev.findIndex(t => t.id === id))
+                .filter(idx => idx !== -1)
+                .sort((a, b) => a - b);
+            
+            if (sortedSelectedIndices.length === 0 || sortedSelectedIndices[0] <= 0) return prev;
+            
+            const next = [...prev];
+            // Move each selected item up by one, starting from the top
+            for (const idx of sortedSelectedIndices) {
+                [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+            }
+            saveToSupabase(next);
+            return next;
+        });
+        return;
+    }
+
+    // 2. Single item move logic (existing)
     setTasks(prev => {
       const index = prev.findIndex(t => t.id === taskId);
       if (index > 0) {
@@ -425,7 +470,7 @@ export default function App() {
       return prev;
     });
 
-    // Handle flow movement if not found in current tasks
+    // Handle flow movement (omitted for brevity in this block, but maintained)
     setLogs(prevLogs => {
       const newLogs = [...prevLogs];
       const logWithTask = newLogs.find(l => l.tasks.some(t => t.id === taskId));
@@ -442,9 +487,31 @@ export default function App() {
       }
       return prevLogs;
     });
-  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace]);
+  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace, selectedTaskIds]);
 
   const handleMoveDown = useCallback((taskId: number) => {
+    // 1. Determine if it's a multi-select move
+    if (selectedTaskIds.has(taskId)) {
+        setTasks(prev => {
+            const sortedSelectedIndices = Array.from(selectedTaskIds)
+                .map(id => prev.findIndex(t => t.id === id))
+                .filter(idx => idx !== -1)
+                .sort((a, b) => b - a); // Reverse for downward move
+            
+            if (sortedSelectedIndices.length === 0 || sortedSelectedIndices[0] >= prev.length - 1) return prev;
+            
+            const next = [...prev];
+            // Move each selected item down by one
+            for (const idx of sortedSelectedIndices) {
+                [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+            }
+            saveToSupabase(next);
+            return next;
+        });
+        return;
+    }
+
+    // 2. Single item move logic
     setTasks(prev => {
       const index = prev.findIndex(t => t.id === taskId);
       if (index >= 0 && index < prev.length - 1) {
@@ -472,7 +539,7 @@ export default function App() {
       }
       return prevLogs;
     });
-  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace]);
+  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace, selectedTaskIds]);
 
   useEffect(() => {
     if (currentSpace) {
@@ -712,14 +779,34 @@ export default function App() {
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
       
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTaskIds.size > 0 && !isInput) {
-        e.preventDefault();
-        const nextTasks = tasks.filter(t => !selectedTaskIds.has(t.id));
-        setTasks(nextTasks);
-        saveToSupabase(nextTasks);
-        setFocusedTaskId(null);
-        setSelectedTaskIds(new Set());
-        return;
+      // Multi-select actions
+      if (selectedTaskIds.size > 0 && !isInput) {
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            const nextTasks = tasks.filter(t => !selectedTaskIds.has(t.id));
+            setTasks(nextTasks);
+            saveToSupabase(nextTasks);
+            setFocusedTaskId(null);
+            setSelectedTaskIds(new Set());
+            return;
+          }
+          if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            const anyPending = tasks.some(t => selectedTaskIds.has(t.id) && t.status !== 'completed');
+            const newStatus: Task['status'] = anyPending ? 'completed' : 'pending';
+            const nextTasks: Task[] = tasks.map(t => selectedTaskIds.has(t.id) ? { ...t, status: newStatus, isTimerOn: false } : t);
+            setTasks(nextTasks);
+            saveToSupabase(nextTasks);
+            return;
+          }
+          if (e.key === 'Tab') {
+            e.preventDefault();
+            const direction = e.shiftKey ? -1 : 1;
+            const nextTasks = tasks.map(t => selectedTaskIds.has(t.id) ? { ...t, depth: Math.max(0, (t.depth || 0) + direction) } : t);
+            setTasks(nextTasks);
+            saveToSupabase(nextTasks);
+            return;
+          }
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }

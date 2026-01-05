@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useSpace } from './contexts/SpaceContext';
 import { AuthModal } from './components/AuthModal';

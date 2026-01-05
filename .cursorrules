@@ -1,0 +1,9 @@
+# AI Agent Project Rules
+
+BEFORE PERFORMING ANY ACTIONS IN THIS PROJECT:
+1. ALWAYS read the `AI_INSTRUCTIONS.md` file in the root directory first.
+2. Follow the deployment and UI rules specified in `AI_INSTRUCTIONS.md` with 100% accuracy.
+3. NEVER assume deployment methods (e.g., No Vercel/Firebase) without checking `AI_INSTRUCTIONS.md`.
+4. NEVER change the UI layouts (Streak positions, align-items) without following the strict rules in `AI_INSTRUCTIONS.md`.
+
+This is a strict requirement from the user. Failure to follow these rules will cause critical frustration for the user.

@@ -231,21 +231,17 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.id, updateTask]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-[#7c4dff]/10' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
-       {/* Selection Border Indicator (Absolute to avoid layout shift) */}
-       <div className={`absolute left-0 top-0 bottom-0 w-[2px] transition-colors ${isSelected ? 'bg-[#7c4dff]' : 'bg-transparent'}`} />
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'outline outline-2 outline-purple-500 rounded-lg' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
        
-       <div className="absolute left-0 top-[5px] flex items-center justify-center w-5 h-6 cursor-grab active:cursor-grabbing text-gray-700 hover:text-gray-400 transition-opacity z-20" {...attributes} {...listeners}>
+       <div className="absolute left-1 top-[5px] flex items-center justify-center w-5 h-6 cursor-grab active:cursor-grabbing text-gray-500 group-hover:opacity-100 transition-opacity z-20" {...attributes} {...listeners}>
          <GripVertical size={14} />
        </div>
 
-      {currentDepth > 0 && (
-        <div className="flex flex-shrink-0" style={{ width: `${currentDepth * 24}px` }} onClick={(e) => onTaskClick(e, task.id, index)}>
-            {Array.from({ length: currentDepth }).map((_, i) => (
-            <div key={i} className="h-full border-r border-white/10" style={{ width: '24px' }} />
-            ))}
-        </div>
-      )}
+      <div className="flex flex-shrink-0" onClick={(e) => onTaskClick(e, task.id, index)}>
+        {Array.from({ length: currentDepth }).map((_, i) => (
+          <div key={i} className="h-full border-r border-white/10" style={{ width: '24px' }} />
+        ))}
+      </div>
       <div className="flex flex-col items-center justify-start mt-[7px]">
         <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}

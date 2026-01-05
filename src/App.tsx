@@ -188,6 +188,23 @@ export default function App() {
     }
   }, [user, currentSpace, viewDate]);
 
+  const saveToSupabaseAtDate = useCallback(async (dateStr: string, tasksToSave: Task[]) => {
+    if (!user || !currentSpace) return;
+    const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
+    
+    try {
+      await supabase.from('task_logs').upsert({ 
+          user_id: user.id, 
+          space_id: currentSpace.id, 
+          date: dateStr, 
+          tasks: JSON.stringify(tasksToSave), 
+          memo: currentMemo
+      }, { onConflict: 'user_id,space_id,date' });
+    } catch (error) {
+      console.error("Failed to save to Supabase at date:", error);
+    }
+  }, [user, currentSpace]);
+
   useEffect(() => {
     if (!localLogsLoaded || !currentSpace) return;
     
@@ -646,7 +663,6 @@ export default function App() {
 
   const showBulkActions = selectedTaskIds.size > 1;
 
-  // Flow Mode Update Handlers (Corrected to handle full state updates)
   const handleUpdateTaskInFlow = useCallback((date: string, taskId: number, updates: Partial<Task>) => {
       setLogs(prevLogs => {
           const newLogs = [...prevLogs];
@@ -658,11 +674,15 @@ export default function App() {
              if (date === viewDateRef.current.toDateString()) {
                  setTasks(log.tasks); 
              }
-             if(currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+             if(currentSpace) {
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 // Also save to Supabase if it's the current date or historical
+                 saveToSupabaseAtDate(date, log.tasks);
+             }
           }
           return newLogs;
       });
-  }, [currentSpace]);
+  }, [currentSpace, saveToSupabaseAtDate]);
 
   const handleAddTaskInFlow = useCallback((date: string, taskId: number, textBefore: string, textAfter: string) => {
      setLogs(prevLogs => {
@@ -688,11 +708,94 @@ export default function App() {
              if (newTasksToAdd.length > 0) {
                 setFocusedTaskId(newTasksToAdd[0].id);
              }
-             if(currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+             if(currentSpace) {
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 saveToSupabaseAtDate(date, nextTasks);
+             }
           }
           return newLogs;
       });
-  }, [currentSpace]);
+  }, [currentSpace, saveToSupabaseAtDate]);
+
+  const handleMergeInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
+      setLogs(prevLogs => {
+          const newLogs = [...prevLogs];
+          const logIndex = newLogs.findIndex(l => l.date === date);
+          if (logIndex >= 0) {
+              const log = { ...newLogs[logIndex] };
+              const idx = log.tasks.findIndex(t => t.id === taskId);
+              if (idx === -1) return prevLogs;
+
+              const nextTasks = [...log.tasks];
+              if (direction === 'prev') {
+                  if (idx > 0) {
+                      const prevTask = nextTasks[idx - 1];
+                      const newPos = (prevTask.name || '').length;
+                      nextTasks[idx - 1] = { 
+                          ...prevTask, 
+                          name: (prevTask.name || '') + (currentText || ''),
+                          text: (prevTask.text || '') + (currentText || '')
+                      };
+                      nextTasks.splice(idx, 1);
+                      setFocusedTaskId(prevTask.id);
+                      (window as any).__restoreCursorPos = newPos;
+                  } else {
+                      nextTasks.splice(idx, 1);
+                      setFocusedTaskId(null);
+                  }
+              } else {
+                  if (idx < nextTasks.length - 1) {
+                      const current = nextTasks[idx];
+                      const nextTask = nextTasks[idx + 1];
+                      nextTasks[idx] = { 
+                          ...current, 
+                          name: (current.name || '') + (nextTask.name || ''),
+                          text: (current.text || '') + (nextTask.name || '')
+                      };
+                      nextTasks.splice(idx + 1, 1);
+                  }
+              }
+              
+              log.tasks = nextTasks;
+              newLogs[logIndex] = log;
+              if (date === viewDateRef.current.toDateString()) {
+                  setTasks(nextTasks);
+              }
+              if (currentSpace) {
+                  localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                  saveToSupabaseAtDate(date, nextTasks);
+              }
+          }
+          return newLogs;
+      });
+  }, [currentSpace, saveToSupabaseAtDate]);
+
+  const handleIndentInFlow = useCallback((date: string, taskId: number, direction: 'in' | 'out') => {
+      setLogs(prevLogs => {
+          const newLogs = [...prevLogs];
+          const logIndex = newLogs.findIndex(l => l.date === date);
+          if (logIndex >= 0) {
+              const log = { ...newLogs[logIndex] };
+              log.tasks = log.tasks.map(t => {
+                  if (t.id === taskId) {
+                      const newDepth = direction === 'in' ? (t.depth || 0) + 1 : Math.max(0, (t.depth || 0) - 1);
+                      return { ...t, depth: newDepth };
+                  }
+                  return t;
+              });
+              newLogs[logIndex] = log;
+              if (date === viewDateRef.current.toDateString()) {
+                  setTasks(log.tasks);
+              }
+              if (currentSpace) {
+                  localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                  saveToSupabaseAtDate(date, log.tasks);
+              }
+          }
+          return newLogs;
+      });
+      setFocusedTaskId(taskId);
+  }, [currentSpace, saveToSupabaseAtDate]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#e0e0e0] font-sans overflow-x-hidden">
@@ -831,6 +934,8 @@ export default function App() {
                 currentSpaceId={String(currentSpace?.id || '')} 
                 onUpdateTask={handleUpdateTaskInFlow} 
                 onAddTask={handleAddTaskInFlow}
+                onMergeTask={handleMergeInFlow}
+                onIndentTask={handleIndentInFlow}
                 setFocusedTaskId={setFocusedTaskId}
                 focusedTaskId={focusedTaskId}
                 onViewDateChange={setViewDate}
@@ -892,7 +997,7 @@ export default function App() {
         {showHistoryTarget && <TaskHistoryModal taskName={showHistoryTarget} logs={logs} onClose={() => setShowHistoryTarget(null)} />}
         {showShortcuts && (
           <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
-            <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-start mb-6">
                 <h2 className="text-xl font-bold text-white">Keyboard Shortcuts</h2>
                 <button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button>

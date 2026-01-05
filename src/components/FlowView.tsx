@@ -8,6 +8,8 @@ interface FlowViewProps {
   currentSpaceId: string;
   onUpdateTask: (date: string, taskId: number, updates: Partial<Task>) => void;
   onAddTask: (date: string, taskId: number, textBefore: string, textAfter: string) => void;
+  onMergeTask: (date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => void;
+  onIndentTask: (date: string, taskId: number, direction: 'in' | 'out') => void;
   setFocusedTaskId: (id: number | null) => void;
   focusedTaskId: number | null;
   onViewDateChange?: (date: Date) => void;
@@ -17,6 +19,8 @@ export const FlowView: React.FC<FlowViewProps> = ({
   logs, 
   onUpdateTask, 
   onAddTask, 
+  onMergeTask,
+  onIndentTask,
   setFocusedTaskId, 
   focusedTaskId, 
   onViewDateChange 
@@ -96,10 +100,10 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                    onTaskClick={() => {}} 
                                    logs={logs}
                                    onAddTaskAtCursor={(tid, before, after) => onAddTask(log.date, tid, before, after)}
-                                   onMergeWithPrevious={() => {}} 
-                                   onMergeWithNext={() => {}} 
-                                   onIndent={() => {}} 
-                                   onOutdent={() => {}} 
+                                   onMergeWithPrevious={(tid, txt) => onMergeTask(log.date, tid, txt, 'prev')} 
+                                   onMergeWithNext={(tid, txt) => onMergeTask(log.date, tid, txt, 'next')} 
+                                   onIndent={(tid) => onIndentTask(log.date, tid, 'in')} 
+                                   onOutdent={(tid) => onIndentTask(log.date, tid, 'out')} 
                                    onMoveUp={() => {}} 
                                    onMoveDown={() => {}} 
                                />

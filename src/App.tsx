@@ -20,7 +20,7 @@ import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, Trash2, GripVertical, Copy } from 'lucide-react';
+import { Play, Pause, BarChart2, X, Check, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, Trash2, GripVertical, Copy, Flame } from 'lucide-react';
 import { supabase } from './supabase';
 
 // --- 데이터 타입 ---
@@ -1093,24 +1093,18 @@ export default function App() {
                // Background & Text logic
                if (hasCompleted) {
                  // Intensity based on streak
-                 // Streak 1: 20%, 2: 40%, 3: 60%, 4: 80%, 5+: 100%
-                 // const opacity = Math.min(20 + (streakCount - 1) * 20, 90); 
-                 // Using style attribute for dynamic opacity might be cleaner, but let's try strict classes if possible or inline style.
-                 // Tailwind arbitrary values support: bg-[#39ff14]/[0.2]
-                 // Let's just use inline styles for the background to be precise, or map to classes.
-                 // Mapping to classes is safer for now.
+                 // Cap at 60% opacity to ensure white text remains readable and consistent
                  const opacityClass = 
                     streakCount <= 1 ? "bg-[#39ff14]/20" :
-                    streakCount === 2 ? "bg-[#39ff14]/40" :
-                    streakCount === 3 ? "bg-[#39ff14]/60" :
-                    streakCount === 4 ? "bg-[#39ff14]/80" :
-                    "bg-[#39ff14]";
+                    streakCount === 2 ? "bg-[#39ff14]/30" :
+                    streakCount === 3 ? "bg-[#39ff14]/40" :
+                    streakCount === 4 ? "bg-[#39ff14]/50" :
+                    "bg-[#39ff14]/60";
                  
                  btnClass += `${opacityClass} `; 
 
                  if (isSelected) btnClass += "text-white shadow-[0_0_15px_rgba(57,255,20,0.3)] ";
-                 else if (streakCount >= 3) btnClass += "text-black font-bold ";
-                 else btnClass += "text-white font-bold ";
+                 else btnClass += "text-white font-bold "; // Always white text
                } else {
                  if (isSelected) btnClass += "bg-[#7c4dff] text-white ";
                  else if (isToday) btnClass += "bg-blue-500/20 text-blue-400 font-bold ";
@@ -1125,11 +1119,12 @@ export default function App() {
                   }} className={btnClass}>
                     <span className="font-black text-[14px]">{d.getDate()}</span>
                     {hasCompleted && streakCount > 1 && (
-                        <div className="absolute top-0.5 right-1 flex items-center gap-0.5 opacity-80">
-                             <span className="text-[8px] font-black">{streakCount}</span>
+                        <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5">
+                             <Flame size={10} className="text-orange-500 fill-orange-500" />
+                             <span className="text-[9px] font-black text-white">{streakCount}</span>
                         </div>
                     )}
-                    {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : (hasCompleted && streakCount >= 3) ? 'text-black/70' : hasCompleted ? 'text-[#39ff14] mix-blend-screen' : 'text-gray-500'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}
+                    {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : hasCompleted ? 'text-white/90' : 'text-gray-500'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}
                   </button>
                 </div>
                );

@@ -1109,7 +1109,8 @@ export default function App() {
                  btnClass += `${opacityClass} `; 
 
                  if (isSelected) btnClass += "text-white shadow-[0_0_15px_rgba(57,255,20,0.3)] ";
-                 else btnClass += "text-[#39ff14] ";
+                 else if (streakCount >= 3) btnClass += "text-black font-bold ";
+                 else btnClass += "text-white font-bold ";
                } else {
                  if (isSelected) btnClass += "bg-[#7c4dff] text-white ";
                  else if (isToday) btnClass += "bg-blue-500/20 text-blue-400 font-bold ";
@@ -1128,7 +1129,7 @@ export default function App() {
                              <span className="text-[8px] font-black">{streakCount}</span>
                         </div>
                     )}
-                    {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : hasCompleted ? 'text-[#39ff14] mix-blend-screen' : 'text-gray-500'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}
+                    {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : (hasCompleted && streakCount >= 3) ? 'text-black/70' : hasCompleted ? 'text-[#39ff14] mix-blend-screen' : 'text-gray-500'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}
                   </button>
                 </div>
                );

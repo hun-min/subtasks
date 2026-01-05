@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, GripVertical } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { Task, DailyLog } from '../types';
 import { formatTimeShort } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
@@ -39,7 +39,7 @@ export const UnifiedTaskItem = React.memo(({
   onMoveUp: (taskId: number) => void,
   onMoveDown: (taskId: number) => void
 }) => {
-  const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: task.id });
+  const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
   const isFocused = focusedTaskId === task.id;
   const isSelected = selectedTaskIds.has(task.id);
@@ -208,16 +208,6 @@ export const UnifiedTaskItem = React.memo(({
     }
   };
 
-  const swipeTouchStart = useRef<number | null>(null);
-  const handleItemTouchStart = (e: React.TouchEvent) => { if (document.activeElement?.tagName === 'TEXTAREA') return; swipeTouchStart.current = e.touches[0].clientX; };
-  const handleItemTouchEnd = (e: React.TouchEvent) => {
-    if (swipeTouchStart.current === null) return;
-    const touchEnd = e.changedTouches[0].clientX;
-    const diff = touchEnd - swipeTouchStart.current;
-    if (Math.abs(diff) > 60) { if (diff > 0) onIndent(task.id); else onOutdent(task.id); }
-    swipeTouchStart.current = null;
-  };
-
   const getStatusColor = () => {
     if (task.isTimerOn) return 'bg-[#7c4dff] border-[#7c4dff] shadow-[0_0_8px_rgba(124,77,255,0.6)]';
     if (task.status === 'completed') return 'bg-[#4caf50] border-[#4caf50]';
@@ -231,18 +221,14 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.id, updateTask]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'outline outline-2 outline-purple-500 rounded-lg' : ''}`} onTouchStart={handleItemTouchStart} onTouchEnd={handleItemTouchEnd}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-white/[0.08]' : ''}`}>
        
-       <div className="absolute left-1 top-[5px] flex items-center justify-center w-5 h-6 cursor-grab active:cursor-grabbing text-gray-500 group-hover:opacity-100 transition-opacity z-20" {...attributes} {...listeners}>
-         <GripVertical size={14} />
-       </div>
-
-      <div className="flex flex-shrink-0" onClick={(e) => onTaskClick(e, task.id, index)}>
+      <div className="flex flex-shrink-0 pt-1.5" onClick={(e) => onTaskClick(e, task.id, index)}>
         {Array.from({ length: currentDepth }).map((_, i) => (
-          <div key={i} className="h-full border-r border-white/10" style={{ width: '24px' }} />
+          <div key={i} className="h-full border-r border-white/5" style={{ width: '15px' }} />
         ))}
       </div>
-      <div className="flex flex-col items-center justify-start mt-[7px]">
+      <div className="flex flex-col items-center justify-start pt-2">
         <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
@@ -267,7 +253,7 @@ export const UnifiedTaskItem = React.memo(({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1.5 mt-[4px]">
+      <div className="flex items-center gap-1.5 pt-1.5">
         {task.actTime !== undefined && task.actTime > 0 && <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap">{formatTimeShort(task.actTime)}</span>}
       </div>
     </div>

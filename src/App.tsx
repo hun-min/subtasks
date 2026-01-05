@@ -5,7 +5,7 @@ import { AuthModal } from './components/AuthModal';
 import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Play, Pause, BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, Trash2, Copy, Flame } from 'lucide-react';
+import { Play, Pause, BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, ChevronUp, Trash2, Copy, Flame, RotateCcw, RotateCw } from 'lucide-react';
 import { supabase } from './supabase';
 import { Task, DailyLog } from './types';
 import { formatTimeFull, parseTimeToSeconds } from './utils';
@@ -169,6 +169,34 @@ export default function App() {
 
   // New State: View Mode
   const [viewMode, setViewMode] = useState<'day' | 'flow'>('day');
+  const [bottomOffset, setBottomOffset] = useState(24);
+
+  const activeTask = useMemo(() => {
+    if (!focusedTaskId) return undefined;
+    const currentTasks = tasks.find(t => t.id === focusedTaskId);
+    if (currentTasks) return currentTasks;
+    for (const log of logs) {
+      const found = log.tasks.find(t => t.id === focusedTaskId);
+      if (found) return found;
+    }
+    return undefined;
+  }, [tasks, logs, focusedTaskId]);
+
+  useEffect(() => {
+    if (!window.visualViewport) return;
+    const handleResize = () => {
+      const vv = window.visualViewport;
+      if (!vv) return;
+      const offset = window.innerHeight - vv.height;
+      setBottomOffset(offset > 50 ? offset + 12 : 24);
+    };
+    window.visualViewport.addEventListener('resize', handleResize);
+    window.visualViewport.addEventListener('scroll', handleResize);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('scroll', handleResize);
+    };
+  }, []);
 
   const saveToSupabase = useCallback(async (tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
@@ -247,12 +275,35 @@ export default function App() {
   }, [tasks]);
 
   const handleUpdateTask = useCallback((taskId: number, updates: Partial<Task>) => {
+    // 1. Update current tasks state if it exists there
     setTasks(prev => {
-        const next = prev.map(t => t.id === taskId ? { ...t, ...updates } : t);
-        saveToSupabase(next);
-        return next;
+        const index = prev.findIndex(t => t.id === taskId);
+        if (index >= 0) {
+            const next = prev.map(t => t.id === taskId ? { ...t, ...updates } : t);
+            saveToSupabase(next);
+            return next;
+        }
+        return prev;
     });
-  }, [saveToSupabase]);
+
+    // 2. Update logs for Flow view or other dates
+    setLogs(prevLogs => {
+        const logIndex = prevLogs.findIndex(l => l.tasks.some(t => t.id === taskId));
+        if (logIndex >= 0 && prevLogs[logIndex].date !== viewDate.toDateString()) {
+            const newLogs = [...prevLogs];
+            const log = { ...newLogs[logIndex] };
+            log.tasks = log.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t);
+            newLogs[logIndex] = log;
+            
+            saveToSupabaseAtDate(log.date, log.tasks);
+            if (currentSpace) {
+                localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+            }
+            return newLogs;
+        }
+        return prevLogs;
+    });
+  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
     setTasks(prev => {
@@ -324,22 +375,20 @@ export default function App() {
   }, [saveToSupabase]);
 
   const handleIndent = useCallback((taskId: number) => {
-    setTasks(prev => {
-        const next = prev.map(t => t.id === taskId ? { ...t, depth: (t.depth || 0) + 1 } : t);
-        saveToSupabase(next);
-        return next;
-    });
+    const taskToIndent = activeTask || tasks.find(t => t.id === taskId);
+    if (taskToIndent) {
+      handleUpdateTask(taskId, { depth: (taskToIndent.depth || 0) + 1 });
+    }
     setFocusedTaskId(taskId);
-  }, [saveToSupabase]);
+  }, [handleUpdateTask, activeTask, tasks]);
 
   const handleOutdent = useCallback((taskId: number) => {
-    setTasks(prev => {
-        const next = prev.map(t => t.id === taskId ? { ...t, depth: Math.max(0, (t.depth || 0) - 1) } : t);
-        saveToSupabase(next);
-        return next;
-    });
+    const taskToOutdent = activeTask || tasks.find(t => t.id === taskId);
+    if (taskToOutdent) {
+      handleUpdateTask(taskId, { depth: Math.max(0, (taskToOutdent.depth || 0) - 1) });
+    }
     setFocusedTaskId(taskId);
-  }, [saveToSupabase]);
+  }, [handleUpdateTask, activeTask, tasks]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
@@ -364,30 +413,66 @@ export default function App() {
   }, [history, historyIndex, saveToSupabase]);
 
   const handleMoveUp = useCallback((taskId: number) => {
+    // Determine if it's in current tasks or in flow
     setTasks(prev => {
       const index = prev.findIndex(t => t.id === taskId);
-      if (index <= 0) return prev;
-      
-      const newTasks = [...prev];
-      [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
-      
-      saveToSupabase(newTasks);
-      return newTasks;
+      if (index > 0) {
+        const newTasks = [...prev];
+        [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
+        saveToSupabase(newTasks);
+        return newTasks;
+      }
+      return prev;
     });
-  }, [saveToSupabase]);
+
+    // Handle flow movement if not found in current tasks
+    setLogs(prevLogs => {
+      const newLogs = [...prevLogs];
+      const logWithTask = newLogs.find(l => l.tasks.some(t => t.id === taskId));
+      if (logWithTask && logWithTask.date !== viewDate.toDateString()) {
+        const index = logWithTask.tasks.findIndex(t => t.id === taskId);
+        if (index > 0) {
+          const newTasks = [...logWithTask.tasks];
+          [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
+          logWithTask.tasks = newTasks;
+          saveToSupabaseAtDate(logWithTask.date, newTasks);
+          if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+          return newLogs;
+        }
+      }
+      return prevLogs;
+    });
+  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace]);
 
   const handleMoveDown = useCallback((taskId: number) => {
     setTasks(prev => {
       const index = prev.findIndex(t => t.id === taskId);
-      if (index < 0 || index >= prev.length - 1) return prev;
-      
-      const newTasks = [...prev];
-      [newTasks[index + 1], newTasks[index]] = [newTasks[index], newTasks[index + 1]];
-      
-      saveToSupabase(newTasks);
-      return newTasks;
+      if (index >= 0 && index < prev.length - 1) {
+        const newTasks = [...prev];
+        [newTasks[index + 1], newTasks[index]] = [newTasks[index], newTasks[index + 1]];
+        saveToSupabase(newTasks);
+        return newTasks;
+      }
+      return prev;
     });
-  }, [saveToSupabase]);
+
+    setLogs(prevLogs => {
+      const newLogs = [...prevLogs];
+      const logWithTask = newLogs.find(l => l.tasks.some(t => t.id === taskId));
+      if (logWithTask && logWithTask.date !== viewDate.toDateString()) {
+        const index = logWithTask.tasks.findIndex(t => t.id === taskId);
+        if (index >= 0 && index < logWithTask.tasks.length - 1) {
+          const newTasks = [...logWithTask.tasks];
+          [newTasks[index + 1], newTasks[index]] = [newTasks[index], newTasks[index + 1]];
+          logWithTask.tasks = newTasks;
+          saveToSupabaseAtDate(logWithTask.date, newTasks);
+          if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+          return newLogs;
+        }
+      }
+      return prevLogs;
+    });
+  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace]);
 
   useEffect(() => {
     if (currentSpace) {
@@ -651,7 +736,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [tasks, selectedTaskIds, handleUndo, handleRedo, spaces, setCurrentSpace]);
 
-  const activeTask = useMemo(() => tasks.find(t => t.id === focusedTaskId), [tasks, focusedTaskId]);
   const currentLog = logs.find(l => l.date === viewDate.toDateString());
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -660,6 +744,28 @@ export default function App() {
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter(t => t.status === 'completed').length;
   const progressPercent = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+
+  const getStreakAtDate = useCallback((currentDate: Date) => {
+      const hasCompletedAtDate = (date: Date) => {
+          const l = logsRef.current.find(log => log.date === date.toDateString());
+          return l?.tasks.some(t => t.status === 'completed');
+      };
+      if (!hasCompletedAtDate(currentDate)) return 0;
+      let streak = 1;
+      let checkDate = new Date(currentDate);
+      checkDate.setDate(checkDate.getDate() - 1);
+      for(let k=0; k<365; k++) { 
+          if (hasCompletedAtDate(checkDate)) {
+              streak++;
+              checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+              break;
+          }
+      }
+      return streak;
+  }, []);
+
+  const currentStreak = getStreakAtDate(viewDate);
 
   const showBulkActions = selectedTaskIds.size > 1;
 
@@ -841,43 +947,44 @@ export default function App() {
                            }
                            return streak;
                        };
-                       const streakCount = getStreak(d);
-                       let btnClass = "h-11 rounded-xl text-xs flex flex-col items-center justify-center relative transition-all border-2 w-full ";
-                       if (isSelected) btnClass += "border-[#7c4dff] z-10 ";
-                       else btnClass += "border-transparent ";
-                       if (isToday) btnClass += "ring-2 ring-inset ring-blue-500 ";
-                       if (hasCompleted) {
-                         const opacityClass = 
-                            streakCount <= 1 ? "bg-[#39ff14]/20" :
-                            streakCount === 2 ? "bg-[#39ff14]/30" :
-                            streakCount === 3 ? "bg-[#39ff14]/40" :
-                            streakCount === 4 ? "bg-[#39ff14]/50" :
-                            "bg-[#39ff14]/60";
-                         btnClass += `${opacityClass} `; 
-                         if (isSelected) btnClass += "text-white shadow-[0_0_15px_rgba(57,255,20,0.3)] ";
-                         else btnClass += "text-white font-bold "; 
-                       } else {
-                         if (isSelected) btnClass += "bg-[#7c4dff] text-white ";
-                         else if (isToday) btnClass += "bg-blue-500/20 text-blue-400 font-bold ";
-                         else if (d.getMonth() !== month) btnClass += "text-gray-700 opacity-30 ";
-                         else btnClass += "text-gray-400 hover:bg-white/5 ";
-                       }
-                       return (
-                        <div key={i} className="relative">
-                          <button onClick={() => {
-                           setViewDate(d);
-                          }} className={btnClass}>
-                            <span className="font-black text-[14px]">{d.getDate()}</span>
-                            {hasCompleted && streakCount > 1 && (
-                                <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5">
-                                     <Flame size={10} className="text-orange-500 fill-orange-500" />
-                                     <span className="text-[9px] font-black text-white">{streakCount}</span>
-                                </div>
-                            )}
-                            {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : hasCompleted ? 'text-white/90' : 'text-gray-500'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}
-                          </button>
-                        </div>
-                       );
+                        const streakCount = getStreak(d);
+                        const isOtherMonth = d.getMonth() !== month;
+                        let btnClass = "h-11 rounded-xl text-xs flex flex-col items-center justify-center relative transition-all border-2 w-full ";
+                        if (isSelected) btnClass += "border-[#7c4dff] z-10 ";
+                        else btnClass += "border-transparent ";
+                        if (isToday) btnClass += "ring-2 ring-inset ring-blue-500 ";
+                        
+                        if (hasCompleted) {
+                          const opacityClass = 
+                             streakCount <= 1 ? "bg-[#39ff14]/20" :
+                             streakCount === 2 ? "bg-[#39ff14]/30" :
+                             streakCount === 3 ? "bg-[#39ff14]/40" :
+                             streakCount === 4 ? "bg-[#39ff14]/50" :
+                             "bg-[#39ff14]/60";
+                          btnClass += `${opacityClass} `; 
+                          if (isOtherMonth) btnClass += "opacity-20 ";
+                          if (isSelected) btnClass += "text-white shadow-[0_0_15px_rgba(124,77,255,0.3)] ";
+                          else btnClass += "text-white font-bold "; 
+                        } else {
+                          if (isSelected) btnClass += "text-white ";
+                          else if (isToday) btnClass += "bg-blue-500/20 text-blue-400 font-bold ";
+                          else if (isOtherMonth) btnClass += "text-gray-700 opacity-30 ";
+                          else btnClass += "text-gray-400 hover:bg-white/5 ";
+                        }
+                        return (
+                         <div key={i} className="relative">
+                           <button onClick={() => setViewDate(d)} className={btnClass}>
+                             <span className="font-black text-[14px]">{d.getDate()}</span>
+                             {hasCompleted && streakCount > 1 && (
+                                 <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5">
+                                      <Flame size={10} className="text-orange-500 fill-orange-500" />
+                                      <span className="text-[9px] font-black text-white">{streakCount}</span>
+                                 </div>
+                             )}
+                             {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : hasCompleted ? 'text-white/90' : 'text-gray-500'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}
+                           </button>
+                         </div>
+                        );
                    })}</div>
                 </div>
                 <div className="px-6 mb-6">
@@ -885,8 +992,14 @@ export default function App() {
                         <div>
                             <span className="text-4xl font-black text-white leading-none tracking-tight">{completedTasks} <span className="text-gray-600">/</span> <span className="text-gray-500">{totalTasks}</span></span>
                         </div>
-                        <div className="text-right">
-                            <div className="text-xs font-bold text-[#7c4dff]">{progressPercent}% DONE</div>
+                        <div className="text-right flex items-end gap-2">
+                            {currentStreak > 1 && (
+                                <div className="flex items-center gap-0.5 mb-0.5">
+                                    <Flame size={14} className="text-orange-500 fill-orange-500" />
+                                    <span className="text-sm font-black text-white">{currentStreak}</span>
+                                </div>
+                            )}
+                            <div className="text-xs font-bold text-[#7c4dff] mb-0.5">{progressPercent}% DONE</div>
                         </div>
                     </div>
                     <div className="h-1.5 w-full bg-[#1a1a1f] rounded-full overflow-hidden mb-4">
@@ -919,8 +1032,8 @@ export default function App() {
                                       onMergeWithNext={handleMergeWithNext} 
                                       onIndent={handleIndent} 
                                       onOutdent={handleOutdent} 
-                                      onMoveUp={handleMoveUp}
-                                      onMoveDown={handleMoveDown}
+                                      onMoveUp={handleMoveUp} 
+                                      onMoveDown={handleMoveDown} 
                                   />
                               ))}
                           </SortableContext>
@@ -942,8 +1055,8 @@ export default function App() {
             />
         )}
         {(activeTask || showBulkActions) && (
-          <div className="fixed bottom-6 left-0 right-0 z-[500] flex justify-center px-4">
-              <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-2 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl">
+          <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200" style={{ bottom: `${bottomOffset}px` }}>
+              <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl">
                   {showBulkActions ? (
                      <>
                         <div className="px-4 font-bold text-white whitespace-nowrap flex items-center gap-2">
@@ -979,13 +1092,34 @@ export default function App() {
                             <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull(activeTask.actTime || 0)} onChange={(e) => handleUpdateTask(activeTask.id, { actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
-                        <div className="flex items-center gap-0.5 flex-shrink-0"><button onClick={() => handleOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button><button onClick={() => handleIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button></div>
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <button onClick={() => handleOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button>
+                            <button onClick={() => handleIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button>
+                            <button onClick={() => handleMoveUp(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronUp size={18} /></button>
+                            <button onClick={() => handleMoveDown(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronDown size={18} /></button>
+                        </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
-                        <div className="flex items-center gap-0.5 pr-2 flex-shrink-0">
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
                             <button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><Calendar size={18} /></button>
                             <button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><BarChart2 size={18} /></button>
-                            <button onClick={() => { if (window.confirm("Delete this task?")) { setTasks(prev => prev.filter(t => t.id !== activeTask.id)); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500"><Trash2 size={18} /></button>
-                            <button onClick={() => setFocusedTaskId(null)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronDown size={18} /></button>
+                            <button onClick={() => { 
+                                if (window.confirm("Delete this task?")) { 
+                                    const taskId = activeTask.id;
+                                    setTasks(prev => prev.filter(t => t.id !== taskId)); 
+                                    setLogs(prevLogs => {
+                                        const newLogs = prevLogs.map(l => ({ ...l, tasks: l.tasks.filter(t => t.id !== taskId) }));
+                                        if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                                        return newLogs;
+                                    });
+                                    // Also need to handle remote delete if necessary, but saving logs usually covers it
+                                    setFocusedTaskId(null); 
+                                } 
+                            }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500"><Trash2 size={18} /></button>
+                        </div>
+                        <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
+                        <div className="flex items-center gap-0.5 pr-2 flex-shrink-0">
+                            <button onClick={handleUndo} disabled={historyIndex <= 0} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCcw size={18} /></button>
+                            <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCw size={18} /></button>
                         </div>
                       </>
                     )

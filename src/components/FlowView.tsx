@@ -104,7 +104,14 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                    onMergeWithNext={(tid, txt) => onMergeTask(log.date, tid, txt, 'next')} 
                                    onIndent={(tid) => onIndentTask(log.date, tid, 'in')} 
                                    onOutdent={(tid) => onIndentTask(log.date, tid, 'out')} 
-                                   onMoveUp={() => {}} 
+                                   onMoveUp={() => {
+                                       const index = log.tasks.findIndex(t => t.id === focusedTaskId);
+                                       if (index > 0) {
+                                           const newTasks = [...log.tasks];
+                                           [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
+                                           onUpdateTask(log.date, focusedTaskId!, {}); // Trigger update logic via onUpdateTask proxy if needed or direct
+                                       }
+                                   }} 
                                    onMoveDown={() => {}} 
                                />
                            ))}

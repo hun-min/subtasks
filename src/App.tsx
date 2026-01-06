@@ -131,7 +131,7 @@ export default function App() {
           const date = typeof newDate === 'function' ? newDate(prev) : newDate;
           if (date.getTime() === prev.getTime()) return prev;
           isSwitchingDate.current = true;
-          setIsLoading(true);
+          // setIsLoading(true);
           return date;
       });
   }, []);
@@ -230,7 +230,7 @@ export default function App() {
 
   const saveToSupabase = useCallback(async (tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
-    if (isLoading) { console.warn('Save blocked due to loading'); return; }
+    // if (isLoading) { console.warn('Save blocked due to loading'); return; }
     const dateStr = viewDate.toDateString();
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
@@ -249,7 +249,7 @@ export default function App() {
 
   const saveToSupabaseAtDate = useCallback(async (dateStr: string, tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
-    if (isLoading) { console.warn('SaveAtDate blocked due to loading'); return; }
+    // if (isLoading) { console.warn('SaveAtDate blocked due to loading'); return; }
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
     try {
@@ -1063,7 +1063,7 @@ export default function App() {
         </div>
         {viewMode === 'day' ? (
             <>
-                <div className={`calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`} onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
+                <div className={`calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`} onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
                    <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button><div className="text-center cursor-pointer" onClick={() => setViewDate(new Date())}><div className="text-[11px] text-gray-500 uppercase tracking-widest font-bold">{year}</div><div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button></div>
                    <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map((d, i) => <div key={i} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { 
                        const d = new Date(year, month, 1); 
@@ -1134,7 +1134,7 @@ export default function App() {
                     </div>
                     <AutoResizeTextarea value={currentLog?.memo || ''} onChange={(e: any) => { const newMemo = e.target.value; setLogs(prev => prev.map(l => l.date === viewDate.toDateString() ? { ...l, memo: newMemo } : l)); }} placeholder="M E M O" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none" />
                 </div>
-                <div className={`flex-1 space-y-8 pb-48 transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className={`flex-1 space-y-8 pb-48 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
                   <div>
                       <div className="flex items-center justify-between mb-2 px-6">
                           <div className="flex items-center gap-3">

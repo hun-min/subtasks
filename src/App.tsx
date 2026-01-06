@@ -871,9 +871,9 @@ export default function App() {
                            <button onClick={() => setViewDate(d)} className={btnClass}>
                              <span className="font-black text-[14px]">{d.getDate()}</span>
                              {hasCompleted && streakCount > 1 && (
-                                 <div className="absolute top-0.5 right-0.5 hidden md:flex items-center gap-0.5">
+                                 <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5">
                                       <Flame size={10} className="text-orange-500 fill-orange-500" />
-                                      <span className="text-[9px] font-black text-white">{streakCount}</span>
+                                      <span className="text-[9px] font-black text-white hidden md:inline">{streakCount}</span>
                                  </div>
                              )}
                              {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : hasCompleted ? 'text-white/90' : 'text-gray-500'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}
@@ -889,7 +889,7 @@ export default function App() {
                         </div>
                         <div className="text-right flex items-end gap-2">
                             {currentStreak > 1 && (
-                                <div className="hidden md:flex items-center gap-0.5 mb-0.5">
+                                <div className="flex items-center gap-0.5 mb-0.5">
                                     <Flame size={14} className="text-orange-500 fill-orange-500" />
                                     <span className="text-sm font-black text-white">{currentStreak}</span>
                                 </div>

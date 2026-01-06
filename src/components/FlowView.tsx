@@ -107,7 +107,7 @@ export const FlowView: React.FC<FlowViewProps> = ({
                    <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-sm py-2 px-6 border-b border-white/5 mb-2 flex items-center gap-4 flow-date-header" data-date={log.date}>
                        <h3 className="text-xl font-black text-white">{dateLabel}</h3>
                        {streakAtDate > 1 && (
-                           <div className="hidden md:flex items-center gap-0.5 ml-2">
+                           <div className="flex items-center gap-0.5 ml-2">
                                <Flame size={14} className="text-orange-500 fill-orange-500" />
                                <span className="text-xs font-black text-white">{streakAtDate}</span>
                            </div>

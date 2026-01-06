@@ -719,7 +719,18 @@ export default function App() {
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      
+      // Alt + 숫자 단축키 (스페이스 이동)
+      if (e.altKey && !isNaN(Number(e.key)) && Number(e.key) >= 1 && Number(e.key) <= 9) {
+        e.preventDefault();
+        const index = Number(e.key) - 1;
+        if (spaces && spaces[index]) {
+          setCurrentSpace(spaces[index]);
+        }
+        return;
+      }
+
       if (selectedTaskIds.size > 0 && !isInput) {
           if (e.key === 'Delete' || e.key === 'Backspace') {
             e.preventDefault();
@@ -1029,11 +1040,23 @@ export default function App() {
         {showHistoryTarget && <TaskHistoryModal taskName={showHistoryTarget} logs={logs} onClose={() => setShowHistoryTarget(null)} />}
         {showShortcuts && (
           <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
-            <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-start mb-6"><h2 className="text-xl font-bold text-white">Keyboard Shortcuts</h2><button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button></div>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between items-center"><span className="text-gray-400">Add Task</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Enter</kbd></div>
-                <div className="flex justify-between items-center"><span className="text-gray-400">Toggle Status</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">General</h3>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Add Task</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Enter</kbd></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Toggle Status</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Undo / Redo</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Z / Y</kbd></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Help</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">?</kbd></div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Navigation</h3>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Switch Space</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + 1-9</kbd></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Indent</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Tab</kbd></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Outdent</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Shift + Tab</kbd></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Move Up/Down</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Alt + ↑ / ↓</kbd></div>
+                </div>
               </div>
             </div>
           </div>

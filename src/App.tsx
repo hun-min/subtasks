@@ -224,6 +224,7 @@ export default function App() {
     
     // 빈 배열 저장 방지
     if (tasksToSave.length === 0) {
+      // 하지만 서버에 데이터가 이미 있다면 삭제 대신 유지를 위해 로그만 남김
       console.warn('[SYNC] Aborting save: tasks list is empty. Prevent data loss.');
       return;
     }
@@ -237,7 +238,7 @@ export default function App() {
           user_id: user.id, 
           space_id: currentSpace.id, 
           date: dateStr, 
-          tasks: JSON.stringify(tasksToSave), 
+          tasks: tasksToSave, // JSON.stringify 제거 (Supabase SDK가 처리)
           memo: currentMemo
       }, { onConflict: 'user_id,space_id,date' });
       if (error) throw error;
@@ -264,7 +265,7 @@ export default function App() {
           user_id: user.id, 
           space_id: currentSpace.id, 
           date: dateStr, 
-          tasks: JSON.stringify(tasksToSave), 
+          tasks: tasksToSave, // JSON.stringify 제거
           memo: currentMemo
       }, { onConflict: 'user_id,space_id,date' });
       if (error) throw error;
@@ -635,9 +636,13 @@ export default function App() {
     loadFromSupabase();
     
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
         if (payload.new && payload.new.space_id === currentSpace.id) {
-          const serverLog = { date: payload.new.date, tasks: migrateTasks(JSON.parse(payload.new.tasks)), memo: payload.new.memo };
+          const serverLog = { 
+            date: payload.new.date, 
+            tasks: migrateTasks(typeof payload.new.tasks === 'string' ? JSON.parse(payload.new.tasks) : payload.new.tasks), 
+            memo: payload.new.memo 
+          };
           if (serverLog.date === 'SETTINGS') return;
           
           const targetDateStr = viewDateRef.current.toDateString();

@@ -531,27 +531,6 @@ export default function App() {
     });
   }, [saveToSupabase, selectedTaskIds]);
 
-  const handleDeleteTask = useCallback((taskId: number) => {
-    if (window.confirm("Delete this task?")) { 
-        setTasks(prev => {
-            const next = prev.filter(t => t.id !== taskId);
-            saveToSupabase(next);
-            return next;
-        }); 
-        setLogs(prevLogs => {
-            const newLogs = prevLogs.map(l => ({ ...l, tasks: l.tasks.filter(t => t.id !== taskId) }));
-            if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-            return newLogs;
-        });
-        setFocusedTaskId(null); 
-    } 
-  }, [currentSpace, saveToSupabase]);
-
-  const handleCopyTask = useCallback((task: Task) => {
-    const text = task.name || task.text || '';
-    navigator.clipboard.writeText(text);
-  }, []);
-
   useEffect(() => {
     if (currentSpace) {
       // Don't set isLoading(true) here if we already have tasks for this space
@@ -1004,9 +983,6 @@ export default function App() {
                                       onOutdent={handleOutdent} 
                                       onMoveUp={handleMoveUp} 
                                       onMoveDown={handleMoveDown} 
-                                      onDelete={handleDeleteTask}
-                                      onCopy={handleCopyTask}
-                                      showMenuButton={true}
                                   />
                               ))}
                           </SortableContext>
@@ -1119,7 +1095,7 @@ export default function App() {
         {showHistoryTarget && <TaskHistoryModal taskName={showHistoryTarget} logs={logs} onClose={() => setShowHistoryTarget(null)} />}
         {showShortcuts && (
           <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
-            <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-start mb-6"><h2 className="text-xl font-bold text-white">Keyboard Shortcuts</h2><button onClick={() => setShowShortcuts(false)} className="text-gray-500 hover:text-white"><X /></button></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
                 <div className="space-y-3">

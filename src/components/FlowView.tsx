@@ -141,7 +141,6 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                        }
                                    }} 
                                    onMoveDown={() => {}} 
-                                   showMenuButton={false}
                                />
                            ))}
                        </SortableContext>

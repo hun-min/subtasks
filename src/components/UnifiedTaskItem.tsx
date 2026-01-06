@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, MoreVertical, Copy, ArrowLeft, ArrowRight, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { Task, DailyLog } from '../types';
 import { formatTimeShort } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
@@ -21,10 +21,7 @@ export const UnifiedTaskItem = React.memo(({
   onIndent, 
   onOutdent,
   onMoveUp,
-  onMoveDown,
-  onDelete,
-  onCopy,
-  showMenuButton = true
+  onMoveDown
 }: { 
   task: Task, 
   index: number,
@@ -40,30 +37,13 @@ export const UnifiedTaskItem = React.memo(({
   onIndent: (taskId: number) => void, 
   onOutdent: (taskId: number) => void,
   onMoveUp: (taskId: number) => void,
-  onMoveDown: (taskId: number) => void,
-  onDelete?: (taskId: number) => void,
-  onCopy?: (task: Task) => void,
-  showMenuButton?: boolean
+  onMoveDown: (taskId: number) => void
 }) => {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
   const isFocused = focusedTaskId === task.id;
   const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showMenu]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -195,26 +175,61 @@ export const UnifiedTaskItem = React.memo(({
     
     // Arrow Navigation between tasks
     if (e.key === 'ArrowUp' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-        if (textareaRef.current && textareaRef.current.selectionStart === 0 && textareaRef.current.selectionEnd === 0) {
-            e.preventDefault();
-            const parentElement = textareaRef.current.closest('[data-handler-id]') || textareaRef.current.closest('.group');
-            const prevElement = parentElement?.previousElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
-            if (prevElement) {
-                const pos = prevElement.value.length;
-                (window as any).__restoreCursorPos = pos;
-                prevElement.focus();
+        if (textareaRef.current) {
+            const { selectionStart, value } = textareaRef.current;
+            const textBeforeCursor = value.substring(0, selectionStart);
+            const isFirstLine = !textBeforeCursor.includes('\n');
+
+            if (isFirstLine) {
+                e.preventDefault();
+                const parentElement = textareaRef.current.closest('[data-handler-id]') || textareaRef.current.closest('.group');
+                const prevElement = parentElement?.previousElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
+                if (prevElement) {
+                    const currentColumn = selectionStart; // 첫 줄이므로 selectionStart가 곧 컬럼 위치
+                    const prevValue = prevElement.value;
+                    const prevLastNewlineIndex = prevValue.lastIndexOf('\n');
+                    
+                    // 이전 항목의 마지막 줄의 시작 인덱스 + 현재 컬럼 (단, 마지막 줄 길이를 넘지 않게)
+                    const prevLastLineStart = prevLastNewlineIndex + 1;
+                    const prevLastLineLength = prevValue.length - prevLastLineStart;
+                    const targetPos = prevLastLineStart + Math.min(currentColumn, prevLastLineLength);
+                    
+                    (window as any).__restoreCursorPos = targetPos;
+                    prevElement.focus();
+                } else {
+                    // 맨 위 항목에서 Up 시 커서를 맨 앞으로
+                    textareaRef.current.selectionStart = textareaRef.current.selectionEnd = 0;
+                }
             }
         }
     }
     
     if (e.key === 'ArrowDown' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-        if (textareaRef.current && textareaRef.current.selectionStart === taskName.length && textareaRef.current.selectionEnd === taskName.length) {
-            e.preventDefault();
-            const parentElement = textareaRef.current.closest('[data-handler-id]') || textareaRef.current.closest('.group');
-            const nextElement = parentElement?.nextElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
-            if (nextElement) {
-                (window as any).__restoreCursorPos = 0;
-                nextElement.focus();
+        if (textareaRef.current) {
+            const { selectionStart, value } = textareaRef.current;
+            const textAfterCursor = value.substring(selectionStart);
+            const isLastLine = !textAfterCursor.includes('\n');
+
+            if (isLastLine) {
+                e.preventDefault();
+                const parentElement = textareaRef.current.closest('[data-handler-id]') || textareaRef.current.closest('.group');
+                const nextElement = parentElement?.nextElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
+                if (nextElement) {
+                    const lastNewlineIndex = value.substring(0, selectionStart).lastIndexOf('\n');
+                    const currentColumn = selectionStart - (lastNewlineIndex + 1);
+                    
+                    // 다음 항목의 첫 번째 줄의 컬럼 위치 (단, 첫 줄 길이를 넘지 않게)
+                    const nextValue = nextElement.value;
+                    const nextFirstNewlineIndex = nextValue.indexOf('\n');
+                    const nextFirstLineLength = nextFirstNewlineIndex === -1 ? nextValue.length : nextFirstNewlineIndex;
+                    const targetPos = Math.min(currentColumn, nextFirstLineLength);
+                    
+                    (window as any).__restoreCursorPos = targetPos;
+                    nextElement.focus();
+                } else {
+                    // 맨 마지막 항목에서 Down 시 커서를 맨 뒤로
+                    textareaRef.current.selectionStart = textareaRef.current.selectionEnd = value.length;
+                }
             }
         }
     }
@@ -299,43 +314,8 @@ export const UnifiedTaskItem = React.memo(({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1.5 pt-1.5">
+      <div className="flex items-center gap-1.5 pt-1.5 pr-2">
         {task.actTime !== undefined && task.actTime > 0 && <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap">{formatTimeShort(task.actTime)}</span>}
-        {showMenuButton && (
-          <div className="relative" ref={menuRef}>
-            <button 
-              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} 
-              className="p-1 text-gray-600 hover:text-gray-300 transition-colors opacity-0 group-hover:opacity-100 lg:opacity-0"
-            >
-              <MoreVertical size={14} />
-            </button>
-            {showMenu && (
-              <div className="absolute right-0 top-full mt-1 z-[200] bg-[#1a1a1f] border border-white/10 rounded-xl shadow-2xl py-1 min-w-[140px] animate-in fade-in zoom-in duration-100 origin-top-right">
-                <button onClick={() => { onCopy?.(task); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                  <Copy size={14} /> Copy
-                </button>
-                <div className="h-px bg-white/5 my-1" />
-                <button onClick={() => { onIndent(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                  <ArrowRight size={14} /> Indent
-                </button>
-                <button onClick={() => { onOutdent(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                  <ArrowLeft size={14} /> Outdent
-                </button>
-                <div className="h-px bg-white/5 my-1" />
-                <button onClick={() => { onMoveUp(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                  <ChevronUp size={14} /> Move Up
-                </button>
-                <button onClick={() => { onMoveDown(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                  <ChevronDown size={14} /> Move Down
-                </button>
-                <div className="h-px bg-white/5 my-1" />
-                <button onClick={() => { onDelete?.(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-red-500/80 hover:text-red-500 hover:bg-red-500/10 flex items-center gap-2">
-                  <Trash2 size={14} /> Delete
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

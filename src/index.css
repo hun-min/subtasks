@@ -16,6 +16,17 @@ body {
 html, body {
   max-width: 100vw;
   overflow-x: hidden;
+  height: 100%;
+  height: 100dvh;
+  overscroll-behavior: none; /* 상단/하단 바운스 효과 방지하여 레이아웃 안정화 */
+}
+
+#root {
+  height: 100%;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
 }
 
 @layer utilities {

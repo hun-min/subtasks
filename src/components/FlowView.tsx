@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
 import { DailyLog, Task } from '../types';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { UnifiedTaskItem } from './UnifiedTaskItem';
+import { Flame } from 'lucide-react';
 
 interface FlowViewProps {
   logs: DailyLog[];
@@ -34,6 +35,26 @@ export const FlowView: React.FC<FlowViewProps> = ({
 
     // Intersection Observer for Sticky Header Highlight
     const observer = useRef<IntersectionObserver | null>(null);
+
+    const getStreakAtDate = useCallback((currentDate: Date) => {
+        const hasCompletedAtDate = (date: Date) => {
+            const l = logs.find(log => log.date === date.toDateString());
+            return l?.tasks.some(t => t.status === 'completed');
+        };
+        if (!hasCompletedAtDate(currentDate)) return 0;
+        let streak = 1;
+        let checkDate = new Date(currentDate);
+        checkDate.setDate(checkDate.getDate() - 1);
+        for(let k=0; k<365; k++) { 
+            if (hasCompletedAtDate(checkDate)) {
+                streak++;
+                checkDate.setDate(checkDate.getDate() - 1);
+            } else {
+                break;
+            }
+        }
+        return streak;
+    }, [logs]);
 
     useEffect(() => {
         // Debounced observer setup
@@ -79,11 +100,18 @@ export const FlowView: React.FC<FlowViewProps> = ({
                const d = new Date(log.date);
                // Fix Date Format: 2026-1-5 (No zero padding, YYYY-M-D)
                const dateLabel = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; 
+               const streakAtDate = getStreakAtDate(d);
 
                return (
                <div key={log.date} className="group mb-8 flow-section" data-date={log.date}>
                    <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-sm py-2 px-6 border-b border-white/5 mb-2 flex items-center gap-4 flow-date-header" data-date={log.date}>
                        <h3 className="text-xl font-black text-white">{dateLabel}</h3>
+                       {streakAtDate > 1 && (
+                           <div className="hidden md:flex items-center gap-0.5 ml-2">
+                               <Flame size={14} className="text-orange-500 fill-orange-500" />
+                               <span className="text-xs font-black text-white">{streakAtDate}</span>
+                           </div>
+                       )}
                        <div className="h-px flex-1 bg-white/10" />
                    </div>
                    <div className="px-0">

@@ -235,13 +235,21 @@ export default function App() {
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
     try {
-      await supabase.from('task_logs').upsert({ 
-          user_id: user.id, 
-          space_id: currentSpace.id, 
-          date: dateStr, 
-          tasks: JSON.stringify(tasksToSave), 
-          memo: currentMemo
-      }, { onConflict: 'user_id,space_id,date' });
+      if (tasksToSave.length === 0 && !currentMemo) {
+          await supabase.from('task_logs').delete().match({ 
+              user_id: user.id, 
+              space_id: currentSpace.id, 
+              date: dateStr 
+          });
+      } else {
+          await supabase.from('task_logs').upsert({ 
+              user_id: user.id, 
+              space_id: currentSpace.id, 
+              date: dateStr, 
+              tasks: JSON.stringify(tasksToSave), 
+              memo: currentMemo
+          }, { onConflict: 'user_id,space_id,date' });
+      }
     } catch (error) {
       console.error("Failed to save to Supabase:", error);
     }
@@ -253,13 +261,21 @@ export default function App() {
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
     try {
-      await supabase.from('task_logs').upsert({  
-          user_id: user.id, 
-          space_id: currentSpace.id, 
-          date: dateStr, 
-          tasks: JSON.stringify(tasksToSave), 
-          memo: currentMemo
-      }, { onConflict: 'user_id,space_id,date' });
+      if (tasksToSave.length === 0 && !currentMemo) {
+          await supabase.from('task_logs').delete().match({ 
+              user_id: user.id, 
+              space_id: currentSpace.id, 
+              date: dateStr 
+          });
+      } else {
+          await supabase.from('task_logs').upsert({  
+              user_id: user.id, 
+              space_id: currentSpace.id, 
+              date: dateStr, 
+              tasks: JSON.stringify(tasksToSave), 
+              memo: currentMemo
+          }, { onConflict: 'user_id,space_id,date' });
+      }
     } catch (error) {
       console.error("Failed to save to Supabase at date:", error);
     }
@@ -285,7 +301,8 @@ export default function App() {
             newLogs.push({ date: dateStr, tasks: currentTasks, memo: '' });
         }
 
-        localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+        const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+        localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
         return newLogs;
     });
 
@@ -331,7 +348,8 @@ export default function App() {
             
             saveToSupabaseAtDate(log.date, log.tasks);
             if (currentSpace) {
-                localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+                localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
             }
             return newLogs;
         }
@@ -517,7 +535,10 @@ export default function App() {
           [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
           logWithTask.tasks = newTasks;
           saveToSupabaseAtDate(logWithTask.date, newTasks);
-          if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+          if (currentSpace) {
+             const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
+          }
           return newLogs;
         }
       }
@@ -568,7 +589,10 @@ export default function App() {
           [newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]];
           logWithTask.tasks = newTasks;
           saveToSupabaseAtDate(logWithTask.date, newTasks);
-          if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+          if (currentSpace) {
+             const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
+          }
           return newLogs;
         }
       }
@@ -578,15 +602,23 @@ export default function App() {
 
   const handleDeleteTask = useCallback((taskId: number) => {
     if (window.confirm("Delete this task?")) { 
-        setTasks(prev => prev.filter(t => t.id !== taskId)); 
+        setTasks(prev => {
+            const next = prev.filter(t => t.id !== taskId);
+            saveToSupabase(next);
+            return next;
+        }); 
         setLogs(prevLogs => {
             const newLogs = prevLogs.map(l => ({ ...l, tasks: l.tasks.filter(t => t.id !== taskId) }));
-            if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+            if (currentSpace) {
+                // Remove empty logs from local storage if needed, or just update
+                const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+                localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
+            }
             return newLogs;
         });
         setFocusedTaskId(null); 
     } 
-  }, [currentSpace]);
+  }, [currentSpace, saveToSupabase]);
 
   const handleCopyTask = useCallback((task: Task) => {
     const text = task.name || task.text || '';
@@ -684,7 +716,10 @@ export default function App() {
 
             if (!hasChanges) return prevLogs;
             const mergedLogs = Array.from(logMap.values());
-            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(mergedLogs));
+            
+            // Filter out empty logs before saving to localStorage
+            const nonEmptyLogs = mergedLogs.filter(l => l.tasks.length > 0 || l.memo);
+            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
             
             if (targetDateStr !== viewDateRef.current.toDateString()) return prevLogs;
             const currentViewLog = mergedLogs.find(l => l.date === viewDateRef.current.toDateString());
@@ -725,7 +760,11 @@ export default function App() {
              const idx = prev.findIndex(l => l.date === serverLog.date);
              const newLogs = idx >= 0 ? [...prev] : [...prev, serverLog];
              if (idx >= 0) newLogs[idx] = serverLog;
-             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+             
+             // Filter out empty logs before saving to localStorage
+             const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
+             
              return newLogs;
           });
         }
@@ -876,7 +915,10 @@ export default function App() {
             newLogs.push({ date: targetDate, tasks: selectedTasks, memo: '' });
             saveToSupabaseAtDate(targetDate, selectedTasks);
         }
-        if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+        if (currentSpace) {
+            const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
+        }
         return newLogs;
     });
     setSelectedTaskIds(new Set());
@@ -891,7 +933,8 @@ export default function App() {
              newLogs[logIndex].tasks = newLogs[logIndex].tasks.map(t => t.id === taskId ? { ...t, ...updates } : t);
              if (date === viewDateRef.current.toDateString()) setTasks(newLogs[logIndex].tasks);
              if(currentSpace) {
-                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
                  saveToSupabaseAtDate(date, newLogs[logIndex].tasks);
              }
           }
@@ -927,7 +970,8 @@ export default function App() {
 
              if (date === viewDateRef.current.toDateString()) setTasks(next);
              if(currentSpace) {
-                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
                  saveToSupabaseAtDate(date, next);
              }
           }
@@ -977,7 +1021,8 @@ export default function App() {
              newLogs[logIndex].tasks = next;
              if (date === viewDateRef.current.toDateString()) setTasks(next);
              if(currentSpace) {
-                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
                  saveToSupabaseAtDate(date, next);
              }
           }
@@ -1000,7 +1045,8 @@ export default function App() {
              newLogs[logIndex].tasks = next;
              if (date === viewDateRef.current.toDateString()) setTasks(next);
              if(currentSpace) {
-                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
                  saveToSupabaseAtDate(date, next);
              }
           }
@@ -1035,7 +1081,8 @@ export default function App() {
              newLogs[logIndex].tasks = next;
              if (date === viewDateRef.current.toDateString()) setTasks(next);
              if(currentSpace) {
-                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 const nonEmptyLogs = newLogs.filter(l => l.tasks.length > 0 || l.memo);
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(nonEmptyLogs));
                  saveToSupabaseAtDate(date, next);
              }
           }
@@ -1204,7 +1251,7 @@ export default function App() {
                             setSelectedTaskIds(new Set());
                         }} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Copy size={16} /> Copy</button>
                         <button onClick={() => setShowDatePicker(true)} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Calendar size={16} /> Move</button>
-                        <button onClick={() => { if(confirm(`Delete ${selectedTaskIds.size} tasks?`)) { setTasks(prev => prev.filter(t => !selectedTaskIds.has(t.id))); setSelectedTaskIds(new Set()); } }} className="p-3 hover:bg-white/10 rounded-2xl text-red-500 font-bold text-sm px-4 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
+                        <button onClick={() => { if(confirm(`Delete ${selectedTaskIds.size} tasks?`)) { setTasks(prev => { const next = prev.filter(t => !selectedTaskIds.has(t.id)); saveToSupabase(next); return next; }); setSelectedTaskIds(new Set()); } }} className="p-3 hover:bg-white/10 rounded-2xl text-red-500 font-bold text-sm px-4 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
                         <div className="h-8 w-px bg-white/10 mx-1" />
                         <button onClick={() => setSelectedTaskIds(new Set())} className="p-3 hover:bg-white/10 rounded-2xl text-gray-400"><X size={20} /></button>
                      </>
@@ -1227,7 +1274,7 @@ export default function App() {
                           <button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Move to Date"><Calendar size={18} /></button>
                           <button onClick={() => { navigator.clipboard.writeText(activeTask.name || activeTask.text || ''); alert("Copied to clipboard"); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Copy Text"><Copy size={18} /></button>
                           <button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="History"><BarChart2 size={18} /></button>
-                          <button onClick={() => { if (window.confirm("Delete this task?")) { setTasks(prev => prev.filter(t => t.id !== activeTask.id)); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
+                          <button onClick={() => { if (window.confirm("Delete this task?")) { setTasks(prev => { const next = prev.filter(t => t.id !== activeTask.id); saveToSupabase(next); return next; }); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
                       </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 pr-2 flex-shrink-0">

@@ -427,6 +427,20 @@ export default function App() {
     setFocusedTaskId(taskId);
   }, [handleUpdateTask, activeTask, tasks, selectedTaskIds, saveToSupabase]);
 
+  const handleFocusPrev = useCallback((taskId: number) => {
+    const idx = tasks.findIndex(t => t.id === taskId);
+    if (idx > 0) {
+      setFocusedTaskId(tasks[idx - 1].id);
+    }
+  }, [tasks]);
+
+  const handleFocusNext = useCallback((taskId: number) => {
+    const idx = tasks.findIndex(t => t.id === taskId);
+    if (idx !== -1 && idx < tasks.length - 1) {
+      setFocusedTaskId(tasks[idx + 1].id);
+    }
+  }, [tasks]);
+
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
       isInternalUpdate.current = true;
@@ -942,6 +956,8 @@ export default function App() {
                                       onMoveDown={handleMoveDown} 
                                       onDelete={handleDeleteTask}
                                       onCopy={handleCopyTask}
+                                      onFocusPrev={handleFocusPrev}
+                                      onFocusNext={handleFocusNext}
                                   />
                               ))}
                           </SortableContext>

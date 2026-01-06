@@ -113,16 +113,17 @@ export const UnifiedTaskItem = React.memo(({
         if (!e.shiftKey && !e.metaKey) {
             const cursor = textareaRef.current?.selectionStart || 0;
             const value = task.name || task.text || '';
+            
+            // 커서가 첫 번째 줄에 있는지 확인
             const valueBeforeCursor = value.substring(0, cursor);
             const lineIndex = valueBeforeCursor.split('\n').length - 1;
-            
-            // If on the first line, move to previous task regardless of horizontal position
+
             if (lineIndex === 0) {
                  e.preventDefault();
                  onFocusPrev?.(task.id);
                  return;
             }
-            // Otherwise allow default behavior (moving cursor within text)
+            // 그 외에는 브라우저 기본 동작(텍스트 내부 이동, 줄바꿈 등) 허용
         }
     }
 
@@ -140,13 +141,13 @@ export const UnifiedTaskItem = React.memo(({
             const lines = value.split('\n');
             const currentLineIndex = value.substring(0, cursor).split('\n').length - 1;
             
-            // If on the last line, move to next task
+            // 커서가 마지막 줄에 있는지 확인
             if (currentLineIndex === lines.length - 1) {
                  e.preventDefault();
                  onFocusNext?.(task.id);
                  return;
             }
-            // Otherwise allow default behavior
+            // 그 외에는 브라우저 기본 동작 허용
         }
     }
 

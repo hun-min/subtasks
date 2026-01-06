@@ -278,7 +278,14 @@ export default function App() {
   // --- 핵심: 안정적인 데이터 저장 로직 ---
   // tasks 상태가 변경되면 이 useEffect가 감지하여 로그를 업데이트하고 저장한다.
   useEffect(() => {
-    if (!localLogsLoaded || !currentSpace || isSyncLocked) return;
+    // 0. 동기화 잠금 상태(날짜 변경 중 등)라면 절대 저장하지 않음.
+    // 이는 날짜 변경 시 이전 날짜 데이터가 새 날짜로 덮어씌워지는 것을 방지하는 핵심.
+    if (isSyncLocked) {
+        console.log('[SYNC] Sync is locked (date changing?), skipping save.');
+        return;
+    }
+    
+    if (!localLogsLoaded || !currentSpace) return;
     
     // 1. 내부 업데이트(서버 수신 등) 중이면 절대 저장하지 않음
     if (isInternalUpdate.current) {
@@ -299,6 +306,7 @@ export default function App() {
         }
 
         // 3. 실제 데이터가 다른지 깊은 비교
+        // 단순히 JSON.stringify를 쓰면 순서 등이 미묘하게 다를 수 있으므로 simplifyTasks 활용
         const currentSimp = JSON.stringify(simplifyTasks(currentTasks));
         const existingSimp = existingLogIndex >= 0 ? JSON.stringify(simplifyTasks(prevLogs[existingLogIndex].tasks)) : null;
 
@@ -328,7 +336,11 @@ export default function App() {
         setHistoryIndex(prev => Math.min(prev + 1, 49));
         
         lastLocalChange.current = Date.now();
-        saveToSupabase(tasks);
+        // saveToSupabase는 내부적으로 viewDate를 참조하므로, 
+        // 현재 tasks 상태가 viewDate와 일치하는지 한 번 더 확인하면 더 안전함.
+        if (dateStr === viewDate.toDateString()) {
+             saveToSupabase(tasks);
+        }
     }
     
   }, [tasks, viewDate, localLogsLoaded, currentSpace, saveToSupabase, isSyncLocked]);
@@ -961,6 +973,51 @@ export default function App() {
     });
   }, [currentSpace, saveToSupabaseAtDate]);
 
+  const handleFixDuplicates = useCallback(() => {
+    if (!confirm("Remove all duplicate tasks? This cannot be undone.")) return;
+
+    setLogs(prevLogs => {
+        let hasChanges = false;
+        const newLogs = prevLogs.map(log => {
+            const seen = new Set();
+            const uniqueTasks: Task[] = [];
+            let logChanged = false;
+
+            log.tasks.forEach(t => {
+                // 중복 기준: 이름과 상태가 같으면 중복으로 간주 (ID 무시)
+                const key = `${(t.name || t.text || '').trim()}|${t.status}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    uniqueTasks.push(t);
+                } else {
+                    logChanged = true;
+                }
+            });
+
+            if (logChanged) {
+                hasChanges = true;
+                // 현재 보고 있는 날짜라면 화면도 갱신
+                if (log.date === viewDateRef.current.toDateString()) {
+                    setTasks(uniqueTasks);
+                }
+                // Supabase에 해당 날짜 데이터 저장
+                saveToSupabaseAtDate(log.date, uniqueTasks);
+                return { ...log, tasks: uniqueTasks };
+            }
+            return log;
+        });
+
+        if (hasChanges && currentSpace) {
+            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+            alert("Duplicates removed successfully.");
+            return newLogs;
+        } else {
+            alert("No duplicates found.");
+            return prevLogs;
+        }
+    });
+  }, [currentSpace, saveToSupabaseAtDate]);
+
   return (
     <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
@@ -974,6 +1031,7 @@ export default function App() {
                     <button onClick={() => setViewMode('flow')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
                 </div>
                 <button onClick={() => setViewDate(new Date())} className="text-gray-500 hover:text-white p-1 text-xs font-bold border border-gray-700 rounded px-2">TODAY</button>
+                <button onClick={handleFixDuplicates} className="text-gray-500 hover:text-red-400 p-1 text-[10px] font-bold border border-gray-800 rounded px-2">FIX</button>
                 <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1"><HelpCircle size={18} /></button>
                 <button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button>
             </div>

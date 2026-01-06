@@ -280,10 +280,18 @@ export default function App() {
   useEffect(() => {
     if (!localLogsLoaded || !currentSpace || isSyncLocked) return;
     
-    if (isInternalUpdate.current) return;
+    // 내부 업데이트(서버 수신 등)로 인한 변경일 경우 저장을 건너뜀
+    if (isInternalUpdate.current) {
+        console.log('[SYNC] Internal update detected, skipping save.');
+        return;
+    }
 
     const dateStr = viewDate.toDateString();
     
+    // 현재 tasks 상태와 이전에 저장된 logs의 해당 날짜 tasks를 비교하여
+    // 진짜 변경되었을 때만 setLogs와 저장을 수행
+    let shouldSave = false;
+
     setLogs(prevLogs => {
         const existingLogIndex = prevLogs.findIndex(l => l.date === dateStr);
         const currentTasks = tasks;
@@ -293,10 +301,15 @@ export default function App() {
             return prevLogs;
         }
 
-        if (existingLogIndex >= 0 && JSON.stringify(prevLogs[existingLogIndex].tasks) === JSON.stringify(currentTasks)) {
+        // 실제 데이터가 다른지 비교 (깊은 비교)
+        const currentSimp = JSON.stringify(simplifyTasks(currentTasks));
+        const existingSimp = existingLogIndex >= 0 ? JSON.stringify(simplifyTasks(prevLogs[existingLogIndex].tasks)) : null;
+
+        if (existingLogIndex >= 0 && currentSimp === existingSimp) {
             return prevLogs;
         }
 
+        shouldSave = true;
         const newLogs = [...prevLogs];
         if (existingLogIndex >= 0) {
             newLogs[existingLogIndex] = { ...newLogs[existingLogIndex], tasks: currentTasks };
@@ -308,17 +321,17 @@ export default function App() {
         return newLogs;
     });
 
-    if (!isInternalUpdate.current) {
+    if (shouldSave) {
         setHistory(prev => {
             const newHistory = [...prev.slice(0, historyIndex + 1), tasks];
             if (newHistory.length > 50) return newHistory.slice(newHistory.length - 50);
             return newHistory;
         });
         setHistoryIndex(prev => Math.min(prev + 1, 49));
+        
+        lastLocalChange.current = Date.now();
+        saveToSupabase(tasks);
     }
-
-    lastLocalChange.current = Date.now();
-    saveToSupabase(tasks);
     
   }, [tasks, viewDate, localLogsLoaded, currentSpace, saveToSupabase, isSyncLocked]);
 

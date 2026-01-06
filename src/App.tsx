@@ -183,6 +183,7 @@ export default function App() {
   }, [tasks, logs, focusedTaskId]);
 
   useEffect(() => {
+    // --- CRITICAL: DO NOT REMOVE OR MODIFY (VisualViewport Mobile Keyboard Handling) ---
     if (!window.visualViewport) return;
     
     const handleResize = () => {
@@ -498,13 +499,45 @@ export default function App() {
     });
   }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace, selectedTaskIds]);
 
-  const handleMoveDown = useCallback((_taskId: number) => {
-    // Implement handleMoveDown logic if needed
-  }, []);
+  const handleMoveDown = useCallback((taskId: number) => {
+    if (selectedTaskIds.has(taskId)) {
+        setTasks(prev => {
+            const sortedSelectedIndices = Array.from(selectedTaskIds)
+                .map(id => prev.findIndex(t => t.id === id))
+                .filter(idx => idx !== -1)
+                .sort((a, b) => b - a); // Bottom to top
+            
+            if (sortedSelectedIndices.length === 0 || sortedSelectedIndices[0] >= prev.length - 1) return prev;
+            
+            const next = [...prev];
+            for (const idx of sortedSelectedIndices) {
+                [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+            }
+            saveToSupabase(next);
+            return next;
+        });
+        return;
+    }
+
+    setTasks(prev => {
+      const index = prev.findIndex(t => t.id === taskId);
+      if (index !== -1 && index < prev.length - 1) {
+        const newTasks = [...prev];
+        [newTasks[index + 1], newTasks[index]] = [newTasks[index], newTasks[index + 1]];
+        saveToSupabase(newTasks);
+        return newTasks;
+      }
+      return prev;
+    });
+  }, [saveToSupabase, selectedTaskIds]);
 
   const handleDeleteTask = useCallback((taskId: number) => {
     if (window.confirm("Delete this task?")) { 
-        setTasks(prev => prev.filter(t => t.id !== taskId)); 
+        setTasks(prev => {
+            const next = prev.filter(t => t.id !== taskId);
+            saveToSupabase(next);
+            return next;
+        }); 
         setLogs(prevLogs => {
             const newLogs = prevLogs.map(l => ({ ...l, tasks: l.tasks.filter(t => t.id !== taskId) }));
             if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
@@ -512,7 +545,7 @@ export default function App() {
         });
         setFocusedTaskId(null); 
     } 
-  }, [currentSpace]);
+  }, [currentSpace, saveToSupabase]);
 
   const handleCopyTask = useCallback((task: Task) => {
     const text = task.name || task.text || '';
@@ -718,6 +751,7 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // --- CRITICAL: DO NOT REMOVE OR MODIFY (Core Shortcuts: Alt + 1~9, ?) ---
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
       
@@ -899,6 +933,7 @@ export default function App() {
                             <span className="text-4xl font-black text-white leading-none tracking-tight">{completedTasks} <span className="text-gray-600">/</span> <span className="text-gray-500">{totalTasks}</span></span>
                         </div>
                         <div className="text-right flex items-end gap-2">
+                            {/* --- CRITICAL: DO NOT REMOVE OR MODIFY (Top Bar Streak Visibility: ALWAYS visible) --- */}
                             {currentStreak > 1 && (
                                 <div className="flex items-center gap-0.5 mb-0.5">
                                     <Flame size={14} className="text-orange-500 fill-orange-500" />
@@ -942,6 +977,7 @@ export default function App() {
                                       onMoveDown={handleMoveDown} 
                                       onDelete={handleDeleteTask}
                                       onCopy={handleCopyTask}
+                                      showMenuButton={true}
                                   />
                               ))}
                           </SortableContext>
@@ -980,7 +1016,14 @@ export default function App() {
                             setSelectedTaskIds(new Set());
                         }} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Copy size={16} /> Copy</button>
                         <button onClick={() => setShowDatePicker(true)} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Calendar size={16} /> Move</button>
-                        <button onClick={() => { if(confirm(`Delete ${selectedTaskIds.size} tasks?`)) { setTasks(prev => prev.filter(t => !selectedTaskIds.has(t.id))); setSelectedTaskIds(new Set()); } }} className="p-3 hover:bg-white/10 rounded-2xl text-red-500 font-bold text-sm px-4 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
+                        <button onClick={() => { 
+                            if(confirm(`Delete ${selectedTaskIds.size} tasks?`)) { 
+                                const nextTasks = tasks.filter(t => !selectedTaskIds.has(t.id));
+                                setTasks(nextTasks); 
+                                saveToSupabase(nextTasks);
+                                setSelectedTaskIds(new Set()); 
+                            } 
+                        }} className="p-3 hover:bg-white/10 rounded-2xl text-red-500 font-bold text-sm px-4 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
                         <div className="h-8 w-px bg-white/10 mx-1" />
                         <button onClick={() => setSelectedTaskIds(new Set())} className="p-3 hover:bg-white/10 rounded-2xl text-gray-400"><X size={20} /></button>
                      </>
@@ -1003,7 +1046,14 @@ export default function App() {
                           <button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Move to Date"><Calendar size={18} /></button>
                           <button onClick={() => { navigator.clipboard.writeText(activeTask.name || activeTask.text || ''); alert("Copied to clipboard"); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Copy Text"><Copy size={18} /></button>
                           <button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="History"><BarChart2 size={18} /></button>
-                          <button onClick={() => { if (window.confirm("Delete this task?")) { setTasks(prev => prev.filter(t => t.id !== activeTask.id)); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
+                          <button onClick={() => { 
+                              if (window.confirm("Delete this task?")) { 
+                                  const nextTasks = tasks.filter(t => t.id !== activeTask.id);
+                                  setTasks(nextTasks); 
+                                  saveToSupabase(nextTasks);
+                                  setFocusedTaskId(null); 
+                              } 
+                          }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
                       </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 pr-2 flex-shrink-0">

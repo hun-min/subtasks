@@ -1,9 +1,26 @@
-# AI Agent Project Rules
+# Cursor Rules & Project Guidelines
 
-BEFORE PERFORMING ANY ACTIONS IN THIS PROJECT:
-1. ALWAYS read the `AI_INSTRUCTIONS.md` file in the root directory first.
-2. Follow the deployment and UI rules specified in `AI_INSTRUCTIONS.md` with 100% accuracy.
-3. NEVER assume deployment methods (e.g., No Vercel/Firebase) without checking `AI_INSTRUCTIONS.md`.
-4. NEVER change the UI layouts (Streak positions, align-items) without following the strict rules in `AI_INSTRUCTIONS.md`.
+You must follow these rules strictly. This project has critical UI/UX and logic constraints that must not be broken.
 
-This is a strict requirement from the user. Failure to follow these rules will cause critical frustration for the user.
+## 1. Protected Logic (CRITICAL: DO NOT REMOVE OR MODIFY)
+- **Keyboard Shortcuts**: `Alt + 1~9` for space switching and `?` for help modal must be preserved in `src/App.tsx`.
+- **Streak Logic**: The logic calculating and displaying streaks in the calendar and top bar is essential.
+- **VisualViewport API**: Mobile keyboard handling logic using `VisualViewport` in `src/App.tsx` must stay intact to prevent the floating bar from being hidden.
+
+## 2. Mobile UI Policy
+- **Calendar Streak Numbers**: In mobile view, hide the streak number inside calendar cells (keep only the `Flame` icon). Use `hidden md:inline` for the number.
+- **Top Bar Streak Numbers**: Streak numbers in the top bar (statistics area) MUST be visible at all times, including on mobile.
+
+## 3. Mandatory Checklist After UI Modification
+Before finishing any task that modifies UI:
+1. Verify `Alt + 1~9` shortcuts still work.
+2. Verify `?` shortcut still opens the help modal.
+3. Check mobile view: Ensure the floating bar follows the keyboard via `VisualViewport`.
+4. Check mobile view: Ensure the top bar still shows streak numbers, while calendar cells hide them.
+
+## 4. Environment & Deployment
+- Deployment is automated via GitHub Actions on push to `main`.
+- Always run `npm run build` locally to verify before pushing.
+- Never ask the user for deployment instructions or Vercel login.
+
+Refer to `AI_INSTRUCTIONS.md` for more detailed specifications.

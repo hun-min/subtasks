@@ -23,7 +23,8 @@ export const UnifiedTaskItem = React.memo(({
   onMoveUp,
   onMoveDown,
   onDelete,
-  onCopy
+  onCopy,
+  showMenuButton = true
 }: { 
   task: Task, 
   index: number,
@@ -41,7 +42,8 @@ export const UnifiedTaskItem = React.memo(({
   onMoveUp: (taskId: number) => void,
   onMoveDown: (taskId: number) => void,
   onDelete?: (taskId: number) => void,
-  onCopy?: (task: Task) => void
+  onCopy?: (task: Task) => void,
+  showMenuButton?: boolean
 }) => {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
@@ -273,39 +275,41 @@ export const UnifiedTaskItem = React.memo(({
       </div>
       <div className="flex items-center gap-1.5 pt-1.5">
         {task.actTime !== undefined && task.actTime > 0 && <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap">{formatTimeShort(task.actTime)}</span>}
-        <div className="relative" ref={menuRef}>
-          <button 
-            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} 
-            className="p-1 text-gray-600 hover:text-gray-300 transition-colors opacity-0 group-hover:opacity-100 lg:opacity-0"
-          >
-            <MoreVertical size={14} />
-          </button>
-          {showMenu && (
-            <div className="absolute right-0 top-full mt-1 z-[200] bg-[#1a1a1f] border border-white/10 rounded-xl shadow-2xl py-1 min-w-[140px] animate-in fade-in zoom-in duration-100 origin-top-right">
-              <button onClick={() => { onCopy?.(task); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                <Copy size={14} /> Copy
-              </button>
-              <div className="h-px bg-white/5 my-1" />
-              <button onClick={() => { onIndent(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                <ArrowRight size={14} /> Indent
-              </button>
-              <button onClick={() => { onOutdent(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                <ArrowLeft size={14} /> Outdent
-              </button>
-              <div className="h-px bg-white/5 my-1" />
-              <button onClick={() => { onMoveUp(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                <ChevronUp size={14} /> Move Up
-              </button>
-              <button onClick={() => { onMoveDown(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
-                <ChevronDown size={14} /> Move Down
-              </button>
-              <div className="h-px bg-white/5 my-1" />
-              <button onClick={() => { onDelete?.(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-red-500/80 hover:text-red-500 hover:bg-red-500/10 flex items-center gap-2">
-                <Trash2 size={14} /> Delete
-              </button>
-            </div>
-          )}
-        </div>
+        {showMenuButton && (
+          <div className="relative" ref={menuRef}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} 
+              className="p-1 text-gray-600 hover:text-gray-300 transition-colors opacity-0 group-hover:opacity-100 lg:opacity-0"
+            >
+              <MoreVertical size={14} />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-full mt-1 z-[200] bg-[#1a1a1f] border border-white/10 rounded-xl shadow-2xl py-1 min-w-[140px] animate-in fade-in zoom-in duration-100 origin-top-right">
+                <button onClick={() => { onCopy?.(task); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
+                  <Copy size={14} /> Copy
+                </button>
+                <div className="h-px bg-white/5 my-1" />
+                <button onClick={() => { onIndent(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
+                  <ArrowRight size={14} /> Indent
+                </button>
+                <button onClick={() => { onOutdent(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
+                  <ArrowLeft size={14} /> Outdent
+                </button>
+                <div className="h-px bg-white/5 my-1" />
+                <button onClick={() => { onMoveUp(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
+                  <ChevronUp size={14} /> Move Up
+                </button>
+                <button onClick={() => { onMoveDown(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-2">
+                  <ChevronDown size={14} /> Move Down
+                </button>
+                <div className="h-px bg-white/5 my-1" />
+                <button onClick={() => { onDelete?.(task.id); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-xs font-bold text-red-500/80 hover:text-red-500 hover:bg-red-500/10 flex items-center gap-2">
+                  <Trash2 size={14} /> Delete
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

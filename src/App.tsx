@@ -222,13 +222,11 @@ export default function App() {
   const saveToSupabase = useCallback(async (tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
     
-    // 빈 배열 저장 방지
-    if (tasksToSave.length === 0) {
-      // 하지만 서버에 데이터가 이미 있다면 삭제 대신 유지를 위해 로그만 남김
-      console.warn('[SYNC] Aborting save: tasks list is empty. Prevent data loss.');
-      return;
-    }
-
+    // 빈 배열이라도 삭제 요청이면 보내야 함. (빈 배열 저장 방지 로직 제거/수정)
+    // 단, 앱 초기화 시점의 오동작을 막기 위해 tasksToSave가 []일 때, 
+    // 정말 사용자가 다 지운 건지 아니면 로딩 실패인지 구분해야 함.
+    // 여기서는 UI상 Delete 액션을 통해서만 빈 배열이 생성된다고 가정하고 허용.
+    
     const dateStr = viewDate.toDateString();
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
@@ -238,7 +236,7 @@ export default function App() {
           user_id: user.id, 
           space_id: currentSpace.id, 
           date: dateStr, 
-          tasks: tasksToSave, // JSON.stringify 제거 (Supabase SDK가 처리)
+          tasks: tasksToSave, 
           memo: currentMemo
       }, { onConflict: 'user_id,space_id,date' });
       if (error) throw error;
@@ -251,12 +249,7 @@ export default function App() {
   const saveToSupabaseAtDate = useCallback(async (dateStr: string, tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
 
-    // 빈 배열 저장 방지
-    if (tasksToSave.length === 0) {
-      console.warn(`[SYNC] Aborting save for ${dateStr}: tasks list is empty.`);
-      return;
-    }
-
+    // 여기도 마찬가지로 빈 배열 저장 허용
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
     console.log(`[SYNC] Saving to Supabase (TargetDate) for ${dateStr}`, tasksToSave);
@@ -265,7 +258,7 @@ export default function App() {
           user_id: user.id, 
           space_id: currentSpace.id, 
           date: dateStr, 
-          tasks: tasksToSave, // JSON.stringify 제거
+          tasks: tasksToSave, 
           memo: currentMemo
       }, { onConflict: 'user_id,space_id,date' });
       if (error) throw error;
@@ -279,7 +272,6 @@ export default function App() {
   // tasks 상태가 변경되면 이 useEffect가 감지하여 로그를 업데이트하고 저장한다.
   useEffect(() => {
     // 0. 동기화 잠금 상태(날짜 변경 중 등)라면 절대 저장하지 않음.
-    // 이는 날짜 변경 시 이전 날짜 데이터가 새 날짜로 덮어씌워지는 것을 방지하는 핵심.
     if (isSyncLocked) {
         console.log('[SYNC] Sync is locked (date changing?), skipping save.');
         return;
@@ -299,14 +291,11 @@ export default function App() {
         const existingLogIndex = prevLogs.findIndex(l => l.date === dateStr);
         const currentTasks = tasks;
         
-        // 2. 현재 상태가 비어있는데 기존 데이터가 있으면, 
-        // 앱 초기화 단계이거나 데이터 유실 위험이 있으므로 저장을 막음
-        if (currentTasks.length === 0 && existingLogIndex >= 0 && prevLogs[existingLogIndex].tasks.length > 0) {
-            return prevLogs;
-        }
-
+        // 2. [수정] 빈 배열 저장 방지 로직 제거. 
+        // 사용자가 모든 태스크를 지웠을 때([]), 저장이 안 되어서 삭제가 반영 안 되는 문제 해결.
+        // 다만, 최초 로딩 시점의 []와 구분하기 위해 localLogsLoaded 체크는 위에서 이미 수행함.
+        
         // 3. 실제 데이터가 다른지 깊은 비교
-        // 단순히 JSON.stringify를 쓰면 순서 등이 미묘하게 다를 수 있으므로 simplifyTasks 활용
         const currentSimp = JSON.stringify(simplifyTasks(currentTasks));
         const existingSimp = existingLogIndex >= 0 ? JSON.stringify(simplifyTasks(prevLogs[existingLogIndex].tasks)) : null;
 
@@ -314,7 +303,7 @@ export default function App() {
             return prevLogs;
         }
 
-        // 4. 여기까지 왔으면 진짜 사용자가 수동으로 변경한 것임
+        // 4. 여기까지 왔으면 진짜 사용자가 수동으로 변경한 것임 (삭제 포함)
         shouldSave = true;
         const newLogs = [...prevLogs];
         if (existingLogIndex >= 0) {
@@ -336,8 +325,7 @@ export default function App() {
         setHistoryIndex(prev => Math.min(prev + 1, 49));
         
         lastLocalChange.current = Date.now();
-        // saveToSupabase는 내부적으로 viewDate를 참조하므로, 
-        // 현재 tasks 상태가 viewDate와 일치하는지 한 번 더 확인하면 더 안전함.
+        // viewDate 일치 여부 확인 후 저장
         if (dateStr === viewDate.toDateString()) {
              saveToSupabase(tasks);
         }

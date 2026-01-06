@@ -102,17 +102,10 @@ export const FlowView: React.FC<FlowViewProps> = ({
                const dateLabel = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; 
                const streakAtDate = getStreakAtDate(d);
 
-               // Calculate completion percentage excluding empty tasks
-               const activeTasks = log.tasks.filter(t => (t.name || t.text || '').trim() !== '');
-               const dayTotal = activeTasks.length;
-               const dayCompleted = activeTasks.filter(t => t.status === 'completed').length;
-               const dayPercent = dayTotal === 0 ? 0 : Math.round((dayCompleted / dayTotal) * 100);
-
                return (
                <div key={log.date} className="group mb-8 flow-section" data-date={log.date}>
                    <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-sm py-2 px-6 border-b border-white/5 mb-2 flex items-center gap-4 flow-date-header" data-date={log.date}>
                        <h3 className="text-xl font-black text-white">{dateLabel}</h3>
-                       <div className="text-xs font-bold text-[#7c4dff]">{dayPercent}%</div>
                        {streakAtDate > 1 && (
                            <div className="flex items-center gap-0.5 ml-2">
                                <Flame size={14} className="text-orange-500 fill-orange-500" />
@@ -139,22 +132,15 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                    onMergeWithNext={(tid, txt) => onMergeTask(log.date, tid, txt, 'next')} 
                                    onIndent={(tid) => onIndentTask(log.date, tid, 'in')} 
                                    onOutdent={(tid) => onIndentTask(log.date, tid, 'out')} 
-                                   onMoveUp={(tid) => {
-                                       const idx = log.tasks.findIndex(tk => tk.id === tid);
-                                       if (idx > 0) {
+                                   onMoveUp={() => {
+                                       const index = log.tasks.findIndex(t => t.id === focusedTaskId);
+                                       if (index > 0) {
                                            const newTasks = [...log.tasks];
-                                           [newTasks[idx - 1], newTasks[idx]] = [newTasks[idx], newTasks[idx - 1]];
-                                           onUpdateTask(log.date, tid, {});
+                                           [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
+                                           onUpdateTask(log.date, focusedTaskId!, {}); // Trigger update logic via onUpdateTask proxy if needed or direct
                                        }
                                    }} 
-                                   onMoveDown={(tid) => {
-                                       const idx = log.tasks.findIndex(tk => tk.id === tid);
-                                       if (idx !== -1 && idx < log.tasks.length - 1) {
-                                           const newTasks = [...log.tasks];
-                                           [newTasks[idx + 1], newTasks[idx]] = [newTasks[idx], newTasks[idx + 1]];
-                                           onUpdateTask(log.date, tid, {});
-                                       }
-                                   }} 
+                                   onMoveDown={() => {}} 
                                />
                            ))}
                        </SortableContext>

@@ -973,51 +973,6 @@ export default function App() {
     });
   }, [currentSpace, saveToSupabaseAtDate]);
 
-  const handleFixDuplicates = useCallback(() => {
-    if (!confirm("Remove all duplicate tasks? This cannot be undone.")) return;
-
-    setLogs(prevLogs => {
-        let hasChanges = false;
-        const newLogs = prevLogs.map(log => {
-            const seen = new Set();
-            const uniqueTasks: Task[] = [];
-            let logChanged = false;
-
-            log.tasks.forEach(t => {
-                // 중복 기준: 이름과 상태가 같으면 중복으로 간주 (ID 무시)
-                const key = `${(t.name || t.text || '').trim()}|${t.status}`;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    uniqueTasks.push(t);
-                } else {
-                    logChanged = true;
-                }
-            });
-
-            if (logChanged) {
-                hasChanges = true;
-                // 현재 보고 있는 날짜라면 화면도 갱신
-                if (log.date === viewDateRef.current.toDateString()) {
-                    setTasks(uniqueTasks);
-                }
-                // Supabase에 해당 날짜 데이터 저장
-                saveToSupabaseAtDate(log.date, uniqueTasks);
-                return { ...log, tasks: uniqueTasks };
-            }
-            return log;
-        });
-
-        if (hasChanges && currentSpace) {
-            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-            alert("Duplicates removed successfully.");
-            return newLogs;
-        } else {
-            alert("No duplicates found.");
-            return prevLogs;
-        }
-    });
-  }, [currentSpace, saveToSupabaseAtDate]);
-
   return (
     <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
@@ -1031,7 +986,6 @@ export default function App() {
                     <button onClick={() => setViewMode('flow')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
                 </div>
                 <button onClick={() => setViewDate(new Date())} className="text-gray-500 hover:text-white p-1 text-xs font-bold border border-gray-700 rounded px-2">TODAY</button>
-                <button onClick={handleFixDuplicates} className="text-gray-500 hover:text-red-400 p-1 text-[10px] font-bold border border-gray-800 rounded px-2">FIX</button>
                 <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1"><HelpCircle size={18} /></button>
                 <button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button>
             </div>

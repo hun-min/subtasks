@@ -148,6 +148,7 @@ export default function App() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const lastClickedIndex = useRef<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncLocked, setIsSyncLocked] = useState(false);
   const [localLogsLoaded, setLocalLogsLoaded] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -261,7 +262,10 @@ export default function App() {
 
   // --- 핵심: 안정적인 데이터 저장 로직 (LocalStorage 우선) ---
   useEffect(() => {
-    if (!localLogsLoaded || !currentSpace) return;
+    if (!localLogsLoaded || !currentSpace || isSyncLocked) {
+        if (isSyncLocked) console.log('[SYNC] Save blocked: Sync is locked');
+        return;
+    }
     
     if (isInternalUpdate.current) {
         console.log('[SYNC] Skipping local save due to internal update');
@@ -304,7 +308,7 @@ export default function App() {
     // 이펙트에서 직접 Supabase 저장 호출
     saveToSupabase(tasks);
     
-  }, [tasks, viewDate, localLogsLoaded, currentSpace, saveToSupabase]);
+  }, [tasks, viewDate, localLogsLoaded, currentSpace, saveToSupabase, isSyncLocked]);
 
   const handleUpdateTask = useCallback((taskId: number, updates: Partial<Task>) => {
     const isStatusUpdate = 'status' in updates;
@@ -559,6 +563,8 @@ export default function App() {
 
   useEffect(() => {
     if (currentSpace) {
+      console.log(`[SYNC] Date change detected: Locking sync and loading data for ${viewDate.toDateString()}`);
+      setIsSyncLocked(true);
       setLocalLogsLoaded(false);
       setIsLoading(true);
 
@@ -582,22 +588,29 @@ export default function App() {
       
       setLogs(currentLogs);
       
-      if (JSON.stringify(simplifyTasks(tasksRef.current)) !== JSON.stringify(simplifyTasks(log.tasks))) {
-          console.log(`[SYNC] Switching to date ${dateStr}, loading tasks`);
-          isInternalUpdate.current = true;
-          setTasks(log.tasks); 
-          setHistory([log.tasks]); 
-          setHistoryIndex(0); 
-          
-          setTimeout(() => {
-              isInternalUpdate.current = false;
+      const applyTasks = () => {
+          if (JSON.stringify(simplifyTasks(tasksRef.current)) !== JSON.stringify(simplifyTasks(log!.tasks))) {
+              console.log(`[SYNC] Applying tasks for ${dateStr}`);
+              isInternalUpdate.current = true;
+              setTasks(log!.tasks); 
+              setHistory([log!.tasks]); 
+              setHistoryIndex(0); 
+              
+              setTimeout(() => {
+                  isInternalUpdate.current = false;
+                  setIsLoading(false);
+                  setIsSyncLocked(false);
+                  console.log(`[SYNC] Sync unlocked for ${dateStr}`);
+              }, 300); 
+          } else {
               setIsLoading(false);
-          }, 300); 
-      } else {
-          setIsLoading(false);
-      }
-      
-      setLocalLogsLoaded(true);
+              setIsSyncLocked(false);
+              console.log(`[SYNC] Sync unlocked (no task change) for ${dateStr}`);
+          }
+          setLocalLogsLoaded(true);
+      };
+
+      applyTasks();
     }
   }, [currentSpace, viewDate]);
 
@@ -609,6 +622,7 @@ export default function App() {
     const loadFromSupabase = async () => {
       try {
         console.log('[SYNC] Loading from Supabase...');
+        setIsSyncLocked(true); // 서버 로딩 중에도 잠금
         const { data, error } = await supabase
           .from('task_logs')
           .select('*')
@@ -619,6 +633,7 @@ export default function App() {
         // targetDateStr을 렉시컬 환경에서 캡처하여 비교
         if (targetDateStr !== viewDateRef.current.toDateString()) {
             console.log('[SYNC] View date changed during load, aborting');
+            setIsSyncLocked(false);
             return;
         }
 
@@ -656,7 +671,10 @@ export default function App() {
               }
             });
 
-            if (!hasChanges) return prevLogs;
+            if (!hasChanges) {
+                setIsSyncLocked(false);
+                return prevLogs;
+            }
             const mergedLogs = Array.from(logMap.values());
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(mergedLogs));
             
@@ -666,17 +684,26 @@ export default function App() {
                    if (JSON.stringify(simplifyTasks(currentTasks)) !== JSON.stringify(simplifyTasks(currentViewLog.tasks))) {
                        console.log(`[SYNC] Applying server tasks to UI for ${targetDateStr}`);
                        isInternalUpdate.current = true;
-                       setTimeout(() => isInternalUpdate.current = false, 100);
+                       setTimeout(() => {
+                           isInternalUpdate.current = false;
+                           setIsSyncLocked(false);
+                       }, 100);
                        return currentViewLog.tasks;
                    }
+                   setIsSyncLocked(false);
                    return currentTasks;
                });
+            } else {
+                setIsSyncLocked(false);
             }
             return mergedLogs;
           });
+        } else {
+            setIsSyncLocked(false);
         }
       } catch (e) {
         console.error("[SYNC] Supabase load failed:", e);
+        setIsSyncLocked(false);
       }
     };
 
@@ -1004,7 +1031,24 @@ export default function App() {
                   <div>
                       <div className="flex items-center justify-between mb-2 px-6">
                           <div className="flex items-center gap-3">
-                            <button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 }; setTasks(prev => [...prev, n]); setFocusedTaskId(n.id); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
+                            <button onClick={() => { 
+                                const n: Task = { 
+                                    id: Date.now(), 
+                                    name: '', 
+                                    status: 'pending', 
+                                    indent: 0, 
+                                    parent: null, 
+                                    space_id: String(currentSpace?.id || ''), 
+                                    text: '', 
+                                    percent: 0, 
+                                    planTime: 0, 
+                                    actTime: 0, 
+                                    isTimerOn: false, 
+                                    depth: 0 
+                                }; 
+                                setTasks(prev => [...prev, n]); 
+                                setFocusedTaskId(n.id); 
+                            }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
                           </div>
                       </div>
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

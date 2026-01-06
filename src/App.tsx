@@ -280,28 +280,25 @@ export default function App() {
   useEffect(() => {
     if (!localLogsLoaded || !currentSpace || isSyncLocked) return;
     
-    // 내부 업데이트(서버 수신 등)로 인한 변경일 경우 저장을 건너뜀
+    // 1. 내부 업데이트(서버 수신 등) 중이면 절대 저장하지 않음
     if (isInternalUpdate.current) {
-        console.log('[SYNC] Internal update detected, skipping save.');
         return;
     }
 
     const dateStr = viewDate.toDateString();
-    
-    // 현재 tasks 상태와 이전에 저장된 logs의 해당 날짜 tasks를 비교하여
-    // 진짜 변경되었을 때만 setLogs와 저장을 수행
     let shouldSave = false;
 
     setLogs(prevLogs => {
         const existingLogIndex = prevLogs.findIndex(l => l.date === dateStr);
         const currentTasks = tasks;
         
-        // 빈 배열 저장 방지 가이드라인 유지
-        if (currentTasks.length === 0 && (existingLogIndex === -1 || prevLogs[existingLogIndex].tasks.length > 0)) {
+        // 2. 현재 상태가 비어있는데 기존 데이터가 있으면, 
+        // 앱 초기화 단계이거나 데이터 유실 위험이 있으므로 저장을 막음
+        if (currentTasks.length === 0 && existingLogIndex >= 0 && prevLogs[existingLogIndex].tasks.length > 0) {
             return prevLogs;
         }
 
-        // 실제 데이터가 다른지 비교 (깊은 비교)
+        // 3. 실제 데이터가 다른지 깊은 비교
         const currentSimp = JSON.stringify(simplifyTasks(currentTasks));
         const existingSimp = existingLogIndex >= 0 ? JSON.stringify(simplifyTasks(prevLogs[existingLogIndex].tasks)) : null;
 
@@ -309,6 +306,7 @@ export default function App() {
             return prevLogs;
         }
 
+        // 4. 여기까지 왔으면 진짜 사용자가 수동으로 변경한 것임
         shouldSave = true;
         const newLogs = [...prevLogs];
         if (existingLogIndex >= 0) {

@@ -230,7 +230,7 @@ export default function App() {
 
   const saveToSupabase = useCallback(async (tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
-    // if (isLoading) { console.warn('Save blocked due to loading'); return; }
+    
     const dateStr = viewDate.toDateString();
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
@@ -249,7 +249,7 @@ export default function App() {
 
   const saveToSupabaseAtDate = useCallback(async (dateStr: string, tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
-    // if (isLoading) { console.warn('SaveAtDate blocked due to loading'); return; }
+    
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
     try {

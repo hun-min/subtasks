@@ -123,7 +123,18 @@ export default function App() {
 
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   
-  const [viewDate, setViewDate] = useState(new Date());
+  const [viewDate, setRawViewDate] = useState(new Date());
+  const isSwitchingDate = useRef(false);
+
+  const setViewDate = useCallback((newDate: Date | ((prev: Date) => Date)) => {
+      setRawViewDate(prev => {
+          const date = typeof newDate === 'function' ? newDate(prev) : newDate;
+          if (date.getTime() === prev.getTime()) return prev;
+          isSwitchingDate.current = true;
+          setIsLoading(true);
+          return date;
+      });
+  }, []);
 
   useEffect(() => {
       const ids = tasks.map(t => t.id);
@@ -219,6 +230,7 @@ export default function App() {
 
   const saveToSupabase = useCallback(async (tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
+    if (isLoading) { console.warn('Save blocked due to loading'); return; }
     const dateStr = viewDate.toDateString();
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
@@ -237,10 +249,11 @@ export default function App() {
 
   const saveToSupabaseAtDate = useCallback(async (dateStr: string, tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
+    if (isLoading) { console.warn('SaveAtDate blocked due to loading'); return; }
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
     try {
-      await supabase.from('task_logs').upsert({ 
+      await supabase.from('task_logs').upsert({  
           user_id: user.id, 
           space_id: currentSpace.id, 
           date: dateStr, 
@@ -253,7 +266,7 @@ export default function App() {
   }, [user, currentSpace]);
 
   useEffect(() => {
-    if (!localLogsLoaded || !currentSpace) return;
+    if (!localLogsLoaded || !currentSpace || isLoading) return;
     
     const dateStr = viewDate.toDateString();
     
@@ -617,7 +630,10 @@ export default function App() {
       }
       
       setLocalLogsLoaded(true);
-      setTimeout(() => setIsLoading(false), 50);
+      setTimeout(() => {
+          setIsLoading(false);
+          isSwitchingDate.current = false;
+      }, 50);
     }
   }, [currentSpace, viewDate]);
 

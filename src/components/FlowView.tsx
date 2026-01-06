@@ -139,15 +139,22 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                    onMergeWithNext={(tid, txt) => onMergeTask(log.date, tid, txt, 'next')} 
                                    onIndent={(tid) => onIndentTask(log.date, tid, 'in')} 
                                    onOutdent={(tid) => onIndentTask(log.date, tid, 'out')} 
-                                   onMoveUp={() => {
-                                       const index = log.tasks.findIndex(t => t.id === focusedTaskId);
-                                       if (index > 0) {
+                                   onMoveUp={(tid) => {
+                                       const idx = log.tasks.findIndex(tk => tk.id === tid);
+                                       if (idx > 0) {
                                            const newTasks = [...log.tasks];
-                                           [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
-                                           onUpdateTask(log.date, focusedTaskId!, {}); // Trigger update logic via onUpdateTask proxy if needed or direct
+                                           [newTasks[idx - 1], newTasks[idx]] = [newTasks[idx], newTasks[idx - 1]];
+                                           onUpdateTask(log.date, tid, {});
                                        }
                                    }} 
-                                   onMoveDown={() => {}} 
+                                   onMoveDown={(tid) => {
+                                       const idx = log.tasks.findIndex(tk => tk.id === tid);
+                                       if (idx !== -1 && idx < log.tasks.length - 1) {
+                                           const newTasks = [...log.tasks];
+                                           [newTasks[idx + 1], newTasks[idx]] = [newTasks[idx], newTasks[idx + 1]];
+                                           onUpdateTask(log.date, tid, {});
+                                       }
+                                   }} 
                                />
                            ))}
                        </SortableContext>

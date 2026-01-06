@@ -591,7 +591,6 @@ export default function App() {
           }));
 
           setLogs(prevLogs => {
-            const targetDateStr = viewDateRef.current.toDateString();
             const logMap = new Map(prevLogs.map(l => [l.date, l]));
             let hasChanges = false;
             
@@ -845,6 +844,98 @@ export default function App() {
       });
   }, [currentSpace, saveToSupabaseAtDate]);
 
+  const handleAddTaskAtCursorInFlow = useCallback((date: string, taskId: number, textBefore: string, textAfter: string) => {
+    setLogs(prevLogs => {
+        const newLogs = [...prevLogs];
+        const logIndex = newLogs.findIndex(l => l.date === date);
+        if (logIndex >= 0) {
+            const currentTasks = [...newLogs[logIndex].tasks];
+            const idx = currentTasks.findIndex(t => t.id === taskId);
+            if (idx !== -1) {
+                const current = currentTasks[idx];
+                const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
+                    id: Date.now() + i, name: line.trim(), status: 'pending', indent: current.indent, parent: current.parent, text: line.trim(),
+                    percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: current.depth || 0, space_id: String(currentSpace?.id || ''),
+                }));
+                currentTasks[idx] = { ...current, name: textBefore, text: textBefore };
+                currentTasks.splice(idx + 1, 0, ...newTasksToAdd);
+                newLogs[logIndex].tasks = currentTasks;
+                
+                if (date === viewDateRef.current.toDateString()) setTasks(currentTasks);
+                if (newTasksToAdd.length > 0) setFocusedTaskId(newTasksToAdd[0].id);
+                
+                if(currentSpace) {
+                    localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                    saveToSupabaseAtDate(date, currentTasks);
+                }
+            }
+        }
+        return newLogs;
+    });
+  }, [currentSpace, saveToSupabaseAtDate]);
+
+  const handleMergeTaskInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
+    setLogs(prevLogs => {
+        const newLogs = [...prevLogs];
+        const logIndex = newLogs.findIndex(l => l.date === date);
+        if (logIndex >= 0) {
+            const currentTasks = [...newLogs[logIndex].tasks];
+            const idx = currentTasks.findIndex(t => t.id === taskId);
+            if (idx === -1) return prevLogs;
+
+            if (direction === 'prev') {
+                if (idx > 0) {
+                    const prevTask = currentTasks[idx - 1];
+                    const newPos = (prevTask.name || '').length;
+                    currentTasks[idx - 1] = { ...prevTask, name: (prevTask.name || '') + (currentText || ''), text: (prevTask.text || '') + (currentText || '') };
+                    currentTasks.splice(idx, 1);
+                    setFocusedTaskId(prevTask.id);
+                    (window as any).__restoreCursorPos = newPos;
+                } else {
+                    currentTasks.splice(idx, 1);
+                    setFocusedTaskId(null);
+                }
+            } else {
+                if (idx < currentTasks.length - 1) {
+                    const nextTask = currentTasks[idx + 1];
+                    currentTasks[idx] = { ...currentTasks[idx], name: (currentTasks[idx].name || '') + (nextTask.name || ''), text: (currentTasks[idx].text || '') + (nextTask.text || '') };
+                    currentTasks.splice(idx + 1, 1);
+                }
+            }
+            newLogs[logIndex].tasks = currentTasks;
+            if (date === viewDateRef.current.toDateString()) setTasks(currentTasks);
+            if(currentSpace) {
+                localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                saveToSupabaseAtDate(date, currentTasks);
+            }
+        }
+        return newLogs;
+    });
+  }, [currentSpace, saveToSupabaseAtDate]);
+
+  const handleIndentTaskInFlow = useCallback((date: string, taskId: number, direction: 'in' | 'out') => {
+    setLogs(prevLogs => {
+        const newLogs = [...prevLogs];
+        const logIndex = newLogs.findIndex(l => l.date === date);
+        if (logIndex >= 0) {
+            const currentTasks = newLogs[logIndex].tasks.map(t => {
+                if (t.id === taskId) {
+                    const depth = t.depth || 0;
+                    return { ...t, depth: direction === 'in' ? depth + 1 : Math.max(0, depth - 1) };
+                }
+                return t;
+            });
+            newLogs[logIndex].tasks = currentTasks;
+            if (date === viewDateRef.current.toDateString()) setTasks(currentTasks);
+            if(currentSpace) {
+                localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                saveToSupabaseAtDate(date, currentTasks);
+            }
+        }
+        return newLogs;
+    });
+  }, [currentSpace, saveToSupabaseAtDate]);
+
   return (
     <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
@@ -999,9 +1090,9 @@ export default function App() {
                 logs={logs} 
                 currentSpaceId={String(currentSpace?.id || '')} 
                 onUpdateTask={handleUpdateTaskInFlow} 
-                onAddTask={() => {}} // simplified
-                onMergeTask={() => {}} // simplified
-                onIndentTask={() => {}} // simplified
+                onAddTask={handleAddTaskAtCursorInFlow} 
+                onMergeTask={handleMergeTaskInFlow} 
+                onIndentTask={handleIndentTaskInFlow} 
                 setFocusedTaskId={setFocusedTaskId}
                 focusedTaskId={focusedTaskId}
                 onViewDateChange={setViewDate}

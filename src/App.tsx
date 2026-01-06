@@ -648,7 +648,7 @@ export default function App() {
     
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
-        // space_id가 일치하는지 확인
+        // payload.new가 있고, space_id가 일치하는지 확인
         if (payload.new && payload.new.space_id === currentSpace.id) {
           const serverLog = { 
             date: payload.new.date, 
@@ -658,31 +658,32 @@ export default function App() {
           if (serverLog.date === 'SETTINGS') return;
           
           const targetDateStr = viewDateRef.current.toDateString();
-          // 현재 보고 있는 날짜와 일치할 때만 tasks 상태를 업데이트
-          if (serverLog.date === targetDateStr) {
-              const currentSimplified = JSON.stringify(simplifyTasks(tasksRef.current));
-              const serverSimplified = JSON.stringify(simplifyTasks(serverLog.tasks));
-              
-              if (currentSimplified !== serverSimplified) {
+          
+          // 로컬 데이터(tasks)와 서버 데이터 비교
+          const currentSimplified = JSON.stringify(simplifyTasks(tasksRef.current));
+          const serverSimplified = JSON.stringify(simplifyTasks(serverLog.tasks));
+          
+          // 데이터가 다를 때만 처리
+          if (currentSimplified !== serverSimplified) {
+              // 현재 보고 있는 날짜라면 tasks 상태 업데이트
+              if (serverLog.date === targetDateStr) {
                   isInternalUpdate.current = true;
                   setTasks(serverLog.tasks);
-                  setTimeout(() => { isInternalUpdate.current = false; }, 100);
+                  // 플래그 해제 타이밍을 조금 늦춤
+                  setTimeout(() => { isInternalUpdate.current = false; }, 200);
               }
-          }
-          
-          // 전체 로그(logs) 상태 업데이트
-          setLogs(prev => {
-             const idx = prev.findIndex(l => l.date === serverLog.date);
-             const newLogs = idx >= 0 ? [...prev] : [...prev, serverLog];
-             if (idx >= 0) {
-                 if (JSON.stringify(simplifyTasks(prev[idx].tasks)) === JSON.stringify(simplifyTasks(serverLog.tasks))) {
-                     return prev;
+              
+              // 전체 로그(logs) 상태 및 LocalStorage 업데이트
+              setLogs(prev => {
+                 const idx = prev.findIndex(l => l.date === serverLog.date);
+                 const newLogs = idx >= 0 ? [...prev] : [...prev, serverLog];
+                 if (idx >= 0) {
+                     newLogs[idx] = serverLog;
                  }
-                 newLogs[idx] = serverLog;
-             }
-             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-             return newLogs;
-          });
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 return newLogs;
+              });
+          }
         }
       }).subscribe();
       

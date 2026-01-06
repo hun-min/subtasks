@@ -102,10 +102,17 @@ export const FlowView: React.FC<FlowViewProps> = ({
                const dateLabel = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; 
                const streakAtDate = getStreakAtDate(d);
 
+               // Calculate completion percentage excluding empty tasks
+               const activeTasks = log.tasks.filter(t => (t.name || t.text || '').trim() !== '');
+               const dayTotal = activeTasks.length;
+               const dayCompleted = activeTasks.filter(t => t.status === 'completed').length;
+               const dayPercent = dayTotal === 0 ? 0 : Math.round((dayCompleted / dayTotal) * 100);
+
                return (
                <div key={log.date} className="group mb-8 flow-section" data-date={log.date}>
                    <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-sm py-2 px-6 border-b border-white/5 mb-2 flex items-center gap-4 flow-date-header" data-date={log.date}>
                        <h3 className="text-xl font-black text-white">{dateLabel}</h3>
+                       <div className="text-xs font-bold text-[#7c4dff]">{dayPercent}%</div>
                        {streakAtDate > 1 && (
                            <div className="flex items-center gap-0.5 ml-2">
                                <Flame size={14} className="text-orange-500 fill-orange-500" />

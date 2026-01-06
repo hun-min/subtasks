@@ -253,9 +253,16 @@ export default function App() {
     }
   }, [user, currentSpace]);
 
+  // --- 핵심: 안정적인 데이터 저장 로직 (LocalStorage 우선) ---
   useEffect(() => {
     if (!localLogsLoaded || !currentSpace) return;
     
+    // 이펙트 실행 시점의 tasks가 현재 날짜의 tasks임을 보장하기 위해
+    // viewDate가 변경된 직후라면 tasks가 아직 구형(이전 날짜)일 수 있음.
+    // 따라서 viewDate 변경 직후에 tasks를 설정하는 로직과 충돌하지 않도록
+    // isInternalUpdate.current가 true일 때는 저장을 건너뜀 (이미 초기화 중이므로)
+    if (isInternalUpdate.current) return;
+
     const dateStr = viewDate.toDateString();
     
     setLogs(prevLogs => {
@@ -533,8 +540,9 @@ export default function App() {
 
   useEffect(() => {
     if (currentSpace) {
-      // Don't set isLoading(true) here if we already have tasks for this space
-      // to avoid blank screen flicker.
+      setLocalLogsLoaded(false);
+      setIsLoading(true);
+
       const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let currentLogs: DailyLog[] = [];
       if (saved) { 
@@ -547,45 +555,41 @@ export default function App() {
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
       
-      // If we don't have local logs yet, then show loading
-      if (!saved) {
-          setIsLoading(true);
-      }
-
       if (!log) {
         log = { date: dateStr, tasks: [], memo: '' };
         currentLogs.push(log);
         localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(currentLogs));
       }
       
-      const corrupted = log.tasks.filter(t => !t.name && !t.text);
-      if (corrupted.length > 0) {
-          log.tasks = log.tasks.filter(t => t.name || t.text);
-      }
-
       setLogs(currentLogs);
       
       const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth }));
       if (JSON.stringify(simplify(tasksRef.current)) !== JSON.stringify(simplify(log.tasks))) {
+          // CRITICAL: 날짜 변경 시 tasks를 업데이트하기 전에 플래그를 설정하여 
+          // 이전 날짜의 tasks가 이 날짜로 저장되는 것을 확실히 방지
           isInternalUpdate.current = true;
           setTasks(log.tasks); 
           setHistory([log.tasks]); 
           setHistoryIndex(0); 
-          setTimeout(() => isInternalUpdate.current = false, 100);
+          
+          setTimeout(() => {
+              isInternalUpdate.current = false;
+              setIsLoading(false);
+          }, 300); 
+      } else {
+          setIsLoading(false);
       }
       
       setLocalLogsLoaded(true);
-      // If it was loading, turn it off after a small delay
-      setTimeout(() => setIsLoading(false), 50);
     }
   }, [currentSpace, viewDate]);
 
   useEffect(() => {
     if (!user || !currentSpace) return;
     
+    const targetDateStr = viewDateRef.current.toDateString();
+    
     const loadFromSupabase = async () => {
-      const targetDateStr = viewDateRef.current.toDateString();
-      
       try {
         const { data, error } = await supabase
           .from('task_logs')
@@ -594,6 +598,7 @@ export default function App() {
           .eq('space_id', currentSpace.id);
 
         if (error) return;
+        // targetDateStr을 렉시컬 환경에서 캡처하여 비교
         if (targetDateStr !== viewDateRef.current.toDateString()) return;
 
         if (data && data.length > 0) {
@@ -613,18 +618,16 @@ export default function App() {
               if (serverLog.date === 'SETTINGS') return;
               const localLog = logMap.get(serverLog.date);
               
+              const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth }));
               if (!localLog || (localLog.tasks.length === 0 && serverLog.tasks.length > 0)) {
                 logMap.set(serverLog.date, serverLog);
                 hasChanges = true;
-              } else {
-                  const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth }));
-                  if (JSON.stringify(simplify(localLog.tasks)) !== JSON.stringify(simplify(serverLog.tasks))) {
-                      // Only update if server has data AND local is different
-                      // If server is empty but local has data, we might be in the middle of a save, so be careful.
-                      // But here serverLogs come from database, if server has it, it's the truth.
-                      logMap.set(serverLog.date, serverLog);
-                      hasChanges = true;
-                  }
+              } else if (JSON.stringify(simplify(localLog.tasks)) !== JSON.stringify(simplify(serverLog.tasks))) {
+                  // 현재 보고 있는 날짜이고 최근 변경이 있었다면 서버 데이터를 무시 (2초 보호)
+                  if (serverLog.date === targetDateStr && Date.now() - lastLocalChange.current < 2000) return;
+                  
+                  logMap.set(serverLog.date, serverLog);
+                  hasChanges = true;
               }
             });
 
@@ -632,16 +635,10 @@ export default function App() {
             const mergedLogs = Array.from(logMap.values());
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(mergedLogs));
             
-            if (targetDateStr !== viewDateRef.current.toDateString()) return prevLogs;
-            const currentViewLog = mergedLogs.find(l => l.date === viewDateRef.current.toDateString());
-            if (currentViewLog) {
+            const currentViewLog = mergedLogs.find(l => l.date === targetDateStr);
+            if (currentViewLog && viewDateRef.current.toDateString() === targetDateStr) {
                setTasks(currentTasks => {
-                   if (targetDateStr !== viewDateRef.current.toDateString()) return currentTasks;
                    const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth }));
-                   
-                   // CRITICAL: Avoid overwriting if local change was very recent
-                   if (Date.now() - lastLocalChange.current < 2000) return currentTasks;
-
                    if (JSON.stringify(simplify(currentTasks)) !== JSON.stringify(simplify(currentViewLog.tasks))) {
                        isInternalUpdate.current = true;
                        setTimeout(() => isInternalUpdate.current = false, 100);
@@ -662,15 +659,20 @@ export default function App() {
     
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
+        // --- 2초 보호 로직 ---
         if (Date.now() - lastLocalChange.current < 2000) return;
+
         if (payload.new && payload.new.space_id === currentSpace.id) {
           const serverLog = { date: payload.new.date, tasks: migrateTasks(JSON.parse(payload.new.tasks)), memo: payload.new.memo };
           if (serverLog.date === 'SETTINGS') return;
-          if (serverLog.date === viewDateRef.current.toDateString()) {
+          
+          const targetDateStr = viewDateRef.current.toDateString();
+          if (serverLog.date === targetDateStr) {
               isInternalUpdate.current = true;
-              setTasks(prev => serverLog.date === viewDateRef.current.toDateString() ? serverLog.tasks : prev);
+              setTasks(serverLog.tasks);
               setTimeout(() => isInternalUpdate.current = false, 100);
           }
+          
           setLogs(prev => {
              const idx = prev.findIndex(l => l.date === serverLog.date);
              const newLogs = idx >= 0 ? [...prev] : [...prev, serverLog];
@@ -790,8 +792,11 @@ export default function App() {
   const currentLog = logs.find(l => l.date === viewDate.toDateString());
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  
+  // 완료율 계산 로직 수정: 내용이 없는 빈 항목은 제외합니다.
+  const activeTasks = tasks.filter(t => (t.name || t.text || '').trim() !== '');
+  const totalTasks = activeTasks.length;
+  const completedTasks = activeTasks.filter(t => t.status === 'completed').length;
   const progressPercent = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
   const getStreakAtDate = useCallback((currentDate: Date) => {
@@ -905,6 +910,13 @@ export default function App() {
                        };
                         const streakCount = getStreak(d);
                         const isOtherMonth = d.getMonth() !== month;
+                        
+                        // 캘린더 내부 완료율 계산 시에도 빈 항목 제외 로직 적용
+                        const dayActiveTasks = l?.tasks.filter(t => (t.name || t.text || '').trim() !== '') || [];
+                        const dayTotal = dayActiveTasks.length;
+                        const dayCompleted = dayActiveTasks.filter(t => t.status === 'completed').length;
+                        const dayPercent = dayTotal === 0 ? 0 : Math.round((dayCompleted / dayTotal) * 100);
+
                         let btnClass = "h-11 rounded-xl text-xs flex flex-col items-center justify-center relative transition-all border-2 w-full ";
                         if (isSelected) btnClass += "border-[#7c4dff] z-10 "; else btnClass += "border-transparent ";
                         if (isToday) btnClass += "ring-2 ring-inset ring-blue-500 ";
@@ -929,7 +941,7 @@ export default function App() {
                                       <span className="text-[9px] font-black text-white hidden md:inline">{streakCount}</span>
                                  </div>
                              )}
-                             {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : hasCompleted ? 'text-white/90' : 'text-gray-500'}`}>{Math.round((l.tasks.filter(t => t.status === 'completed').length / l.tasks.length) * 100)}%</div>}
+                             {l && l.tasks.length > 0 && <div className={`mt-0.5 text-[9px] font-black ${isSelected ? 'text-white/80' : hasCompleted ? 'text-white/90' : 'text-gray-500'}`}>{dayPercent}%</div>}
                            </button>
                          </div>
                         );
@@ -1073,7 +1085,7 @@ export default function App() {
         )}
         {showDatePicker && (activeTask || selectedTaskIds.size > 0) && (
           <div className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowDatePicker(false)}>
-            <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-sm" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
                 <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>

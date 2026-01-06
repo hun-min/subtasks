@@ -86,6 +86,7 @@ export const UnifiedTaskItem = React.memo(({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const taskName = task.name || task.text || '';
     
+    // Suggestions navigation
     if (suggestions.length > 0) {
         if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
         if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
@@ -100,42 +101,52 @@ export const UnifiedTaskItem = React.memo(({
         }
     }
 
-    if (e.key === 'ArrowUp' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
-        const cursor = textareaRef.current?.selectionStart || 0;
-        const value = task.name || task.text || '';
-        const lineIndex = value.substring(0, cursor).split('\n').length - 1;
+    // Arrow keys handling (Reordering vs Navigation)
+    if (e.key === 'ArrowUp') {
+        if (e.altKey || e.ctrlKey) {
+            e.preventDefault();
+            onMoveUp(task.id);
+            return;
+        }
         
-        if (lineIndex === 0) {
-             if (cursor > 0) {
-                 e.preventDefault();
-                 if (textareaRef.current) {
-                    textareaRef.current.setSelectionRange(0, 0);
-                 }
-             } else {
+        // Navigation between tasks
+        if (!e.shiftKey && !e.metaKey) {
+            const cursor = textareaRef.current?.selectionStart || 0;
+            const value = task.name || task.text || '';
+            const valueBeforeCursor = value.substring(0, cursor);
+            const lineIndex = valueBeforeCursor.split('\n').length - 1;
+            
+            // If on the first line, move to previous task regardless of horizontal position
+            if (lineIndex === 0) {
                  e.preventDefault();
                  onFocusPrev?.(task.id);
-             }
-             return;
+                 return;
+            }
+            // Otherwise allow default behavior (moving cursor within text)
         }
     }
 
-    if (e.key === 'ArrowDown' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
-        const cursor = textareaRef.current?.selectionStart || 0;
-        const value = task.name || task.text || '';
-        const lines = value.split('\n');
-        const currentLineIndex = value.substring(0, cursor).split('\n').length - 1;
-        
-        if (currentLineIndex === lines.length - 1) {
-             if (cursor < value.length) {
-                 e.preventDefault();
-                 if (textareaRef.current) {
-                    textareaRef.current.setSelectionRange(value.length, value.length);
-                 }
-             } else {
+    if (e.key === 'ArrowDown') {
+        if (e.altKey || e.ctrlKey) {
+            e.preventDefault();
+            onMoveDown(task.id);
+            return;
+        }
+
+        // Navigation between tasks
+        if (!e.shiftKey && !e.metaKey) {
+            const cursor = textareaRef.current?.selectionStart || 0;
+            const value = task.name || task.text || '';
+            const lines = value.split('\n');
+            const currentLineIndex = value.substring(0, cursor).split('\n').length - 1;
+            
+            // If on the last line, move to next task
+            if (currentLineIndex === lines.length - 1) {
                  e.preventDefault();
                  onFocusNext?.(task.id);
-             }
-             return;
+                 return;
+            }
+            // Otherwise allow default behavior
         }
     }
 
@@ -197,19 +208,7 @@ export const UnifiedTaskItem = React.memo(({
       return; 
     }
     
-    // Alt or Ctrl + Arrows for reordering
-    if (e.altKey || e.ctrlKey) {
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            onMoveUp(task.id);
-            return;
-        }
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            onMoveDown(task.id);
-            return;
-        }
-    }
+    // Alt or Ctrl + Arrows for reordering logic is now handled in the main arrow key blocks above
     
     // Ctrl + Space: Toggle Completion
     if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) { 

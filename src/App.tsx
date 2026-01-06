@@ -512,9 +512,56 @@ export default function App() {
     });
   }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace, selectedTaskIds]);
 
-  const handleMoveDown = useCallback((_taskId: number) => {
-    // Implement handleMoveDown logic if needed
-  }, []);
+  const handleMoveDown = useCallback((taskId: number) => {
+    if (selectedTaskIds.has(taskId)) {
+        setTasks(prev => {
+            const sortedSelectedIndices = Array.from(selectedTaskIds)
+                .map(id => prev.findIndex(t => t.id === id))
+                .filter(idx => idx !== -1)
+                .sort((a, b) => b - a); // Reverse sort for moving down
+            
+            if (sortedSelectedIndices.length === 0 || sortedSelectedIndices[0] >= prev.length - 1) return prev;
+            
+            const next = [...prev];
+            for (const idx of sortedSelectedIndices) {
+                if (idx < next.length - 1) {
+                    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                }
+            }
+            saveToSupabase(next);
+            return next;
+        });
+        return;
+    }
+
+    setTasks(prev => {
+      const index = prev.findIndex(t => t.id === taskId);
+      if (index !== -1 && index < prev.length - 1) {
+        const newTasks = [...prev];
+        [newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]];
+        saveToSupabase(newTasks);
+        return newTasks;
+      }
+      return prev;
+    });
+    
+    setLogs(prevLogs => {
+      const newLogs = [...prevLogs];
+      const logWithTask = newLogs.find(l => l.tasks.some(t => t.id === taskId));
+      if (logWithTask && logWithTask.date !== viewDate.toDateString()) {
+        const index = logWithTask.tasks.findIndex(t => t.id === taskId);
+        if (index !== -1 && index < logWithTask.tasks.length - 1) {
+          const newTasks = [...logWithTask.tasks];
+          [newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]];
+          logWithTask.tasks = newTasks;
+          saveToSupabaseAtDate(logWithTask.date, newTasks);
+          if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+          return newLogs;
+        }
+      }
+      return prevLogs;
+    });
+  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace, selectedTaskIds]);
 
   const handleDeleteTask = useCallback((taskId: number) => {
     if (window.confirm("Delete this task?")) { 

@@ -193,6 +193,32 @@ export const UnifiedTaskItem = React.memo(({
       updateTask(task.id, { status: newStatus, isTimerOn: false }); 
     }
     
+    // Arrow Navigation between tasks
+    if (e.key === 'ArrowUp' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        if (textareaRef.current && textareaRef.current.selectionStart === 0 && textareaRef.current.selectionEnd === 0) {
+            e.preventDefault();
+            const parentElement = textareaRef.current.closest('[data-handler-id]') || textareaRef.current.closest('.group');
+            const prevElement = parentElement?.previousElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
+            if (prevElement) {
+                const pos = prevElement.value.length;
+                (window as any).__restoreCursorPos = pos;
+                prevElement.focus();
+            }
+        }
+    }
+    
+    if (e.key === 'ArrowDown' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        if (textareaRef.current && textareaRef.current.selectionStart === taskName.length && textareaRef.current.selectionEnd === taskName.length) {
+            e.preventDefault();
+            const parentElement = textareaRef.current.closest('[data-handler-id]') || textareaRef.current.closest('.group');
+            const nextElement = parentElement?.nextElementSibling?.querySelector('textarea') as HTMLTextAreaElement;
+            if (nextElement) {
+                (window as any).__restoreCursorPos = 0;
+                nextElement.focus();
+            }
+        }
+    }
+    
     // Shift + Space: Toggle Timer
     if (e.shiftKey && (e.key === ' ' || e.code === 'Space')) {
       e.preventDefault();

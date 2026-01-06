@@ -554,7 +554,8 @@ export default function App() {
 
   useEffect(() => {
     if (currentSpace) {
-      setLocalLogsLoaded(false);
+      // Don't set isLoading(true) here if we already have tasks for this space
+      // to avoid blank screen flicker.
       const saved = localStorage.getItem(`ultra_tasks_space_${currentSpace.id}`);
       let currentLogs: DailyLog[] = [];
       if (saved) { 
@@ -566,6 +567,12 @@ export default function App() {
       }
       const dateStr = viewDate.toDateString();
       let log = currentLogs.find(l => l.date === dateStr);
+      
+      // If we don't have local logs yet, then show loading
+      if (!saved) {
+          setIsLoading(true);
+      }
+
       if (!log) {
         log = { date: dateStr, tasks: [], memo: '' };
         currentLogs.push(log);
@@ -589,6 +596,7 @@ export default function App() {
       }
       
       setLocalLogsLoaded(true);
+      // If it was loading, turn it off after a small delay
       setTimeout(() => setIsLoading(false), 50);
     }
   }, [currentSpace, viewDate]);
@@ -632,6 +640,9 @@ export default function App() {
               } else {
                   const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth }));
                   if (JSON.stringify(simplify(localLog.tasks)) !== JSON.stringify(simplify(serverLog.tasks))) {
+                      // Only update if server has data AND local is different
+                      // If server is empty but local has data, we might be in the middle of a save, so be careful.
+                      // But here serverLogs come from database, if server has it, it's the truth.
                       logMap.set(serverLog.date, serverLog);
                       hasChanges = true;
                   }
@@ -648,6 +659,10 @@ export default function App() {
                setTasks(currentTasks => {
                    if (targetDateStr !== viewDateRef.current.toDateString()) return currentTasks;
                    const simplify = (ts: Task[]) => ts.map(t => ({ id: t.id, name: t.name, status: t.status, depth: t.depth }));
+                   
+                   // CRITICAL: Avoid overwriting if local change was very recent
+                   if (Date.now() - lastLocalChange.current < 2000) return currentTasks;
+
                    if (JSON.stringify(simplify(currentTasks)) !== JSON.stringify(simplify(currentViewLog.tasks))) {
                        isInternalUpdate.current = true;
                        setTimeout(() => isInternalUpdate.current = false, 100);
@@ -818,27 +833,41 @@ export default function App() {
   const handleMoveSelectedToDate = useCallback((targetDate: string) => {
     const selectedTasks = tasks.filter(t => selectedTaskIds.has(t.id));
     if (selectedTasks.length === 0) return;
+    
+    // Optimistically update local state
     setTasks(prev => {
         const next = prev.filter(t => !selectedTaskIds.has(t.id));
-        saveToSupabase(next);
         return next;
     });
+
     setLogs(prev => {
         const newLogs = [...prev];
         const targetLogIndex = newLogs.findIndex(l => l.date === targetDate);
+        let updatedTasksForTarget: Task[] = [];
+        
         if (targetLogIndex >= 0) {
-            newLogs[targetLogIndex].tasks = [...newLogs[targetLogIndex].tasks, ...selectedTasks];
-            saveToSupabaseAtDate(targetDate, newLogs[targetLogIndex].tasks);
+            updatedTasksForTarget = [...newLogs[targetLogIndex].tasks, ...selectedTasks];
+            newLogs[targetLogIndex] = { ...newLogs[targetLogIndex], tasks: updatedTasksForTarget };
         } else {
-            newLogs.push({ date: targetDate, tasks: selectedTasks, memo: '' });
-            saveToSupabaseAtDate(targetDate, selectedTasks);
+            updatedTasksForTarget = selectedTasks;
+            newLogs.push({ date: targetDate, tasks: updatedTasksForTarget, memo: '' });
         }
-        if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+        
+        if (currentSpace) {
+            localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+        }
+
+        // Trigger Supabase saves
+        const currentTasksAfterRemoval = tasksRef.current.filter(t => !selectedTaskIds.has(t.id));
+        saveToSupabase(currentTasksAfterRemoval);
+        saveToSupabaseAtDate(targetDate, updatedTasksForTarget);
+        
         return newLogs;
     });
+
     setSelectedTaskIds(new Set());
     setShowDatePicker(false);
-  }, [tasks, selectedTaskIds, currentSpace, saveToSupabase, saveToSupabaseAtDate]);
+  }, [selectedTaskIds, currentSpace, saveToSupabase, saveToSupabaseAtDate]);
 
   const handleUpdateTaskInFlow = useCallback((date: string, taskId: number, updates: Partial<Task>) => {
       setLogs(prevLogs => {

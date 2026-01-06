@@ -221,6 +221,13 @@ export default function App() {
 
   const saveToSupabase = useCallback(async (tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
+    
+    // 빈 배열 저장 방지
+    if (tasksToSave.length === 0) {
+      console.warn('[SYNC] Aborting save: tasks list is empty. Prevent data loss.');
+      return;
+    }
+
     const dateStr = viewDate.toDateString();
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
@@ -242,6 +249,13 @@ export default function App() {
 
   const saveToSupabaseAtDate = useCallback(async (dateStr: string, tasksToSave: Task[]) => {
     if (!user || !currentSpace) return;
+
+    // 빈 배열 저장 방지
+    if (tasksToSave.length === 0) {
+      console.warn(`[SYNC] Aborting save for ${dateStr}: tasks list is empty.`);
+      return;
+    }
+
     const currentMemo = logsRef.current.find(l => l.date === dateStr)?.memo || '';
     
     console.log(`[SYNC] Saving to Supabase (TargetDate) for ${dateStr}`, tasksToSave);
@@ -260,17 +274,12 @@ export default function App() {
     }
   }, [user, currentSpace]);
 
-  // --- 핵심: 안정적인 데이터 저장 로직 (LocalStorage 우선) ---
+  // --- 핵심: 안정적인 데이터 저장 로직 ---
+  // tasks 상태가 변경되면 이 useEffect가 감지하여 로그를 업데이트하고 저장한다.
   useEffect(() => {
-    if (!localLogsLoaded || !currentSpace || isSyncLocked) {
-        if (isSyncLocked) console.log('[SYNC] Save blocked: Sync is locked');
-        return;
-    }
+    if (!localLogsLoaded || !currentSpace || isSyncLocked) return;
     
-    if (isInternalUpdate.current) {
-        console.log('[SYNC] Skipping local save due to internal update');
-        return;
-    }
+    if (isInternalUpdate.current) return;
 
     const dateStr = viewDate.toDateString();
     
@@ -278,11 +287,15 @@ export default function App() {
         const existingLogIndex = prevLogs.findIndex(l => l.date === dateStr);
         const currentTasks = tasks;
         
+        // 빈 배열 저장 방지 가이드라인 유지
+        if (currentTasks.length === 0 && (existingLogIndex === -1 || prevLogs[existingLogIndex].tasks.length > 0)) {
+            return prevLogs;
+        }
+
         if (existingLogIndex >= 0 && JSON.stringify(prevLogs[existingLogIndex].tasks) === JSON.stringify(currentTasks)) {
             return prevLogs;
         }
 
-        console.log(`[SYNC] Updating local logs for ${dateStr}`);
         const newLogs = [...prevLogs];
         if (existingLogIndex >= 0) {
             newLogs[existingLogIndex] = { ...newLogs[existingLogIndex], tasks: currentTasks };
@@ -304,8 +317,6 @@ export default function App() {
     }
 
     lastLocalChange.current = Date.now();
-    
-    // 이펙트에서 직접 Supabase 저장 호출
     saveToSupabase(tasks);
     
   }, [tasks, viewDate, localLogsLoaded, currentSpace, saveToSupabase, isSyncLocked]);
@@ -322,29 +333,7 @@ export default function App() {
         });
         return next;
     });
-
-    setLogs(prevLogs => {
-        const logWithTask = prevLogs.find(l => l.tasks.some(t => t.id === taskId));
-        if (logWithTask && logWithTask.date !== viewDate.toDateString()) {
-            const newLogs = [...prevLogs];
-            const logIdx = newLogs.findIndex(l => l.date === logWithTask.date);
-            const log = { ...newLogs[logIdx] };
-            log.tasks = log.tasks.map(t => {
-                if (t.id === taskId) return { ...t, ...updates };
-                if (isSelectionUpdate && selectedTaskIds.has(t.id)) return { ...t, ...updates };
-                return t;
-            });
-            newLogs[logIdx] = log;
-            
-            saveToSupabaseAtDate(log.date, log.tasks);
-            if (currentSpace) {
-                localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-            }
-            return newLogs;
-        }
-        return prevLogs;
-    });
-  }, [saveToSupabaseAtDate, viewDate, currentSpace, selectedTaskIds]);
+  }, [selectedTaskIds]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
     setTasks(prev => {
@@ -445,32 +434,26 @@ export default function App() {
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
       const prevTasks = history[historyIndex - 1];
-      console.log('[SYNC] Undo triggered');
       isInternalUpdate.current = true;
       setTasks(prevTasks);
       setHistoryIndex(historyIndex - 1);
       setTimeout(() => {
           isInternalUpdate.current = false;
-          // Undo 후 즉시 동기화 보장
-          saveToSupabase(prevTasks);
       }, 100);
     }
-  }, [history, historyIndex, saveToSupabase]);
+  }, [history, historyIndex]);
 
   const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const nextTasks = history[historyIndex + 1];
-      console.log('[SYNC] Redo triggered');
       isInternalUpdate.current = true;
       setTasks(nextTasks);
       setHistoryIndex(historyIndex + 1);
       setTimeout(() => {
           isInternalUpdate.current = false;
-          // Redo 후 즉시 동기화 보장
-          saveToSupabase(nextTasks);
       }, 100);
     }
-  }, [history, historyIndex, saveToSupabase]);
+  }, [history, historyIndex]);
 
   const handleMoveUp = useCallback((taskId: number) => {
     if (selectedTaskIds.has(taskId)) {
@@ -486,7 +469,6 @@ export default function App() {
             for (const idx of sortedSelectedIndices) {
                 [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
             }
-            saveToSupabase(next);
             return next;
         });
         return;
@@ -497,29 +479,11 @@ export default function App() {
       if (index > 0) {
         const newTasks = [...prev];
         [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
-        saveToSupabase(newTasks);
         return newTasks;
       }
       return prev;
     });
-
-    setLogs(prevLogs => {
-      const newLogs = [...prevLogs];
-      const logWithTask = newLogs.find(l => l.tasks.some(t => t.id === taskId));
-      if (logWithTask && logWithTask.date !== viewDate.toDateString()) {
-        const index = logWithTask.tasks.findIndex(t => t.id === taskId);
-        if (index > 0) {
-          const newTasks = [...logWithTask.tasks];
-          [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
-          logWithTask.tasks = newTasks;
-          saveToSupabaseAtDate(logWithTask.date, newTasks);
-          if (currentSpace) localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
-          return newLogs;
-        }
-      }
-      return prevLogs;
-    });
-  }, [saveToSupabase, saveToSupabaseAtDate, viewDate, currentSpace, selectedTaskIds]);
+  }, [selectedTaskIds]);
 
   const handleMoveDown = useCallback((taskId: number) => {
     if (selectedTaskIds.has(taskId)) {
@@ -535,7 +499,6 @@ export default function App() {
             for (const idx of sortedSelectedIndices) {
                 [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
             }
-            saveToSupabase(next);
             return next;
         });
         return;
@@ -546,12 +509,11 @@ export default function App() {
       if (index !== -1 && index < prev.length - 1) {
         const newTasks = [...prev];
         [newTasks[index + 1], newTasks[index]] = [newTasks[index], newTasks[index + 1]];
-        saveToSupabase(newTasks);
         return newTasks;
       }
       return prev;
     });
-  }, [saveToSupabase, selectedTaskIds]);
+  }, [selectedTaskIds]);
 
   const simplifyTasks = (ts: Task[]) => ts.map(t => ({ 
     id: t.id, 
@@ -563,7 +525,6 @@ export default function App() {
 
   useEffect(() => {
     if (currentSpace) {
-      console.log(`[SYNC] Date change detected: Locking sync and loading data for ${viewDate.toDateString()}`);
       setIsSyncLocked(true);
       setLocalLogsLoaded(false);
       setIsLoading(true);
@@ -588,29 +549,22 @@ export default function App() {
       
       setLogs(currentLogs);
       
-      const applyTasks = () => {
-          if (JSON.stringify(simplifyTasks(tasksRef.current)) !== JSON.stringify(simplifyTasks(log!.tasks))) {
-              console.log(`[SYNC] Applying tasks for ${dateStr}`);
-              isInternalUpdate.current = true;
-              setTasks(log!.tasks); 
-              setHistory([log!.tasks]); 
-              setHistoryIndex(0); 
-              
-              setTimeout(() => {
-                  isInternalUpdate.current = false;
-                  setIsLoading(false);
-                  setIsSyncLocked(false);
-                  console.log(`[SYNC] Sync unlocked for ${dateStr}`);
-              }, 300); 
-          } else {
+      if (JSON.stringify(simplifyTasks(tasksRef.current)) !== JSON.stringify(simplifyTasks(log!.tasks))) {
+          isInternalUpdate.current = true;
+          setTasks(log!.tasks); 
+          setHistory([log!.tasks]); 
+          setHistoryIndex(0); 
+          
+          setTimeout(() => {
+              isInternalUpdate.current = false;
               setIsLoading(false);
               setIsSyncLocked(false);
-              console.log(`[SYNC] Sync unlocked (no task change) for ${dateStr}`);
-          }
-          setLocalLogsLoaded(true);
-      };
-
-      applyTasks();
+          }, 100); 
+      } else {
+          setIsLoading(false);
+          setIsSyncLocked(false);
+      }
+      setLocalLogsLoaded(true);
     }
   }, [currentSpace, viewDate]);
 
@@ -621,8 +575,6 @@ export default function App() {
     
     const loadFromSupabase = async () => {
       try {
-        console.log('[SYNC] Loading from Supabase...');
-        setIsSyncLocked(true); // 서버 로딩 중에도 잠금
         const { data, error } = await supabase
           .from('task_logs')
           .select('*')
@@ -630,13 +582,7 @@ export default function App() {
           .eq('space_id', currentSpace.id);
 
         if (error) throw error;
-        // targetDateStr을 렉시컬 환경에서 캡처하여 비교
-        if (targetDateStr !== viewDateRef.current.toDateString()) {
-            console.log('[SYNC] View date changed during load, aborting');
-            setIsSyncLocked(false);
-            return;
-        }
-
+        
         if (data && data.length > 0) {
           const serverLogs = data.map((row: any) => ({
             date: row.date,
@@ -645,8 +591,7 @@ export default function App() {
           }));
 
           setLogs(prevLogs => {
-            if (viewDateRef.current.toDateString() !== targetDateStr) return prevLogs;
-
+            const targetDateStr = viewDateRef.current.toDateString();
             const logMap = new Map(prevLogs.map(l => [l.date, l]));
             let hasChanges = false;
             
@@ -655,55 +600,36 @@ export default function App() {
               const localLog = logMap.get(serverLog.date);
               
               if (!localLog || (localLog.tasks.length === 0 && serverLog.tasks.length > 0)) {
-                console.log(`[SYNC] Found new/empty log on server for ${serverLog.date}`);
                 logMap.set(serverLog.date, serverLog);
                 hasChanges = true;
               } else if (JSON.stringify(simplifyTasks(localLog.tasks)) !== JSON.stringify(simplifyTasks(serverLog.tasks))) {
-                  // 현재 보고 있는 날짜이고 최근 변경이 있었다면 서버 데이터를 무시 (2초 보호)
-                  if (serverLog.date === targetDateStr && Date.now() - lastLocalChange.current < 2000) {
-                      console.log(`[SYNC] Local protection active for ${serverLog.date}, ignoring server update`);
-                      return;
-                  }
-                  
-                  console.log(`[SYNC] Server data mismatch for ${serverLog.date}, merging...`);
+                  // 2초 보호 로직 제거, 단순히 서버 데이터가 최신이면 업데이트
                   logMap.set(serverLog.date, serverLog);
                   hasChanges = true;
               }
             });
 
-            if (!hasChanges) {
-                setIsSyncLocked(false);
-                return prevLogs;
-            }
+            if (!hasChanges) return prevLogs;
+            
             const mergedLogs = Array.from(logMap.values());
             localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(mergedLogs));
             
             const currentViewLog = mergedLogs.find(l => l.date === targetDateStr);
-            if (currentViewLog && viewDateRef.current.toDateString() === targetDateStr) {
+            if (currentViewLog) {
                setTasks(currentTasks => {
                    if (JSON.stringify(simplifyTasks(currentTasks)) !== JSON.stringify(simplifyTasks(currentViewLog.tasks))) {
-                       console.log(`[SYNC] Applying server tasks to UI for ${targetDateStr}`);
                        isInternalUpdate.current = true;
-                       setTimeout(() => {
-                           isInternalUpdate.current = false;
-                           setIsSyncLocked(false);
-                       }, 100);
+                       setTimeout(() => { isInternalUpdate.current = false; }, 100);
                        return currentViewLog.tasks;
                    }
-                   setIsSyncLocked(false);
                    return currentTasks;
                });
-            } else {
-                setIsSyncLocked(false);
             }
             return mergedLogs;
           });
-        } else {
-            setIsSyncLocked(false);
         }
       } catch (e) {
         console.error("[SYNC] Supabase load failed:", e);
-        setIsSyncLocked(false);
       }
     };
 
@@ -711,31 +637,21 @@ export default function App() {
     
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
-        // --- 2초 보호 로직 ---
-        if (Date.now() - lastLocalChange.current < 2000) {
-            console.log('[SYNC] Realtime update blocked by local protection');
-            return;
-        }
-
         if (payload.new && payload.new.space_id === currentSpace.id) {
           const serverLog = { date: payload.new.date, tasks: migrateTasks(JSON.parse(payload.new.tasks)), memo: payload.new.memo };
           if (serverLog.date === 'SETTINGS') return;
           
           const targetDateStr = viewDateRef.current.toDateString();
           if (serverLog.date === targetDateStr) {
-              console.log(`[SYNC] Realtime update received for current date ${targetDateStr}`);
               isInternalUpdate.current = true;
               setTasks(serverLog.tasks);
               setTimeout(() => isInternalUpdate.current = false, 100);
-          } else {
-              console.log(`[SYNC] Realtime update received for other date ${serverLog.date}`);
           }
           
           setLogs(prev => {
              const idx = prev.findIndex(l => l.date === serverLog.date);
              const newLogs = idx >= 0 ? [...prev] : [...prev, serverLog];
              if (idx >= 0) {
-                 // 로그 데이터가 실제로 다를 때만 업데이트
                  if (JSON.stringify(simplifyTasks(prev[idx].tasks)) === JSON.stringify(simplifyTasks(serverLog.tasks))) {
                      return prev;
                  }

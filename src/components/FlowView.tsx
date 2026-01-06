@@ -11,6 +11,7 @@ interface FlowViewProps {
   onAddTask: (date: string, taskId: number, textBefore: string, textAfter: string) => void;
   onMergeTask: (date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => void;
   onIndentTask: (date: string, taskId: number, direction: 'in' | 'out') => void;
+  onMoveTask: (date: string, taskId: number, direction: 'up' | 'down') => void;
   setFocusedTaskId: (id: number | null) => void;
   focusedTaskId: number | null;
   onViewDateChange?: (date: Date) => void;
@@ -22,6 +23,7 @@ export const FlowView: React.FC<FlowViewProps> = ({
   onAddTask, 
   onMergeTask,
   onIndentTask,
+  onMoveTask,
   setFocusedTaskId, 
   focusedTaskId, 
   onViewDateChange 
@@ -32,6 +34,31 @@ export const FlowView: React.FC<FlowViewProps> = ({
         return [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
             .filter(log => log.tasks.length > 0); // User requirement: hide empty days
     }, [logs]);
+
+    // Create a flat list of tasks for navigation
+    const flatTaskList = useMemo(() => {
+        const list: { id: number; date: string }[] = [];
+        activeDays.forEach(log => {
+            log.tasks.forEach(t => {
+                list.push({ id: t.id, date: log.date });
+            });
+        });
+        return list;
+    }, [activeDays]);
+
+    const handleFocusPrev = useCallback((currentTaskId: number) => {
+        const index = flatTaskList.findIndex(item => item.id === currentTaskId);
+        if (index > 0) {
+            setFocusedTaskId(flatTaskList[index - 1].id);
+        }
+    }, [flatTaskList, setFocusedTaskId]);
+
+    const handleFocusNext = useCallback((currentTaskId: number) => {
+        const index = flatTaskList.findIndex(item => item.id === currentTaskId);
+        if (index !== -1 && index < flatTaskList.length - 1) {
+            setFocusedTaskId(flatTaskList[index + 1].id);
+        }
+    }, [flatTaskList, setFocusedTaskId]);
 
     // Intersection Observer for Sticky Header Highlight
     const observer = useRef<IntersectionObserver | null>(null);
@@ -132,15 +159,10 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                    onMergeWithNext={(tid, txt) => onMergeTask(log.date, tid, txt, 'next')} 
                                    onIndent={(tid) => onIndentTask(log.date, tid, 'in')} 
                                    onOutdent={(tid) => onIndentTask(log.date, tid, 'out')} 
-                                   onMoveUp={() => {
-                                       const index = log.tasks.findIndex(t => t.id === focusedTaskId);
-                                       if (index > 0) {
-                                           const newTasks = [...log.tasks];
-                                           [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
-                                           onUpdateTask(log.date, focusedTaskId!, {}); // Trigger update logic via onUpdateTask proxy if needed or direct
-                                       }
-                                   }} 
-                                   onMoveDown={() => {}} 
+                                   onMoveUp={(tid) => onMoveTask(log.date, tid, 'up')} 
+                                   onMoveDown={(tid) => onMoveTask(log.date, tid, 'down')}
+                                   onFocusPrev={handleFocusPrev}
+                                   onFocusNext={handleFocusNext}
                                />
                            ))}
                        </SortableContext>

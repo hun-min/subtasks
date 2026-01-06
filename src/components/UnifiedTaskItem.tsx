@@ -104,9 +104,17 @@ export const UnifiedTaskItem = React.memo(({
         const cursor = textareaRef.current?.selectionStart || 0;
         const value = task.name || task.text || '';
         const lineIndex = value.substring(0, cursor).split('\n').length - 1;
+        
         if (lineIndex === 0) {
-             e.preventDefault();
-             onFocusPrev?.(task.id);
+             if (cursor > 0) {
+                 e.preventDefault();
+                 if (textareaRef.current) {
+                    textareaRef.current.setSelectionRange(0, 0);
+                 }
+             } else {
+                 e.preventDefault();
+                 onFocusPrev?.(task.id);
+             }
              return;
         }
     }
@@ -116,9 +124,17 @@ export const UnifiedTaskItem = React.memo(({
         const value = task.name || task.text || '';
         const lines = value.split('\n');
         const currentLineIndex = value.substring(0, cursor).split('\n').length - 1;
+        
         if (currentLineIndex === lines.length - 1) {
-             e.preventDefault();
-             onFocusNext?.(task.id);
+             if (cursor < value.length) {
+                 e.preventDefault();
+                 if (textareaRef.current) {
+                    textareaRef.current.setSelectionRange(value.length, value.length);
+                 }
+             } else {
+                 e.preventDefault();
+                 onFocusNext?.(task.id);
+             }
              return;
         }
     }

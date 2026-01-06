@@ -836,6 +836,150 @@ export default function App() {
       });
   }, [currentSpace, saveToSupabaseAtDate]);
 
+  const handleAddTaskInFlow = useCallback((date: string, taskId: number, textBefore: string, textAfter: string) => {
+      setLogs(prevLogs => {
+          const newLogs = [...prevLogs];
+          const logIndex = newLogs.findIndex(l => l.date === date);
+          if (logIndex >= 0) {
+             const tasks = newLogs[logIndex].tasks;
+             const idx = tasks.findIndex(t => t.id === taskId);
+             if (idx === -1) return newLogs;
+
+             const current = tasks[idx];
+             const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
+                id: Date.now() + i + Math.random(),
+                name: line.trim(), status: 'pending', indent: current.indent, parent: current.parent, text: line.trim(),
+                percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: current.depth || 0, space_id: String(currentSpace?.id || ''),
+             }));
+             
+             const next = [...tasks];
+             next[idx] = { ...current, name: textBefore, text: textBefore };
+             next.splice(idx + 1, 0, ...newTasksToAdd);
+
+             newLogs[logIndex].tasks = next;
+
+             if (newTasksToAdd.length > 0) {
+                setFocusedTaskId(newTasksToAdd[0].id);
+             }
+
+             if (date === viewDateRef.current.toDateString()) setTasks(next);
+             if(currentSpace) {
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 saveToSupabaseAtDate(date, next);
+             }
+          }
+          return newLogs;
+      });
+  }, [currentSpace, saveToSupabaseAtDate]);
+
+  const handleMergeTaskInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
+      setLogs(prevLogs => {
+          const newLogs = [...prevLogs];
+          const logIndex = newLogs.findIndex(l => l.date === date);
+          if (logIndex >= 0) {
+             const tasks = newLogs[logIndex].tasks;
+             const idx = tasks.findIndex(t => t.id === taskId);
+             if (idx === -1) return newLogs;
+
+             let next = [...tasks];
+             
+             if (direction === 'prev') {
+                 if (idx > 0) {
+                    const prevTask = tasks[idx - 1];
+                    const newPos = (prevTask.name || '').length;
+                    next[idx - 1] = { 
+                        ...prevTask, 
+                        name: (prevTask.name || '') + (currentText || ''), 
+                        text: (prevTask.text || '') + (currentText || '') 
+                    };
+                    next.splice(idx, 1);
+                    setFocusedTaskId(prevTask.id);
+                    (window as any).__restoreCursorPos = newPos;
+                 } else {
+                     setFocusedTaskId(null);
+                     next = tasks.filter(t => t.id !== taskId);
+                 }
+             } else {
+                 // next
+                 if (idx < tasks.length - 1) {
+                     const current = tasks[idx];
+                     const nextTask = tasks[idx + 1];
+                     next[idx] = { ...current, name: (current.name || '') + (nextTask.name || ''), text: (current.text || '') + (nextTask.text || '') };
+                     next.splice(idx + 1, 1);
+                 } else {
+                     return newLogs;
+                 }
+             }
+
+             newLogs[logIndex].tasks = next;
+             if (date === viewDateRef.current.toDateString()) setTasks(next);
+             if(currentSpace) {
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 saveToSupabaseAtDate(date, next);
+             }
+          }
+          return newLogs;
+      });
+  }, [currentSpace, saveToSupabaseAtDate]);
+
+  const handleIndentTaskInFlow = useCallback((date: string, taskId: number, direction: 'in' | 'out') => {
+      setLogs(prevLogs => {
+          const newLogs = [...prevLogs];
+          const logIndex = newLogs.findIndex(l => l.date === date);
+          if (logIndex >= 0) {
+             const tasks = newLogs[logIndex].tasks;
+             const task = tasks.find(t => t.id === taskId);
+             if (!task) return newLogs;
+
+             const newDepth = direction === 'in' ? (task.depth || 0) + 1 : Math.max(0, (task.depth || 0) - 1);
+             const next = tasks.map(t => t.id === taskId ? { ...t, depth: newDepth } : t);
+
+             newLogs[logIndex].tasks = next;
+             if (date === viewDateRef.current.toDateString()) setTasks(next);
+             if(currentSpace) {
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 saveToSupabaseAtDate(date, next);
+             }
+          }
+          return newLogs;
+      });
+  }, [currentSpace, saveToSupabaseAtDate]);
+  
+  const handleMoveTaskInFlow = useCallback((date: string, taskId: number, direction: 'up' | 'down') => {
+      setLogs(prevLogs => {
+          const newLogs = [...prevLogs];
+          const logIndex = newLogs.findIndex(l => l.date === date);
+          if (logIndex >= 0) {
+             const tasks = newLogs[logIndex].tasks;
+             const index = tasks.findIndex(t => t.id === taskId);
+             if (index === -1) return newLogs;
+
+             const next = [...tasks];
+             if (direction === 'up') {
+                 if (index > 0) {
+                     [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                 } else {
+                     return newLogs;
+                 }
+             } else {
+                 if (index < next.length - 1) {
+                     [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                 } else {
+                     return newLogs;
+                 }
+             }
+
+             newLogs[logIndex].tasks = next;
+             if (date === viewDateRef.current.toDateString()) setTasks(next);
+             if(currentSpace) {
+                 localStorage.setItem(`ultra_tasks_space_${currentSpace.id}`, JSON.stringify(newLogs));
+                 saveToSupabaseAtDate(date, next);
+             }
+          }
+          return newLogs;
+      });
+  }, [currentSpace, saveToSupabaseAtDate]);
+
   return (
     <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden">
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
@@ -970,9 +1114,10 @@ export default function App() {
                 logs={logs} 
                 currentSpaceId={String(currentSpace?.id || '')} 
                 onUpdateTask={handleUpdateTaskInFlow} 
-                onAddTask={() => {}} // simplified
-                onMergeTask={() => {}} // simplified
-                onIndentTask={() => {}} // simplified
+                onAddTask={handleAddTaskInFlow} 
+                onMergeTask={handleMergeTaskInFlow} 
+                onIndentTask={handleIndentTaskInFlow} 
+                onMoveTask={handleMoveTaskInFlow}
                 setFocusedTaskId={setFocusedTaskId}
                 focusedTaskId={focusedTaskId}
                 onViewDateChange={setViewDate}

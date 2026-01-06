@@ -637,6 +637,7 @@ export default function App() {
     
     const channel = supabase.channel(`realtime_tasks_${currentSpace.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_logs', filter: `user_id=eq.${user.id}` }, (payload: any) => {
+        // space_id가 일치하는지 확인
         if (payload.new && payload.new.space_id === currentSpace.id) {
           const serverLog = { 
             date: payload.new.date, 
@@ -646,12 +647,19 @@ export default function App() {
           if (serverLog.date === 'SETTINGS') return;
           
           const targetDateStr = viewDateRef.current.toDateString();
+          // 현재 보고 있는 날짜와 일치할 때만 tasks 상태를 업데이트
           if (serverLog.date === targetDateStr) {
-              isInternalUpdate.current = true;
-              setTasks(serverLog.tasks);
-              setTimeout(() => isInternalUpdate.current = false, 100);
+              const currentSimplified = JSON.stringify(simplifyTasks(tasksRef.current));
+              const serverSimplified = JSON.stringify(simplifyTasks(serverLog.tasks));
+              
+              if (currentSimplified !== serverSimplified) {
+                  isInternalUpdate.current = true;
+                  setTasks(serverLog.tasks);
+                  setTimeout(() => { isInternalUpdate.current = false; }, 100);
+              }
           }
           
+          // 전체 로그(logs) 상태 업데이트
           setLogs(prev => {
              const idx = prev.findIndex(l => l.date === serverLog.date);
              const newLogs = idx >= 0 ? [...prev] : [...prev, serverLog];

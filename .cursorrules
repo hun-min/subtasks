@@ -3,6 +3,7 @@
 You must follow these rules strictly. This project has critical UI/UX and logic constraints that must not be broken.
 
 ## 1. Protected Logic (CRITICAL: DO NOT REMOVE OR MODIFY)
+- **Data Synchronization**: You MUST call `saveToSupabase` (or equivalent sync function) immediately after any state change that modifies tasks or spaces. Failing to do so causes data loss or "deleted data resurrection" bugs.
 - **Keyboard Shortcuts**: `Alt + 1~9` for space switching and `?` for help modal must be preserved in `src/App.tsx`.
 - **Streak Logic**: The logic calculating and displaying streaks in the calendar and top bar is essential.
 - **VisualViewport API**: Mobile keyboard handling logic using `VisualViewport` in `src/App.tsx` must stay intact to prevent the floating bar from being hidden.

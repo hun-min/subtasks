@@ -398,12 +398,13 @@ export const UnifiedTaskItem = React.memo(({
           ))}
         </div>
       )}
-      <div className="relative flex items-center justify-start mt-1 flex-shrink-0 z-10">
+      <div className="relative flex items-center justify-start mt-1.5 flex-shrink-0 z-10">
         <button 
           onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }} 
           onClick={(e) => { 
             e.stopPropagation(); 
             e.preventDefault();
+            // onUpdate 함수가 존재한다면 호출
             updateTask(task.id, { is_starred: !task.is_starred }); 
           }}
           className={`absolute right-full mr-1.5 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star ${

@@ -159,6 +159,7 @@ export const UnifiedTaskItem = React.memo(({
                  e.preventDefault();
                  onFocusPrev?.(task.id, 'end');
             }
+            // Do NOT call preventDefault otherwise, let browser handle line jumping
             return;
         }
     }
@@ -178,6 +179,7 @@ export const UnifiedTaskItem = React.memo(({
                  e.preventDefault();
                  onFocusNext?.(task.id, 'start');
             }
+            // Do NOT call preventDefault otherwise, let browser handle line jumping
             return;
         }
     }

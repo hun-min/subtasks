@@ -740,7 +740,12 @@ export default function App() {
         </div>
         {(activeTask || showBulkActions) && (
           <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200 pointer-events-none" style={{ bottom: 'calc(24px + var(--keyboard-offset, 0px))' }}>
-              <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl pointer-events-auto">
+              <div 
+                  className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl pointer-events-auto"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+              >
                   {showBulkActions ? (
                      <>
                         <div className="px-4 font-bold text-white whitespace-nowrap flex items-center gap-2">
@@ -748,42 +753,42 @@ export default function App() {
                            <span className="text-sm">Selected</span>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1" />
-                        <button onClick={() => {
+                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => {
                             const selectedTasks = tasks.filter(t => selectedTaskIds.has(t.id));
                             navigator.clipboard.writeText(selectedTasks.map(t => t.name || t.text || '').join('\n'));
                             alert(`Copied ${selectedTasks.length} tasks`);
                             setSelectedTaskIds(new Set());
                         }} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Copy size={16} /> Copy</button>
-                        <button onClick={() => setShowDatePicker(true)} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Calendar size={16} /> Move</button>
-                        <button onClick={() => { if(confirm(`Delete ${selectedTaskIds.size} tasks?`)) { const next = tasks.filter(t => !selectedTaskIds.has(t.id)); updateTasks.mutate({ tasks: next, memo: currentMemo }); setSelectedTaskIds(new Set()); } }} className="p-3 hover:bg-white/10 rounded-2xl text-red-500 font-bold text-sm px-4 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
+                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setShowDatePicker(true)} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Calendar size={16} /> Move</button>
+                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => { if(confirm(`Delete ${selectedTaskIds.size} tasks?`)) { const next = tasks.filter(t => !selectedTaskIds.has(t.id)); updateTasks.mutate({ tasks: next, memo: currentMemo }); setSelectedTaskIds(new Set()); } }} className="p-3 hover:bg-white/10 rounded-2xl text-red-500 font-bold text-sm px-4 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
                         <div className="h-8 w-px bg-white/10 mx-1" />
-                        <button onClick={() => setSelectedTaskIds(new Set())} className="p-3 hover:bg-white/10 rounded-2xl text-gray-400"><X size={20} /></button>
+                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setSelectedTaskIds(new Set())} className="p-3 hover:bg-white/10 rounded-2xl text-gray-400"><X size={20} /></button>
                      </>
                   ) : (
                     activeTask && (
                       <>
                         <div className="flex items-center gap-2 flex-shrink-0 pl-1">
-                            <button onClick={() => handleUpdateTask(activeTask.id, { isTimerOn: !activeTask.isTimerOn, timerStartTime: !activeTask.isTimerOn ? Date.now() : undefined })} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleUpdateTask(activeTask.id, { isTimerOn: !activeTask.isTimerOn, timerStartTime: !activeTask.isTimerOn ? Date.now() : undefined })} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
                             <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull(activeTask.actTime || 0)} onChange={(e) => handleUpdateTask(activeTask.id, { actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 flex-shrink-0">
-                            <button onClick={() => handleOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button>
-                            <button onClick={() => handleIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button>
-                            <button onClick={() => handleMoveUp(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronUp size={18} /></button>
-                            <button onClick={() => handleMoveDown(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronDown size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleMoveUp(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronUp size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleMoveDown(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronDown size={18} /></button>
                         </div>
                       <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                       <div className="flex items-center gap-0.5 flex-shrink-0">
-                          <button onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Move to Date"><Calendar size={18} /></button>
-                          <button onClick={() => { navigator.clipboard.writeText(activeTask.name || activeTask.text || ''); alert("Copied to clipboard"); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Copy Text"><Copy size={18} /></button>
-                          <button onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="History"><BarChart2 size={18} /></button>
-                          <button onClick={() => { if (window.confirm("Delete this task?")) { const next = tasks.filter(t => t.id !== activeTask.id); updateTasks.mutate({ tasks: next, memo: currentMemo }); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Move to Date"><Calendar size={18} /></button>
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => { navigator.clipboard.writeText(activeTask.name || activeTask.text || ''); alert("Copied to clipboard"); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Copy Text"><Copy size={18} /></button>
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="History"><BarChart2 size={18} /></button>
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => { if (window.confirm("Delete this task?")) { const next = tasks.filter(t => t.id !== activeTask.id); updateTasks.mutate({ tasks: next, memo: currentMemo }); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
                       </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 pr-2 flex-shrink-0">
-                            <button onClick={handleUndo} disabled={historyIndex <= 0} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCcw size={18} /></button>
-                            <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCw size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={handleUndo} disabled={historyIndex <= 0} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCcw size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCw size={18} /></button>
                         </div>
                       </>
                     )

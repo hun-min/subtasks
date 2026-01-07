@@ -11,11 +11,12 @@ export function SpaceSelector({ onSpaceChange }: { onSpaceChange?: (space: any) 
   const [showAddInput, setShowAddInput] = useState(false); // 인풋창 표시 여부
   const [newSpaceName, setNewSpaceName] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null); // 버튼 Ref 추가
   const addInputRef = useRef<HTMLInputElement>(null); // 인풋 포커싱용 Ref
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) && buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         setEditingId(null);
         setShowAddInput(false); // 닫힐 때 인풋창도 숨김
@@ -24,6 +25,32 @@ export function SpaceSelector({ onSpaceChange }: { onSpaceChange?: (space: any) 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // 화면 밖으로 나가는 문제 해결을 위한 동적 스타일
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+      if (isOpen && buttonRef.current) {
+          const rect = buttonRef.current.getBoundingClientRect();
+          const screenWidth = window.innerWidth;
+          const dropdownWidth = 256; // w-64 = 256px
+          
+          let left = rect.left;
+          
+          // 화면 오른쪽 밖으로 나가는 경우 처리
+          if (left + dropdownWidth > screenWidth) {
+              left = Math.max(10, screenWidth - dropdownWidth - 10); // 오른쪽 여백 10px 유지
+          }
+
+          setDropdownStyle({
+              position: 'fixed',
+              top: `${rect.bottom + 8}px`, // 버튼 아래 8px
+              left: `${left}px`,
+              zIndex: 9999, // 다른 요소보다 위에
+              maxHeight: '60vh'
+          });
+      }
+  }, [isOpen]);
 
   // 인풋창이 열릴 때 자동 포커스
   useEffect(() => {
@@ -74,18 +101,27 @@ export function SpaceSelector({ onSpaceChange }: { onSpaceChange?: (space: any) 
   };
 
   return (
-    <div className="relative z-[5000]" ref={dropdownRef}>
+    <>
       <button 
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)} 
         className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-white/10 transition-colors"
       >
-        <span className="font-black text-lg tracking-tight">{currentSpace?.title || 'Loading...'}</span>
+        <span className="font-black text-lg tracking-tight max-w-[110px] truncate text-left">{currentSpace?.title || 'Loading...'}</span>
         <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-64 bg-[#1a1a1f] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 p-2">
-          <div className="max-h-[60vh] overflow-y-auto custom-scrollbar space-y-1">
+         <div className="fixed top-0 left-0 w-full h-full z-[4000]" onClick={() => setIsOpen(false)} /> // 배경 클릭 시 닫힘용 오버레이 (옵션)
+      )}
+
+      {isOpen && (
+        <div 
+            ref={dropdownRef}
+            style={dropdownStyle}
+            className="fixed w-64 bg-[#1a1a1f] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 p-2 flex flex-col"
+        >
+          <div className="overflow-y-auto custom-scrollbar space-y-1 flex-1">
             {spaces.map(space => (
               <div 
                 key={space.id} 
@@ -155,6 +191,6 @@ export function SpaceSelector({ onSpaceChange }: { onSpaceChange?: (space: any) 
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

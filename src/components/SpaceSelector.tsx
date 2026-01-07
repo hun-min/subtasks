@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSpace } from '../contexts/SpaceContext';
 import { Plus, ChevronDown, Check, Layout, Settings, Trash2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 interface SpaceSelectorProps {
   onSpaceChange?: (space: any) => void;
@@ -15,18 +16,51 @@ export function SpaceSelector({ onSpaceChange }: SpaceSelectorProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
+  
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 224 }); // default width w-56 = 14rem = 224px
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setIsAdding(false);
+      // 버튼 클릭은 토글 핸들러에서 처리하므로 무시해야 함 (안 그러면 닫혔다 바로 열림)
+      if (buttonRef.current && buttonRef.current.contains(event.target as Node)) {
+        return;
       }
+      // 드롭다운 내부 클릭 시 닫히지 않음
+      if (dropdownRef.current && dropdownRef.current.contains(event.target as Node)) {
+        return;
+      }
+      setIsOpen(false);
+      setIsAdding(false);
     }
-    document.addEventListener("mousedown", handleClickOutside);
+
+    if (isOpen) {
+        document.addEventListener("mousedown", handleClickOutside);
+        // 위치 계산
+        if (buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            // 화면 오른쪽 넘어가는지 체크
+            const windowWidth = window.innerWidth;
+            const dropdownWidth = 224; // w-56
+            let left = rect.left;
+            
+            // 모바일 등 좁은 화면에서 오른쪽 잘림 방지
+            if (left + dropdownWidth > windowWidth - 10) {
+                left = windowWidth - dropdownWidth - 10;
+            }
+            // 왼쪽 너무 붙음 방지
+            if (left < 10) left = 10;
+
+            setPosition({
+                top: rect.bottom + 8,
+                left: left,
+                width: dropdownWidth
+            });
+        }
+    }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   const handleAddSpace = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,15 +80,31 @@ export function SpaceSelector({ onSpaceChange }: SpaceSelectorProps) {
   };
 
   return (
-    <div className="relative flex-shrink-0" ref={dropdownRef}>
-      <button onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-xl hover:bg-white/5 transition-colors text-sm font-medium text-gray-200 max-w-[140px] md:max-w-[200px]">
-        <Layout size={16} className="text-gray-400 flex-shrink-0" />
-        <span className="whitespace-nowrap overflow-hidden text-ellipsis text-xs md:text-sm">{currentSpace ? currentSpace.title : '공간 선택'}</span>
-        <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''} flex-shrink-0`} />
-      </button>
+    <>
+      <div className="relative flex-shrink-0">
+        <button 
+            ref={buttonRef}
+            onClick={() => setIsOpen(!isOpen)} 
+            className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-xl hover:bg-white/5 transition-colors text-sm font-medium text-gray-200 max-w-[140px] md:max-w-[200px]"
+        >
+          <Layout size={16} className="text-gray-400 flex-shrink-0" />
+          <span className="whitespace-nowrap overflow-hidden text-ellipsis text-xs md:text-sm">{currentSpace ? currentSpace.title : '공간 선택'}</span>
+          <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''} flex-shrink-0`} />
+        </button>
+      </div>
 
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-56 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl p-1 z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-left">
+      {isOpen && createPortal(
+        <div 
+            ref={dropdownRef}
+            style={{ 
+                position: 'fixed', 
+                top: position.top, 
+                left: position.left,
+                width: position.width,
+                zIndex: 9999 
+            }}
+            className="bg-[#18181b] border border-white/10 rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100 origin-top-left"
+        >
           <div className="flex items-center justify-between px-2 py-1 border-b border-white/5 mb-1">
             <span className="text-xs text-gray-500">공간 목록</span>
             <button onClick={() => setShowSettings(!showSettings)} className="p-1 text-gray-500 hover:text-white transition-colors">
@@ -102,11 +152,12 @@ export function SpaceSelector({ onSpaceChange }: SpaceSelectorProps) {
               </button>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       
-      {deleteConfirmId && (
-        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+      {deleteConfirmId && createPortal(
+        <div className="fixed inset-0 z-[10000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 w-full max-w-xs shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-white mb-2">공간 삭제</h3>
             <p className="text-sm text-gray-400 mb-6">이 공간을 삭제하시겠습니까?</p>
@@ -115,8 +166,9 @@ export function SpaceSelector({ onSpaceChange }: SpaceSelectorProps) {
               <button onClick={async () => { await deleteSpace(deleteConfirmId); setDeleteConfirmId(null); setShowSettings(false); }} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors">삭제</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }

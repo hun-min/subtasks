@@ -173,20 +173,39 @@ export default function App() {
   }, [tasks, currentMemo, updateTasks, selectedTaskIds]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
+      // 즉시 로컬 상태 반영 (낙관적 업데이트)
+      // 현재 tasks 상태를 기준으로 계산
       const idx = tasks.findIndex(t => t.id === taskId);
       if (idx === -1) return;
+      
       const current = tasks[idx];
       const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
-        id: Date.now() + i, name: line.trim(), status: 'pending', indent: current.indent, parent: current.parent, text: line.trim(),
-        percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: current.depth || 0, space_id: String(currentSpace?.id || ''),
+        id: Date.now() + i + Math.random(), // 유니크 ID 보장 강화
+        name: line.trim(), 
+        status: 'pending', 
+        indent: current.indent, 
+        parent: current.parent, 
+        text: line.trim(),
+        percent: 0, 
+        planTime: 0, 
+        actTime: 0, 
+        isTimerOn: false, 
+        depth: current.depth || 0, 
+        space_id: String(currentSpace?.id || ''),
       }));
+      
       const next = [...tasks];
+      // 현재 태스크 내용 수정
       next[idx] = { ...current, name: textBefore, text: textBefore };
+      // 새 태스크 추가
       next.splice(idx + 1, 0, ...newTasksToAdd);
       
+      // 포커스 이동
       if (newTasksToAdd.length > 0) {
         setFocusedTaskId(newTasksToAdd[0].id);
       }
+      
+      // 서버 동기화
       updateTasks.mutate({ tasks: next, memo: currentMemo });
   }, [tasks, currentMemo, updateTasks, currentSpace]);
 

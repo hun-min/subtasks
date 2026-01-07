@@ -154,15 +154,19 @@ export const UnifiedTaskItem = React.memo(({
         
         // Navigation between tasks
         if (!e.shiftKey && !e.metaKey) {
-            const cursor = textareaRef.current?.selectionStart || 0;
-            const value = textareaRef.current?.value || '';
+            const cursorBefore = textareaRef.current?.selectionStart ?? 0;
             
-            // 첫 번째 줄이면 즉시 이전 항목으로 이동 (맨 끝으로)
-            if (value.substring(0, cursor).indexOf('\n') === -1) {
-                 e.preventDefault();
-                 onFocusPrev?.(task.id, 'end');
-                 return;
-            }
+            // Allow default behavior (browser moves cursor) to handle soft wraps correctly
+            setTimeout(() => {
+                if (!textareaRef.current) return;
+                const cursorAfter = textareaRef.current.selectionStart;
+                
+                // If we were at start (0) and stayed at start (0), it means we couldn't go up further
+                if (cursorBefore === 0 && cursorAfter === 0) {
+                    onFocusPrev?.(task.id, 'end');
+                }
+            }, 0);
+            return;
         }
     }
 
@@ -175,15 +179,20 @@ export const UnifiedTaskItem = React.memo(({
 
         // Navigation between tasks
         if (!e.shiftKey && !e.metaKey) {
-            const cursor = textareaRef.current?.selectionStart || 0;
-            const value = textareaRef.current?.value || '';
+            const cursorBefore = textareaRef.current?.selectionStart ?? 0;
+            const length = textareaRef.current?.value.length ?? 0;
             
-            // 마지막 줄이면 즉시 다음 항목으로 이동 (맨 앞으로)
-            if (value.substring(cursor).indexOf('\n') === -1) {
-                 e.preventDefault();
-                 onFocusNext?.(task.id, 'start');
-                 return;
-            }
+            // Allow default behavior
+            setTimeout(() => {
+                if (!textareaRef.current) return;
+                const cursorAfter = textareaRef.current.selectionStart;
+                
+                // If we were at end and stayed at end, it means we couldn't go down further
+                if (cursorBefore === length && cursorAfter === length) {
+                    onFocusNext?.(task.id, 'start');
+                }
+            }, 0);
+            return;
         }
     }
 

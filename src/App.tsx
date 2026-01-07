@@ -77,11 +77,14 @@ export default function App() {
       });
   }, []);
 
+  const isInternalUpdate = useRef(false);
+
   // React Query Hooks
   const { tasks, memo: currentMemo, updateTasks, isLoading } = useTasks({
       currentDate: viewDate,
       userId: user?.id,
-      spaceId: currentSpace?.id ? String(currentSpace.id) : undefined
+      spaceId: currentSpace?.id ? String(currentSpace.id) : undefined,
+      ignoreRealtimeRef: isInternalUpdate // Pass the ref to ignore realtime events
   });
 
   const { data: allLogs } = useAllTaskLogs(user?.id, currentSpace?.id ? String(currentSpace.id) : undefined);
@@ -98,7 +101,6 @@ export default function App() {
   
   const [history, setHistory] = useState<Task[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const isInternalUpdate = useRef(false);
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
@@ -191,6 +193,12 @@ export default function App() {
   }, [tasks, currentMemo, updateTasks, selectedTaskIds]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
+      // 안전장치: 너무 빠른 연속 호출 방지 (UI 레벨 방어)
+      // 사용자 피드백 반영: 엔터 연타 시 지연 없이 생성되도록 Throttle 제거
+      // const now = Date.now();
+      // if (now - lastAddTaskTime.current < 100) return;
+      // lastAddTaskTime.current = now;
+
       // 1. 현재 리스트 복사 및 인덱스 찾기
       const idx = tasks.findIndex(t => t.id === taskId);
       if (idx === -1) return;
@@ -244,6 +252,10 @@ export default function App() {
       if (idx === -1) return;
       
       if (idx > 0) {
+        // 내부 업데이트 플래그 설정 (Realtime 간섭 방지)
+        isInternalUpdate.current = true;
+        setTimeout(() => isInternalUpdate.current = false, 2000); // 2초간 외부 업데이트 무시
+
         const prevTask = tasks[idx - 1];
         const next = [...tasks];
         const newPos = (prevTask.name || '').length;
@@ -260,6 +272,10 @@ export default function App() {
 
         updateTasks.mutate({ tasks: next, memo: currentMemo });
       } else {
+        // 내부 업데이트 플래그 설정
+        isInternalUpdate.current = true;
+        setTimeout(() => isInternalUpdate.current = false, 2000);
+
         setFocusedTaskId(null);
         const next = tasks.filter(t => t.id !== taskId);
         updateTasks.mutate({ tasks: next, memo: currentMemo });
@@ -270,6 +286,10 @@ export default function App() {
       const idx = tasks.findIndex(t => t.id === taskId);
       if (idx === -1 || idx >= tasks.length - 1) return;
       
+      // 내부 업데이트 플래그 설정
+      isInternalUpdate.current = true;
+      setTimeout(() => isInternalUpdate.current = false, 2000);
+
       const current = tasks[idx];
       const nextTask = tasks[idx + 1];
       const next = [...tasks];

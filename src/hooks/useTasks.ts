@@ -62,9 +62,10 @@ type UseTasksProps = {
   currentDate: Date;
   userId?: string;
   spaceId?: string;
+  ignoreRealtimeRef?: React.MutableRefObject<boolean>;
 };
 
-export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
+export const useTasks = ({ currentDate, userId, spaceId, ignoreRealtimeRef }: UseTasksProps) => {
   const queryClient = useQueryClient();
   const dateStr = currentDate.toDateString();
 
@@ -128,6 +129,10 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
         (payload) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           console.debug('Realtime update', payload);
+          if (ignoreRealtimeRef?.current) {
+            console.debug('Ignoring realtime update due to internal action');
+            return;
+          }
           queryClient.invalidateQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
           queryClient.invalidateQueries({ queryKey: ['all_tasks', userId, spaceId] }); // 전체 로그도 갱신
         }

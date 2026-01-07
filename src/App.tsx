@@ -194,6 +194,16 @@ export default function App() {
   }, [tasks, logs, focusedTaskId]);
 
   useEffect(() => {
+    // 1. dvh 지원 여부 확인 및 폴백 설정
+    const setAppHeight = () => {
+      const doc = document.documentElement;
+      // dvh를 지원하는지 체크하는 간단한 방법은 없지만, vh를 100 * 0.01로 설정하여 커스텀 속성 사용
+      doc.style.setProperty('--app-height', `${window.innerHeight}px`);
+    };
+    
+    window.addEventListener('resize', setAppHeight);
+    setAppHeight();
+
     if (!window.visualViewport) return;
     
     const handleResize = () => {
@@ -202,18 +212,22 @@ export default function App() {
       
       const viewportHeight = vv.height;
       const windowHeight = window.innerHeight;
+      // 키보드가 올라왔을 때의 오차 계산 (Android/iOS 차이 고려)
+      // 일반적으로 키보드가 올라오면 visualViewport 높이가 줄어듦
       const offset = windowHeight - viewportHeight;
       
+      // 키보드가 올라온 것으로 간주 (약간의 오차 허용)
       if (offset > 50) {
-        setBottomOffset(offset + 12);
+        setBottomOffset(Math.max(24, offset + 12));
       } else {
         setBottomOffset(24);
       }
 
-      if (offset > 50 && document.activeElement) {
+      // 포커스된 요소가 가려지지 않도록 스크롤 보정
+      if (offset > 50 && document.activeElement && document.activeElement.tagName !== 'BODY') {
         setTimeout(() => {
           document.activeElement?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }, 100);
+        }, 300); // 딜레이를 약간 늘려 키보드 애니메이션 완료 후 실행되도록 함
       }
     };
 
@@ -223,6 +237,7 @@ export default function App() {
     handleResize();
 
     return () => {
+      window.removeEventListener('resize', setAppHeight);
       window.visualViewport?.removeEventListener('resize', handleResize);
       window.visualViewport?.removeEventListener('scroll', handleResize);
     };
@@ -681,6 +696,7 @@ export default function App() {
           .select('*')
           .eq('user_id', user.id)
           .eq('space_id', currentSpace.id);
+          // .limit(1000); // 조회 제한 제거 - 전체 히스토리 로딩
 
         if (error) return;
         if (targetDateStr !== viewDateRef.current.toDateString()) return;
@@ -1091,7 +1107,7 @@ export default function App() {
   }, [currentSpace, saveToSupabaseAtDate]);
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden">
+    <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden" style={{ height: 'var(--app-height, 100vh)' }}>
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       <div className="flex-1 overflow-y-auto no-scrollbar relative">
         <div className="max-w-xl mx-auto flex flex-col p-4">

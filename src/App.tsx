@@ -123,12 +123,27 @@ export default function App() {
       // dvh를 지원하는지 체크하는 간단한 방법은 없지만, vh를 100 * 0.01로 설정하여 커스텀 속성 사용
       doc.style.setProperty('--app-height', `${window.innerHeight}px`);
     };
+
+    const handleVisualViewportResize = () => {
+      if (!window.visualViewport) return;
+      const keyboardHeight = window.innerHeight - window.visualViewport.height;
+      document.documentElement.style.setProperty('--keyboard-offset', `${keyboardHeight}px`);
+    };
     
     window.addEventListener('resize', setAppHeight);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleVisualViewportResize);
+      window.visualViewport.addEventListener('scroll', handleVisualViewportResize);
+    }
     setAppHeight();
+    handleVisualViewportResize();
 
     return () => {
       window.removeEventListener('resize', setAppHeight);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleVisualViewportResize);
+        window.visualViewport.removeEventListener('scroll', handleVisualViewportResize);
+      }
     };
   }, []);
 
@@ -552,21 +567,21 @@ export default function App() {
   return (
     <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden" style={{ height: 'var(--app-height, 100vh)' }}>
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
-      <div className="flex-1 overflow-y-auto no-scrollbar relative">
-        <div className="max-w-xl mx-auto flex flex-col p-4">
-        <div className="mb-4 flex justify-between items-center">
-            <SpaceSelector onSpaceChange={handleSpaceChange} />
-            <div className="flex gap-3 items-center">
-                {isLoading && <div className="text-xs text-blue-500 animate-pulse font-bold">LOADING...</div>}
-                <div className="flex bg-[#1a1a1f] rounded-lg p-0.5 border border-white/10">
-                    <button onClick={() => setViewMode('day')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${viewMode === 'day' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>DAY</button>
-                    <button onClick={() => setViewMode('flow')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
-                </div>
-                <button onClick={() => setViewDate(new Date())} className="text-gray-500 hover:text-white p-1 text-xs font-bold border border-gray-700 rounded px-2">TODAY</button>
-                <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1"><HelpCircle size={18} /></button>
-                <button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white">{user ? 'Logout' : 'Login'}</button>
-            </div>
+      <nav className="flex-none flex items-center justify-between px-2 py-3 md:p-4 max-w-xl mx-auto w-full flex-nowrap overflow-x-auto no-scrollbar">
+        <SpaceSelector onSpaceChange={handleSpaceChange} />
+        <div className="flex gap-2 md:gap-3 items-center flex-nowrap flex-shrink-0">
+          {isLoading && <div className="text-xs text-blue-500 animate-pulse font-bold flex-shrink-0">LOADING...</div>}
+          <div className="flex bg-[#1a1a1f] rounded-lg p-0.5 border border-white/10 flex-shrink-0">
+              <button onClick={() => setViewMode('day')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'day' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>DAY</button>
+              <button onClick={() => setViewMode('flow')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
+          </div>
+          <button onClick={() => setViewDate(new Date())} className="text-gray-500 hover:text-white p-1 text-xs font-bold border border-gray-700 rounded px-1.5 md:px-2 whitespace-nowrap flex-shrink-0">TODAY</button>
+          <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1 flex-shrink-0"><HelpCircle size={18} /></button>
+          <button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white whitespace-nowrap flex-shrink-0">{user ? 'Logout' : 'Login'}</button>
         </div>
+      </nav>
+      <div className="flex-1 overflow-y-auto no-scrollbar relative">
+        <div className="max-w-xl mx-auto flex flex-col px-4 pb-4">
         {viewMode === 'day' ? (
             <>
                 <div className={`calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`} onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
@@ -686,7 +701,7 @@ export default function App() {
         )}
         </div>
         {(activeTask || showBulkActions) && (
-          <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200 pointer-events-none" style={{ bottom: '24px' }}>
+          <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200 pointer-events-none" style={{ bottom: 'calc(24px + var(--keyboard-offset, 0px))' }}>
               <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl pointer-events-auto">
                   {showBulkActions ? (
                      <>

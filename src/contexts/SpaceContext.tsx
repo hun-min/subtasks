@@ -7,7 +7,7 @@ type SpaceContextType = {
   spaces: Space[];
   currentSpace: Space | null;
   setCurrentSpace: (space: Space) => void;
-  addSpace: (title: string) => Promise<void>;
+  createSpace: (title: string) => Promise<void>; // addSpace -> createSpace
   updateSpace: (id: number, title: string) => Promise<void>;
   deleteSpace: (id: number) => Promise<void>;
   loading: boolean;
@@ -178,7 +178,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('ultra_spaces_cache', JSON.stringify(newSpaces));
   };
 
-  const addSpace = async (title: string) => {
+  const createSpace = async (title: string) => { // addSpace -> createSpace
     try {
       if (user) {
         const { data } = await supabase.from('spaces').insert({ user_id: user.id, title }).select().single();
@@ -237,7 +237,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   const safeCurrentSpace = currentSpace || spaces[0] || { id: -1, title: '기본 공간', createdAt: new Date() };
 
   return (
-    <SpaceContext.Provider value={{ spaces, currentSpace: safeCurrentSpace, setCurrentSpace: handleSetCurrentSpace, addSpace, updateSpace, deleteSpace, loading }}>
+    <SpaceContext.Provider value={{ spaces, currentSpace: safeCurrentSpace, setCurrentSpace: handleSetCurrentSpace, createSpace, updateSpace, deleteSpace, loading }}>
       {children}
     </SpaceContext.Provider>
   );

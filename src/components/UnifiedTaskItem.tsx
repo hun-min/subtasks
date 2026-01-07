@@ -252,22 +252,13 @@ export const UnifiedTaskItem = React.memo(({
 
         if (prefixLen > 0) {
             (window as any).__restoreCursorPos = prefixLen;
+        } else {
+             (window as any).__restoreCursorPos = 0;
         }
 
         // 1. 현재 태스크 즉시 로컬 업데이트 (데이터 유실 방지)
         setLocalText(textBefore);
         if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-        
-        // 2. 부모로 요청 (분리 로직) - 여기서 updateTask를 또 호출하면 중복 업데이트 위험이 있으나,
-        // onAddTaskAtCursor 내부에서 전체 리스트를 새로 계산하므로
-        // 현재 태스크의 텍스트가 textBefore여야 함을 보장해야 함.
-        // updateTask는 비동기일 수 있으므로(React state or API), 상위 컴포넌트에서
-        // tasks 배열을 수정할 때 현재 태스크의 텍스트도 같이 수정해서 내려주는게 안전함.
-        // 따라서 여기서는 updateTask 호출을 생략하고 onAddTaskAtCursor만 호출하여
-        // 상위에서 한 번에 처리하도록 유도하거나, 아니면 확실하게 순서를 보장해야 함.
-        
-        // 기존 코드: updateTask 호출 후 onAddTaskAtCursor 호출 -> 상위에서 두 번 렌더링 될 수 있음.
-        // 개선: onAddTaskAtCursor만 호출하고, 그 안에서 현재 태스크 수정 + 새 태스크 추가를 한 번의 연산으로 처리.
         
         onAddTaskAtCursor(task.id, textBefore, newTextAfter);
       }

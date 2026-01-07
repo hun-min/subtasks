@@ -1,174 +1,160 @@
+// components/SpaceSelector.tsx
 import { useState, useRef, useEffect } from 'react';
 import { useSpace } from '../contexts/SpaceContext';
-import { Plus, ChevronDown, Check, Layout, Settings, Trash2 } from 'lucide-react';
-import { createPortal } from 'react-dom';
+import { ChevronDown, Plus, Edit2, Trash2, Check, X } from 'lucide-react';
 
-interface SpaceSelectorProps {
-  onSpaceChange?: (space: any) => void;
-}
-
-export function SpaceSelector({ onSpaceChange }: SpaceSelectorProps) {
-  const { spaces, currentSpace, setCurrentSpace, addSpace, deleteSpace, updateSpace } = useSpace();
+export function SpaceSelector({ onSpaceChange }: { onSpaceChange?: (space: any) => void }) {
+  const { spaces, currentSpace, setCurrentSpace, createSpace, updateSpace, deleteSpace } = useSpace();
   const [isOpen, setIsOpen] = useState(false);
-  const [newSpaceName, setNewSpaceName] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingName, setEditingName] = useState('');
-  
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [editName, setEditName] = useState('');
+  const [showAddInput, setShowAddInput] = useState(false); // 인풋창 표시 여부
+  const [newSpaceName, setNewSpaceName] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ top: 0, left: 0, width: 224 }); // default width w-56 = 14rem = 224px
+  const addInputRef = useRef<HTMLInputElement>(null); // 인풋 포커싱용 Ref
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      // 버튼 클릭은 토글 핸들러에서 처리하므로 무시해야 함 (안 그러면 닫혔다 바로 열림)
-      if (buttonRef.current && buttonRef.current.contains(event.target as Node)) {
-        return;
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setEditingId(null);
+        setShowAddInput(false); // 닫힐 때 인풋창도 숨김
       }
-      // 드롭다운 내부 클릭 시 닫히지 않음
-      if (dropdownRef.current && dropdownRef.current.contains(event.target as Node)) {
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // 인풋창이 열릴 때 자동 포커스
+  useEffect(() => {
+    if (showAddInput && addInputRef.current) {
+      addInputRef.current.focus();
+    }
+  }, [showAddInput]);
+
+  const handleCreate = async () => {
+    if (!newSpaceName.trim()) {
+        setShowAddInput(false);
         return;
-      }
-      setIsOpen(false);
-      setIsAdding(false);
     }
-
-    if (isOpen) {
-        document.addEventListener("mousedown", handleClickOutside);
-        // 위치 계산
-        if (buttonRef.current) {
-            const rect = buttonRef.current.getBoundingClientRect();
-            // 화면 오른쪽 넘어가는지 체크
-            const windowWidth = window.innerWidth;
-            const dropdownWidth = 224; // w-56
-            let left = rect.left;
-            
-            // 모바일 등 좁은 화면에서 오른쪽 잘림 방지
-            if (left + dropdownWidth > windowWidth - 10) {
-                left = windowWidth - dropdownWidth - 10;
-            }
-            // 왼쪽 너무 붙음 방지
-            if (left < 10) left = 10;
-
-            setPosition({
-                top: rect.bottom + 8,
-                left: left,
-                width: dropdownWidth
-            });
-        }
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
-
-  const handleAddSpace = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newSpaceName.trim()) {
-      await addSpace(newSpaceName);
+    try {
+      await createSpace(newSpaceName);
       setNewSpaceName('');
-      setIsAdding(false);
+      setShowAddInput(false);
+    } catch (error) {
+      console.error('Failed to create space:', error);
     }
   };
 
-  const handleDeleteSpace = async (id: number) => {
-    if (spaces.length <= 1) {
-      alert('마지막 공간은 삭제할 수 없습니다.');
-      return;
+  const handleUpdate = async (id: number) => {
+    if (!editName.trim()) return;
+    try {
+      await updateSpace(id, editName);
+      setEditingId(null);
+    } catch (error) {
+      console.error('Failed to update space:', error);
     }
-    setDeleteConfirmId(id);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (spaces.length <= 1) {
+        alert("최소 하나의 스페이스는 있어야 합니다.");
+        return;
+    }
+    if (window.confirm('정말 삭제하시겠습니까? 모든 데이터가 사라집니다.')) {
+      try {
+        await deleteSpace(id);
+        if (currentSpace?.id === id) {
+            setCurrentSpace(spaces.find(s => s.id !== id) || spaces[0]);
+        }
+      } catch (error) {
+        console.error('Failed to delete space:', error);
+      }
+    }
   };
 
   return (
-    <>
-      <div className="relative flex-shrink-0">
-        <button 
-            ref={buttonRef}
-            onClick={() => setIsOpen(!isOpen)} 
-            className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-xl hover:bg-white/5 transition-colors text-sm font-medium text-gray-200 max-w-[140px] md:max-w-[200px]"
-        >
-          <Layout size={16} className="text-gray-400 flex-shrink-0" />
-          <span className="whitespace-nowrap overflow-hidden text-ellipsis text-xs md:text-sm">{currentSpace ? currentSpace.title : '공간 선택'}</span>
-          <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''} flex-shrink-0`} />
-        </button>
-      </div>
+    <div className="relative z-[5000]" ref={dropdownRef}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)} 
+        className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-white/10 transition-colors"
+      >
+        <span className="font-black text-lg tracking-tight">{currentSpace?.title || 'Loading...'}</span>
+        <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
 
-      {isOpen && createPortal(
-        <div 
-            ref={dropdownRef}
-            style={{ 
-                position: 'fixed', 
-                top: position.top, 
-                left: position.left,
-                width: position.width,
-                zIndex: 99999 
-            }}
-            className="bg-black border border-white/10 rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100 origin-top-left"
-        >
-          <div className="flex items-center justify-between px-2 py-1 border-b border-white/5 mb-1">
-            <span className="text-xs text-gray-500">공간 목록</span>
-            <button onClick={() => setShowSettings(!showSettings)} className="p-1 text-gray-500 hover:text-white transition-colors">
-              <Settings size={14} />
-            </button>
-          </div>
-          <div className="max-h-60 overflow-y-auto scrollbar-hide py-1">
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-2 w-64 bg-[#1a1a1f] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 p-2">
+          <div className="max-h-[60vh] overflow-y-auto custom-scrollbar space-y-1">
             {spaces.map(space => (
-              <div key={space.id} className="flex items-center gap-1">
+              <div 
+                key={space.id} 
+                className={`group flex items-center justify-between p-2 rounded-xl transition-all ${currentSpace?.id === space.id ? 'bg-[#7c4dff]/20 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
+              >
                 {editingId === space.id ? (
-                  <form onSubmit={(e) => { e.preventDefault(); updateSpace(space.id!, editingName); setEditingId(null); }} className="flex-1 flex items-center gap-1 px-1">
-                    <input autoFocus type="text" value={editingName} onChange={(e) => setEditingName(e.target.value)} className="flex-1 bg-black/30 text-xs text-white px-2 py-1.5 rounded border border-white/10 outline-none focus:border-blue-500" />
-                    <button type="submit" className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-500"><Check size={12} /></button>
-                  </form>
+                  <div className="flex items-center gap-1 w-full">
+                    <input 
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="flex-1 bg-black/30 border border-white/10 rounded px-2 py-1 text-sm outline-none focus:border-[#7c4dff]"
+                      autoFocus
+                      onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleUpdate(space.id!);
+                          if (e.key === 'Escape') setEditingId(null);
+                      }}
+                    />
+                    <button onClick={() => handleUpdate(space.id!)} className="p-1 hover:text-green-400"><Check size={14} /></button>
+                    <button onClick={() => setEditingId(null)} className="p-1 hover:text-red-400"><X size={14} /></button>
+                  </div>
                 ) : (
                   <>
-                    <button onClick={() => { setCurrentSpace(space); if (onSpaceChange) onSpaceChange(space); setIsOpen(false); }} className={`flex-1 text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors ${currentSpace?.id === space.id ? 'bg-blue-600/10 text-blue-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}>
-                      <span className="truncate">{space.title}</span>
-                      {currentSpace?.id === space.id && <Check size={14} />}
+                    <button 
+                        onClick={() => { 
+                            setCurrentSpace(space); 
+                            setIsOpen(false);
+                            onSpaceChange?.(space);
+                        }} 
+                        className="flex-1 text-left font-bold truncate px-1"
+                    >
+                        {space.title}
                     </button>
-                    {showSettings && (
-                      <>
-                        <button onClick={() => { setEditingId(space.id!); setEditingName(space.title); }} className="p-2 text-gray-600 hover:text-blue-500 transition-colors">
-                          <Settings size={14} />
-                        </button>
-                        <button onClick={() => handleDeleteSpace(space.id!)} className="p-2 text-gray-600 hover:text-red-500 transition-colors">
-                          <Trash2 size={14} />
-                        </button>
-                      </>
-                    )}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => { setEditingId(space.id!); setEditName(space.title); }} className="p-1.5 rounded hover:bg-white/10 text-gray-500 hover:text-white"><Edit2 size={12} /></button>
+                        <button onClick={() => handleDelete(space.id!)} className="p-1.5 rounded hover:bg-white/10 text-gray-500 hover:text-red-400"><Trash2 size={12} /></button>
+                    </div>
                   </>
                 )}
               </div>
             ))}
           </div>
-          <div className="border-t border-white/5 mt-1 pt-1 px-1">
-            {isAdding ? (
-              <form onSubmit={handleAddSpace} className="flex items-center gap-1 p-1">
-                <input autoFocus type="text" value={newSpaceName} onChange={(e) => setNewSpaceName(e.target.value)} placeholder="공간 이름" className="w-full bg-black/30 text-xs text-white px-2 py-1.5 rounded border border-white/10 outline-none focus:border-blue-500" />
-                <button type="submit" className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-500"><Check size={12} /></button>
-              </form>
+          
+          <div className="mt-2 pt-2 border-t border-white/10">
+            {showAddInput ? (
+                <div className="flex items-center gap-2 px-2 py-1">
+                    <input 
+                        ref={addInputRef}
+                        value={newSpaceName}
+                        onChange={(e) => setNewSpaceName(e.target.value)}
+                        placeholder="New Space Name"
+                        className="flex-1 bg-black/30 border border-white/10 rounded px-2 py-1.5 text-sm outline-none focus:border-[#7c4dff] placeholder:text-gray-600"
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCreate();
+                            if (e.key === 'Escape') setShowAddInput(false);
+                        }}
+                    />
+                    <button onClick={handleCreate} className="p-1.5 bg-[#7c4dff] rounded text-white hover:bg-[#6c3de6]"><Check size={14} /></button>
+                </div>
             ) : (
-              <button onClick={() => setIsAdding(true)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-500 hover:text-gray-300 hover:bg-white/5 rounded-lg transition-colors">
-                <Plus size={12} /><span>새 공간 만들기</span>
-              </button>
+                <button 
+                    onClick={() => setShowAddInput(true)} 
+                    className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-sm font-bold text-gray-500 hover:bg-white/5 hover:text-white transition-all border border-transparent hover:border-white/10"
+                >
+                    <Plus size={14} /> Create Space
+                </button>
             )}
           </div>
-        </div>,
-        document.body
+        </div>
       )}
-      
-      {deleteConfirmId && createPortal(
-        <div className="fixed inset-0 z-[10000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
-          <div className="bg-[#0a0a0f]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 w-full max-w-xs shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-white mb-2">공간 삭제</h3>
-            <p className="text-sm text-gray-400 mb-6">이 공간을 삭제하시겠습니까?</p>
-            <div className="flex gap-2">
-              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors">취소</button>
-              <button onClick={async () => { await deleteSpace(deleteConfirmId); setDeleteConfirmId(null); setShowSettings(false); }} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors">삭제</button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </>
+    </div>
   );
 }

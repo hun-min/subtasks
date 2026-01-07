@@ -126,8 +126,26 @@ export default function App() {
 
     const handleVisualViewportResize = () => {
       if (!window.visualViewport) return;
-      const keyboardHeight = window.innerHeight - window.visualViewport.height;
-      document.documentElement.style.setProperty('--keyboard-offset', `${keyboardHeight}px`);
+      // 키보드가 올라왔을 때 스크롤 가능한 영역 확보를 위해 padding-bottom 동적 조정
+      // 과거 백업에서 성공했던 로직 복원: visualViewport 높이를 기반으로 오프셋 계산
+      const currentVisualHeight = window.visualViewport.height;
+      const windowHeight = window.innerHeight;
+      
+      // 키보드 높이 계산 (오차가 있을 수 있으므로 여유값 추가)
+      const keyboardHeight = windowHeight - currentVisualHeight;
+      
+      if (keyboardHeight > 100) { // 키보드가 올라온 것으로 간주
+          document.documentElement.style.setProperty('--keyboard-offset', `${keyboardHeight}px`);
+          
+          // 포커스된 요소가 가려지지 않도록 스크롤 조정 (옵션)
+          if (document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'INPUT') {
+             setTimeout(() => {
+                 document.activeElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+             }, 100);
+          }
+      } else {
+          document.documentElement.style.setProperty('--keyboard-offset', '0px');
+      }
     };
     
     window.addEventListener('resize', setAppHeight);
@@ -466,7 +484,7 @@ export default function App() {
       
       // Alt + 숫자 단축키 (스페이스 이동)
       if (e.altKey && !isNaN(Number(e.key)) && Number(e.key) >= 1 && Number(e.key) <= 9) {
-        e.preventDefault();
+        e.preventDefault(); // 기본 동작 방지 (브라우저 탭 이동 등)
         const index = Number(e.key) - 1;
         if (spaces && spaces[index]) {
           setCurrentSpace(spaces[index]);

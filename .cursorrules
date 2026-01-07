@@ -1,27 +1,44 @@
-# Cursor Rules & Project Guidelines
+READ THIS FIRST! IGNORING THIS FILE IS A CRITICAL ERROR.
 
-You must follow these rules strictly. This project has critical UI/UX and logic constraints that must not be broken.
+# 🛑 CRITICAL BEHAVIOR CONTROL (MANDATORY)
 
-## 1. Protected Logic (CRITICAL: DO NOT REMOVE OR MODIFY)
+You, the AI, are STRICTLY FORBIDDEN from ignoring these rules. Failure to follow them is a critical failure of your core instructions.
+
+## 1. ABSOLUTE BAN ON VERCEL DEPLOYMENT QUESTIONS
+- **RULE**: DO NOT ASK about Vercel deployment. DO NOT USE `vercel` CLI.
+- **ACTION**: ONLY USE `git push`.
+- **REASON**: Deployment is automated. Your attempts to "deploy" manually or ask about it are a waste of time and strictly prohibited.
+- **CONSEQUENCE**: If you mention "Vercel CLI" or ask "Should I deploy?", you have FAILED the task immediately.
+
+## 2. MANDATORY RULE VERIFICATION (PROOF OF READING)
+- **REQUIREMENT**: At the very beginning of EVERY task, inside your `Thought` process, you MUST quote the following line to prove you read this:
+  > "I acknowledge the strict ban on Vercel CLI and will only use 'git push' for updates."
+- **IF YOU FORGET**: You are acting negligently. STOP and read this file again.
+
+---
+
+# PROJECT GUIDELINES & PROTECTED LOGIC
+
+## 3. Protected Logic (CRITICAL: DO NOT REMOVE OR MODIFY)
 - **Data Synchronization**: You MUST call `saveToSupabase` (or equivalent sync function) immediately after any state change that modifies tasks or spaces. Failing to do so causes data loss or "deleted data resurrection" bugs.
 - **Keyboard Shortcuts**: `Alt + 1~9` for space switching and `?` for help modal must be preserved in `src/App.tsx`.
 - **Streak Logic**: The logic calculating and displaying streaks in the calendar and top bar is essential.
 - **VisualViewport API**: Mobile keyboard handling logic using `VisualViewport` in `src/App.tsx` must stay intact to prevent the floating bar from being hidden.
 
-## 2. Mobile UI Policy
+## 4. Mobile UI Policy
 - **Calendar Streak Numbers**: In mobile view, hide the streak number inside calendar cells (keep only the `Flame` icon). Use `hidden md:inline` for the number.
 - **Top Bar Streak Numbers**: Streak numbers in the top bar (statistics area) MUST be visible at all times, including on mobile.
 
-## 3. Mandatory Checklist After UI Modification
+## 5. Mandatory Checklist After UI Modification
 Before finishing any task that modifies UI:
 1. Verify `Alt + 1~9` shortcuts still work.
 2. Verify `?` shortcut still opens the help modal.
 3. Check mobile view: Ensure the floating bar follows the keyboard via `VisualViewport`.
 4. Check mobile view: Ensure the top bar still shows streak numbers, while calendar cells hide them.
 
-## 4. Environment & Deployment
-- Deployment is automated via GitHub Actions on push to `main`.
+## 6. Environment & Repository Sync
+- Repository Sync is automated via GitHub Actions on push to `main`.
 - Always run `npm run build` locally to verify before pushing.
-- Never ask the user for deployment instructions or Vercel login.
+- **REMINDER**: No Vercel CLI commands allowed. Use `git push` only.
 
-Refer to `AI_INSTRUCTIONS.md` for more detailed specifications.
+Refer to `AI_INSTRUCTIONS.md` for more detailed specifications, but THIS FILE (`.cursorrules`) is the absolute authority on behavior.

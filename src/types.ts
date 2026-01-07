@@ -23,6 +23,7 @@ export type Task = {
   parentId?: number;
   subtasks?: Task[];
   depth?: number;
+  is_starred?: boolean;
 };
 
 export type DailyLog = {

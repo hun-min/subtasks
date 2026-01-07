@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check } from 'lucide-react';
+import { Check, Star } from 'lucide-react';
 import { Task, DailyLog } from '../types';
 import { formatTimeShort } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
@@ -273,7 +273,19 @@ export const UnifiedTaskItem = React.memo(({
           <div key={i} className="h-full border-r border-white/5" style={{ width: '15px' }} />
         ))}
       </div>
-      <div className="flex flex-col items-center justify-start pt-2">
+      <div className="flex flex-col items-center justify-start mt-[5px] flex-shrink-0 gap-1.5">
+        <button 
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            updateTask(task.id, { is_starred: !task.is_starred }); 
+          }} 
+          className="flex-shrink-0 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star"
+        >
+          <Star 
+            size={13} 
+            className={`${task.is_starred ? 'fill-yellow-400 text-yellow-400' : 'text-gray-700 opacity-0 group-hover:opacity-100 group-hover/star:text-gray-500'} transition-all`} 
+          />
+        </button>
         <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}

@@ -47,10 +47,10 @@ export function SpaceSelector({ onSpaceChange }: SpaceSelectorProps) {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-white/5 transition-colors text-sm font-medium text-gray-200">
-        <Layout size={16} className="text-gray-400" />
-        <span>{currentSpace ? currentSpace.title : '공간 선택'}</span>
-        <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      <button onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-white/5 transition-colors text-sm font-medium text-gray-200 max-w-[200px]">
+        <Layout size={16} className="text-gray-400 flex-shrink-0" />
+        <span className="whitespace-nowrap overflow-hidden text-ellipsis">{currentSpace ? currentSpace.title : '공간 선택'}</span>
+        <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''} flex-shrink-0`} />
       </button>
 
       {isOpen && (

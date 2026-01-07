@@ -42,6 +42,7 @@ export const migrateTasks = (tasks: any[]): Task[] => {
           planTime: Number(t.planTime) || 0,
           percent: Number(t.percent) || 0,
           space_id: t.space_id || '',
+          is_starred: t.is_starred || false,
           subtasks: undefined 
       };
 

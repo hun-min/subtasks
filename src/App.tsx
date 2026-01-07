@@ -104,7 +104,6 @@ export default function App() {
 
   // New State: View Mode
   const [viewMode, setViewMode] = useState<'day' | 'flow'>('day');
-  const [bottomOffset, setBottomOffset] = useState(24);
 
   const activeTask = useMemo(() => {
     if (!focusedTaskId) return undefined;
@@ -128,42 +127,8 @@ export default function App() {
     window.addEventListener('resize', setAppHeight);
     setAppHeight();
 
-    if (!window.visualViewport) return;
-    
-    const handleResize = () => {
-      const vv = window.visualViewport;
-      if (!vv) return;
-      
-      const viewportHeight = vv.height;
-      const windowHeight = window.innerHeight;
-      // 키보드가 올라왔을 때의 오차 계산 (Android/iOS 차이 고려)
-      // 일반적으로 키보드가 올라오면 visualViewport 높이가 줄어듦
-      const offset = windowHeight - viewportHeight;
-      
-      // 키보드가 올라온 것으로 간주 (약간의 오차 허용)
-      if (offset > 50) {
-        setBottomOffset(Math.max(24, offset + 12));
-      } else {
-        setBottomOffset(24);
-      }
-
-      // 포커스된 요소가 가려지지 않도록 스크롤 보정
-      if (offset > 50 && document.activeElement && document.activeElement.tagName !== 'BODY') {
-        setTimeout(() => {
-          document.activeElement?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }, 300); // 딜레이를 약간 늘려 키보드 애니메이션 완료 후 실행되도록 함
-      }
-    };
-
-    window.visualViewport.addEventListener('resize', handleResize);
-    window.visualViewport.addEventListener('scroll', handleResize);
-    
-    handleResize();
-
     return () => {
       window.removeEventListener('resize', setAppHeight);
-      window.visualViewport?.removeEventListener('resize', handleResize);
-      window.visualViewport?.removeEventListener('scroll', handleResize);
     };
   }, []);
 
@@ -721,8 +686,8 @@ export default function App() {
         )}
         </div>
         {(activeTask || showBulkActions) && (
-          <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200" style={{ bottom: `${bottomOffset}px` }}>
-              <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl">
+          <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200 pointer-events-none" style={{ bottom: '24px' }}>
+              <div className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl pointer-events-auto">
                   {showBulkActions ? (
                      <>
                         <div className="px-4 font-bold text-white whitespace-nowrap flex items-center gap-2">

@@ -1,0 +1,1 @@
+ALTER TABLE task_logs ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT false;

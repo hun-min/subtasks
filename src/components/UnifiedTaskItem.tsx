@@ -42,8 +42,8 @@ export const UnifiedTaskItem = React.memo(({
   onMoveDown: (taskId: number) => void,
   onDelete?: (taskId: number) => void,
   onCopy?: (task: Task) => void,
-  onFocusPrev?: (taskId: number, cursorPosition: 'start' | 'end') => void,
-  onFocusNext?: (taskId: number, cursorPosition: 'start' | 'end') => void
+  onFocusPrev?: (taskId: number, cursorIndex: number | 'start' | 'end') => void,
+  onFocusNext?: (taskId: number, cursorIndex: number | 'start' | 'end') => void
 }) => {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
@@ -89,13 +89,17 @@ export const UnifiedTaskItem = React.memo(({
           if (typeof restorePos === 'number') {
               textareaRef.current.setSelectionRange(restorePos, restorePos);
               delete (window as any).__restoreCursorPos;
-          } else if ((window as any).__cursorPosition) {
+          } else if ((window as any).__cursorPosition !== undefined) {
               const pos = (window as any).__cursorPosition;
               if (pos === 'start') {
                   textareaRef.current.setSelectionRange(0, 0);
               } else if (pos === 'end') {
                   const len = textareaRef.current.value.length;
                   textareaRef.current.setSelectionRange(len, len);
+              } else if (typeof pos === 'number') {
+                  const len = textareaRef.current.value.length;
+                  const newPos = Math.min(pos, len);
+                  textareaRef.current.setSelectionRange(newPos, newPos);
               }
               delete (window as any).__cursorPosition;
           }
@@ -154,18 +158,19 @@ export const UnifiedTaskItem = React.memo(({
         
         // Navigation: Check if cursor moves; if not, move focus
         if (!e.shiftKey && !e.metaKey) {
+            const currentVal = textareaRef.current?.value || '';
             const startPos = textareaRef.current?.selectionStart ?? 0;
-            // Allow browser default behavior (cursor movement)
+            const firstLineBreakIndex = currentVal.indexOf('\n');
             
-            setTimeout(() => {
-                if (!textareaRef.current) return;
-                const newPos = textareaRef.current.selectionStart;
-                if (startPos === newPos) {
-                    // Cursor didn't move, implies we are at the top boundary
-                    onFocusPrev?.(task.id, 'end');
-                }
-            }, 0);
-            return;
+            // 첫 줄에 있거나, 한 줄 짜리 텍스트인데 위로 갈 때
+            // startPos <= firstLineBreakIndex : 첫 줄에 커서가 있음
+            // firstLineBreakIndex === -1 : 전체가 한 줄임
+            if (firstLineBreakIndex === -1 || startPos <= firstLineBreakIndex) {
+                 e.preventDefault();
+                 onFocusPrev?.(task.id, startPos);
+                 return;
+            }
+            // 그 외(두 번째 줄 이상)는 브라우저 기본 동작
         }
     }
 
@@ -178,18 +183,20 @@ export const UnifiedTaskItem = React.memo(({
 
         // Navigation: Check if cursor moves; if not, move focus
         if (!e.shiftKey && !e.metaKey) {
+            const currentVal = textareaRef.current?.value || '';
             const startPos = textareaRef.current?.selectionStart ?? 0;
-            // Allow browser default behavior (cursor movement)
-
-            setTimeout(() => {
-                if (!textareaRef.current) return;
-                const newPos = textareaRef.current.selectionStart;
-                if (startPos === newPos) {
-                    // Cursor didn't move, implies we are at the bottom boundary
-                    onFocusNext?.(task.id, 'start');
-                }
-            }, 0);
-            return;
+            const lastLineBreakIndex = currentVal.lastIndexOf('\n');
+            
+            // 마지막 줄에 있을 때
+            // lastLineBreakIndex === -1 : 전체가 한 줄 (무조건 마지막 줄)
+            // startPos > lastLineBreakIndex : 마지막 줄바꿈 이후에 커서가 있음 (즉 마지막 줄)
+            if (lastLineBreakIndex === -1 || startPos > lastLineBreakIndex) {
+                e.preventDefault();
+                // 현재 줄에서의 오프셋 계산 (여러 줄일 경우 마지막 줄의 시작점부터의 거리)
+                const currentLineOffset = lastLineBreakIndex === -1 ? startPos : startPos - (lastLineBreakIndex + 1);
+                onFocusNext?.(task.id, currentLineOffset);
+                return;
+            }
         }
     }
 

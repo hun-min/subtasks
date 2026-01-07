@@ -191,19 +191,21 @@ export default function App() {
   }, [tasks, currentMemo, updateTasks, selectedTaskIds]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
-      // 즉시 로컬 상태 반영 (낙관적 업데이트)
-      // 현재 tasks 상태를 기준으로 계산
+      // 1. 현재 리스트 복사 및 인덱스 찾기
       const idx = tasks.findIndex(t => t.id === taskId);
       if (idx === -1) return;
-      
+
       const current = tasks[idx];
+      
+      // 2. 새 항목 생성 (아랫줄)
+      // textAfter가 여러 줄일 경우를 대비해 처리하지만, 보통은 한 줄
       const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
-        id: Date.now() + i + Math.random(), // 유니크 ID 보장 강화
-        name: line.trim(), 
+        id: Date.now() + i + Math.random(), // 유니크 ID
+        name: line, // trim() 제거하여 공백 유지 (필요 시) - 여기선 일단 그대로 둠
         status: 'pending', 
         indent: current.indent, 
         parent: current.parent, 
-        text: line.trim(),
+        text: line,
         percent: 0, 
         planTime: 0, 
         actTime: 0, 
@@ -211,20 +213,30 @@ export default function App() {
         depth: current.depth || 0, 
         space_id: String(currentSpace?.id || ''),
       }));
-      
-      const next = [...tasks];
-      // 현재 태스크 내용 수정
-      next[idx] = { ...current, name: textBefore, text: textBefore };
-      // 새 태스크 추가
-      next.splice(idx + 1, 0, ...newTasksToAdd);
-      
-      // 포커스 이동
-      if (newTasksToAdd.length > 0) {
-        setFocusedTaskId(newTasksToAdd[0].id);
+
+      // 3. 리스트 재구성: [이전 항목들] + [수정된 현재 항목] + [새 항목들] + [이후 항목들]
+      const nextTasks = [...tasks];
+      // 현재 항목 수정 (윗줄 자르기)
+      nextTasks[idx] = { ...current, name: textBefore, text: textBefore };
+      // 새 항목 삽입
+      nextTasks.splice(idx + 1, 0, ...newTasksToAdd);
+
+      // 4. 포커스 이동 타겟 설정
+      const nextFocusId = newTasksToAdd.length > 0 ? newTasksToAdd[0].id : null;
+      if (nextFocusId) {
+        setFocusedTaskId(nextFocusId);
       }
+
+      // 5. 서버 동기화 요청 (낙관적 업데이트는 useMutation onMutate에서 처리됨)
+      // 하지만 엔터 키 입력 시의 즉각적인 반응성을 위해 여기서 queryClient를 직접 조작하는 것이 더 확실할 수 있음.
+      // useTasks 훅 내부의 updateTasks가 onMutate를 가지고 있으므로, updateTasks.mutate 호출만으로 충분해야 함.
+      // 그러나 문제 설명에 따르면 "서버 동기화 과정에서 롤백"된다고 하므로, 
+      // onMutate 로직이 확실하게 작동하는지 확인하거나, 여기서 강제 업데이트를 해주는 것이 안전함.
       
-      // 서버 동기화
-      updateTasks.mutate({ tasks: next, memo: currentMemo });
+      // 여기서는 updateTasks 호출 시 낙관적 업데이트가 이미 구현되어 있으므로(useTasks.ts 참고),
+      // updateTasks를 호출합니다. useTasks.ts의 onMutate가 setQueryData를 수행함.
+      updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
+      
   }, [tasks, currentMemo, updateTasks, currentSpace]);
 
   const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {

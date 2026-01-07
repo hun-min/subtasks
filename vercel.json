@@ -1,5 +1,0 @@
-{
-  "WARNING": "MANUAL DEPLOYMENT IS PROHIBITED.",
-  "INFO": "This project is deployed via Git Push. Please do not use the 'vercel' command.",
-  "NOTE": "Configuration has been removed to prevent accidental manual deployments."
-}

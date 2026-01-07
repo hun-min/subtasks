@@ -391,14 +391,14 @@ export const UnifiedTaskItem = React.memo(({
           <div key={i} className="h-full border-r border-white/5" style={{ width: '15px' }} />
         ))}
       </div>
-      <div className="flex items-center justify-start mt-[5px] flex-shrink-0 gap-2">
+      <div className="relative flex items-center justify-start mt-1 flex-shrink-0">
         <button 
           onClick={(e) => { 
             e.stopPropagation(); 
             updateTask(task.id, { is_starred: !task.is_starred }); 
           }}
           disabled={!task.is_starred && !isFocused}
-          className={`flex-shrink-0 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star ${
+          className={`absolute right-full mr-1.5 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star ${
              !task.is_starred && !isFocused ? 'cursor-default' : 'cursor-pointer'
           }`}
         >

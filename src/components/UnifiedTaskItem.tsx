@@ -141,14 +141,14 @@ export const UnifiedTaskItem = React.memo(({
         // Navigation between tasks
         if (!e.shiftKey && !e.metaKey) {
             const cursor = textareaRef.current?.selectionStart || 0;
+            const value = textareaRef.current?.value || '';
             
-            // 커서가 맨 앞에 있을 때만 이전 항목으로 이동
-            if (cursor === 0) {
+            // 첫 번째 줄이면 즉시 이전 항목으로 이동
+            if (value.substring(0, cursor).indexOf('\n') === -1) {
                  e.preventDefault();
                  onFocusPrev?.(task.id);
                  return;
             }
-            // 그 외에는 브라우저 기본 동작(윗줄 이동) 수행
         }
     }
 
@@ -162,15 +162,14 @@ export const UnifiedTaskItem = React.memo(({
         // Navigation between tasks
         if (!e.shiftKey && !e.metaKey) {
             const cursor = textareaRef.current?.selectionStart || 0;
-            const textLength = textareaRef.current?.value.length || 0;
+            const value = textareaRef.current?.value || '';
             
-            // 커서가 맨 뒤에 있을 때만 다음 항목으로 이동
-            if (cursor === textLength) {
+            // 마지막 줄이면 즉시 다음 항목으로 이동
+            if (value.substring(cursor).indexOf('\n') === -1) {
                  e.preventDefault();
                  onFocusNext?.(task.id);
                  return;
             }
-            // 그 외에는 브라우저 기본 동작(아랫줄 이동) 수행
         }
     }
 

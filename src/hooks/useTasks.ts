@@ -1,7 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../supabase';
 import { Task, DailyLog } from '../types';
-import { useEffect } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 
 // --- 유틸리티: 데이터 마이그레이션 및 평탄화 ---
 export const migrateTasks = (tasks: any[]): Task[] => {
@@ -67,9 +67,19 @@ type UseTasksProps = {
 export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
   const queryClient = useQueryClient();
   const dateStr = currentDate.toDateString();
+  
+  // Local state for immediate UI updates
+  const [localTasks, setLocalTasks] = useState<Task[]>([]);
+  const [localMemo, setLocalMemo] = useState<string>('');
+  const [isLocalDirty, setIsLocalDirty] = useState(false);
+  const lastServerDataRef = useRef<{ tasks: Task[], memo: string } | null>(null);
+  const isInitialLoad = useRef(true);
+
+  // Debounce ref
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Fetching (Single Date)
-  const { data: log, isLoading } = useQuery({
+  const { data: serverData, isLoading } = useQuery({
     queryKey: ['tasks', dateStr, userId, spaceId],
     queryFn: async () => {
       // 비로그인 상태일 경우 로컬 스토리지 사용
@@ -108,11 +118,89 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
         tasks: migrateTasks(typeof data.tasks === 'string' ? JSON.parse(data.tasks) : data.tasks),
       } as DailyLog;
     },
-    enabled: true, // 항상 활성화 (로그인 여부 상관없이)
+    enabled: true, 
     staleTime: 1000 * 60 * 5, // 5분
   });
 
-  // 2. Realtime Subscription
+  // 2. Sync Server Data to Local State (Only when safe)
+  useEffect(() => {
+    if (!serverData) return;
+    
+    // 초기 로딩이거나, 로컬 변경사항이 없는 경우에만 서버 데이터로 덮어씌움
+    // 즉, 사용자가 입력 중(isLocalDirty)일 때는 서버 데이터가 와도 무시함 (충돌 방지 우선)
+    if (isInitialLoad.current || !isLocalDirty) {
+        setLocalTasks(serverData.tasks || []);
+        setLocalMemo(serverData.memo || '');
+        lastServerDataRef.current = { tasks: serverData.tasks || [], memo: serverData.memo || '' };
+        if (isInitialLoad.current) isInitialLoad.current = false;
+    }
+  }, [serverData, isLocalDirty]);
+
+  // Reset local dirty state when date changes
+  useEffect(() => {
+    setIsLocalDirty(false);
+    isInitialLoad.current = true;
+    setLocalTasks([]); // Clear while loading new date
+    setLocalMemo('');
+  }, [dateStr, spaceId]);
+
+
+  // 3. Mutation (Actual Save)
+  const saveToSupabase = async (tasks: Task[], memo: string) => {
+      if (!userId || !spaceId) {
+          const localKey = `tasks_${dateStr}`;
+          const dataToSave = { tasks, memo, date: dateStr };
+          localStorage.setItem(localKey, JSON.stringify(dataToSave));
+          return;
+      }
+
+      const { error } = await supabase.from('task_logs').upsert({
+        user_id: userId,
+        space_id: spaceId,
+        date: dateStr,
+        tasks: JSON.stringify(tasks),
+        memo: memo,
+      }, { onConflict: 'user_id,space_id,date' });
+
+      if (error) throw error;
+  };
+
+  // 4. Update Handler (Local First + Debounced Save)
+  const updateTasks = useCallback((newTasks: Task[], newMemo?: string) => {
+      // 1. Update Local State Immediately
+      setLocalTasks(newTasks);
+      if (newMemo !== undefined) setLocalMemo(newMemo);
+      setIsLocalDirty(true);
+
+      // 2. Clear existing timeout
+      if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+      }
+
+      // 3. Set new timeout for server save (Debounce 1.5s)
+      saveTimeoutRef.current = setTimeout(async () => {
+          try {
+              const memoToSave = newMemo !== undefined ? newMemo : localMemo;
+              await saveToSupabase(newTasks, memoToSave);
+              
+              // 저장 성공 시 Dirty 상태 해제하지 않음 (서버 응답이 돌아와서 useQuery가 갱신될 때 처리하거나, 
+              // 복잡성을 줄이기 위해 그냥 Dirty 유지하다가 다른 날짜 이동 시 초기화)
+              // 여기서는 "서버 데이터가 로컬보다 최신이라고 확신할 수 없으므로" 
+              // 로컬이 Dirty인 상태를 계속 유지하여 서버 데이터가 와도 덮어쓰지 않도록 하는 전략이 안전함.
+              // 단, 오랫동안 켜두면 서버의 타인 변경사항을 영원히 못 받을 수 있음.
+              // Local-First는 "내 변경사항이 우선"이므로 이게 맞음.
+              // 리프레시하거나 날짜 이동해야 서버 데이터 다시 받음.
+              
+              // console.log("Auto-saved to server");
+          } catch (err) {
+              console.error("Failed to auto-save", err);
+              // Retry logic could go here
+          }
+      }, 1500); 
+
+  }, [localMemo, userId, spaceId, dateStr]);
+
+  // 5. Realtime Subscription (Optional: Only warn or update if not dirty)
   useEffect(() => {
     if (!userId || !spaceId) return;
 
@@ -126,11 +214,13 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
           filter: `user_id=eq.${userId} and space_id=eq.${spaceId} and date=eq.${dateStr}`,
         },
         (payload) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          console.debug('Realtime update received', payload);
-          // 단순하고 강력하게: 변경 감지 시 무조건 갱신
-          queryClient.invalidateQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
-          queryClient.invalidateQueries({ queryKey: ['all_tasks', userId, spaceId] });
+           // eslint-disable-next-line @typescript-eslint/no-unused-vars
+           console.debug('Realtime update received', payload);
+           // 내가 쓴 글이 아닌 경우(다른 기기/사람)에만 반응해야 하는데 구분 어려움.
+           // 간단히: 로컬이 Dirty(입력중)가 아닐 때만 invalidate
+           if (!isLocalDirty) {
+               queryClient.invalidateQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
+           }
         }
       )
       .subscribe();
@@ -138,71 +228,14 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, spaceId, dateStr, queryClient]);
+  }, [userId, spaceId, dateStr, queryClient, isLocalDirty]);
 
-  // 3. Mutation (Optimistic Update)
-  const saveTasksMutation = useMutation({
-    mutationFn: async ({ tasks, memo }: { tasks: Task[], memo: string }) => {
-      // 비로그인 상태일 경우 로컬 스토리지 사용
-      if (!userId || !spaceId) {
-         const localKey = `tasks_${dateStr}`;
-         const dataToSave = { tasks, memo, date: dateStr };
-         localStorage.setItem(localKey, JSON.stringify(dataToSave));
-         return;
-      }
-
-      const { error } = await supabase.from('task_logs').upsert({
-        user_id: userId,
-        space_id: spaceId,
-        date: dateStr,
-        tasks: JSON.stringify(tasks),
-        memo: memo,
-      }, { onConflict: 'user_id,space_id,date' });
-
-      if (error) throw error;
-    },
-    onMutate: async ({ tasks, memo }) => {
-      await queryClient.cancelQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
-      const previousLog = queryClient.getQueryData(['tasks', dateStr, userId, spaceId]);
-
-      // 낙관적 업데이트
-      queryClient.setQueryData(['tasks', dateStr, userId, spaceId], (old: DailyLog | null) => ({
-        ...old,
-        tasks,
-        memo,
-        date: dateStr,
-      }));
-
-      // 전체 로그 캐시에도 낙관적 반영
-      queryClient.setQueryData(['all_tasks', userId, spaceId], (old: DailyLog[] | undefined) => {
-        if (!old) return old;
-        const index = old.findIndex(l => l.date === dateStr);
-        const newLog = { date: dateStr, tasks, memo, user_id: userId, space_id: spaceId };
-        if (index === -1) return [...old, newLog];
-        const newLogs = [...old];
-        newLogs[index] = newLog;
-        return newLogs;
-      });
-
-      return { previousLog };
-    },
-    onError: (_err, _newTodo, context) => {
-      if (context?.previousLog) {
-          queryClient.setQueryData(['tasks', dateStr, userId, spaceId], context.previousLog);
-      }
-    },
-    onSettled: () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      queryClient.invalidateQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
-      queryClient.invalidateQueries({ queryKey: ['all_tasks', userId, spaceId] });
-    },
-  });
 
   return {
-    tasks: log?.tasks || [],
-    memo: log?.memo || '',
-    isLoading,
-    updateTasks: saveTasksMutation, // mutation 객체 전체 반환 (isLoading 등 사용 가능)
+    tasks: localTasks,     // 항상 로컬 상태 반환
+    memo: localMemo,
+    isLoading: isInitialLoad.current && isLoading, // 초기 로딩만 로딩으로 취급
+    updateTasks: { mutate: ({ tasks, memo }: { tasks: Task[], memo: string }) => updateTasks(tasks, memo) }, // 인터페이스 유지
   };
 };
 
@@ -230,4 +263,3 @@ export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
     staleTime: 1000 * 60 * 10, // 10분
   });
 };
-

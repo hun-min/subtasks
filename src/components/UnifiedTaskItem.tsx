@@ -65,10 +65,11 @@ export const UnifiedTaskItem = React.memo(({
   // Sync local text with prop only when not focused (to allow external updates but prevent overwrite while typing)
   useEffect(() => {
     const taskText = task.name || task.text || '';
+    // Only update if not focused AND text is different, OR if it's the first load
     if (!isFocused && taskText !== localText) {
       setLocalText(taskText);
     }
-  }, [task.name, task.text, isFocused]); // Removed localText from deps
+  }, [task.name, task.text]); // Removed isFocused to prevent flicker, logic handled inside
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -397,15 +398,16 @@ export const UnifiedTaskItem = React.memo(({
           ))}
         </div>
       )}
-      <div className="relative flex items-center justify-start mt-1 flex-shrink-0">
+      <div className="relative flex items-center justify-start mt-1 flex-shrink-0 z-10">
         <button 
+          onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }} 
           onClick={(e) => { 
             e.stopPropagation(); 
+            e.preventDefault();
             updateTask(task.id, { is_starred: !task.is_starred }); 
           }}
-          disabled={!task.is_starred && !isFocused}
           className={`absolute right-full mr-1.5 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star ${
-             !task.is_starred && !isFocused ? 'cursor-default' : 'cursor-pointer'
+             !task.is_starred && !isFocused ? 'opacity-0 group-hover:opacity-100 cursor-pointer' : 'cursor-pointer'
           }`}
         >
           <Star 
@@ -413,13 +415,20 @@ export const UnifiedTaskItem = React.memo(({
             className={`${
               task.is_starred 
                 ? 'fill-yellow-400 text-yellow-400 opacity-100' 
-                : isFocused 
-                  ? 'text-gray-500 opacity-30 hover:opacity-100' 
-                  : 'opacity-0'
+                : 'text-gray-500 opacity-30 hover:opacity-100'
             } transition-all`} 
           />
         </button>
-        <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
+        <button 
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            onClick={(e) => { 
+                e.stopPropagation();
+                e.preventDefault(); 
+                const newStatus = task.status === 'completed' ? 'pending' : 'completed'; 
+                updateTask(task.id, { status: newStatus, isTimerOn: false }); 
+            }} 
+            className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}
+        >
           {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>

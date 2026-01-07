@@ -229,19 +229,7 @@ export default function App() {
         setFocusedTaskId(nextFocusId);
       }
 
-      // [CRITICAL FIX] 엔터 키 데이터 유실 방지를 위한 즉시 캐시 업데이트
-      // 서버 응답 대기 중 입력값 증발 방지 (낙관적 업데이트)
-      const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-      queryClient.setQueryData(queryKey, (old: any) => {
-          if (!old) return { tasks: nextTasks, memo: currentMemo };
-          return {
-              ...old,
-              tasks: nextTasks,
-              memo: currentMemo
-          };
-      });
-
-      // 5. 서버 동기화 요청
+      // 5. 서버 동기화 요청 (Local-First: 즉시 반영 및 백그라운드 저장)
       updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
       
   }, [tasks, currentMemo, updateTasks, currentSpace, queryClient, viewDate, user]);

@@ -270,6 +270,9 @@ export const UnifiedTaskItem = React.memo(({
         setLocalText(textBefore);
         if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
         
+        // 2. 부모 컴포넌트에 추가 요청 (textAfter 전달)
+        // 로컬 업데이트 후 즉시 호출하여 레이턴시 최소화
+        // onAddTaskAtCursor에서 상태 업데이트와 동기화 처리가 이루어짐
         onAddTaskAtCursor(task.id, textBefore, newTextAfter);
       }
       return;

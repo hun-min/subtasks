@@ -62,10 +62,9 @@ type UseTasksProps = {
   currentDate: Date;
   userId?: string;
   spaceId?: string;
-  ignoreRealtimeRef?: React.MutableRefObject<boolean>;
 };
 
-export const useTasks = ({ currentDate, userId, spaceId, ignoreRealtimeRef }: UseTasksProps) => {
+export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
   const queryClient = useQueryClient();
   const dateStr = currentDate.toDateString();
 
@@ -128,13 +127,10 @@ export const useTasks = ({ currentDate, userId, spaceId, ignoreRealtimeRef }: Us
         },
         (payload) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          console.debug('Realtime update', payload);
-          if (ignoreRealtimeRef?.current) {
-            console.debug('Ignoring realtime update due to internal action');
-            return;
-          }
+          console.debug('Realtime update received', payload);
+          // 단순하고 강력하게: 변경 감지 시 무조건 갱신
           queryClient.invalidateQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
-          queryClient.invalidateQueries({ queryKey: ['all_tasks', userId, spaceId] }); // 전체 로그도 갱신
+          queryClient.invalidateQueries({ queryKey: ['all_tasks', userId, spaceId] });
         }
       )
       .subscribe();
@@ -169,6 +165,7 @@ export const useTasks = ({ currentDate, userId, spaceId, ignoreRealtimeRef }: Us
       await queryClient.cancelQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
       const previousLog = queryClient.getQueryData(['tasks', dateStr, userId, spaceId]);
 
+      // 낙관적 업데이트
       queryClient.setQueryData(['tasks', dateStr, userId, spaceId], (old: DailyLog | null) => ({
         ...old,
         tasks,
@@ -176,7 +173,7 @@ export const useTasks = ({ currentDate, userId, spaceId, ignoreRealtimeRef }: Us
         date: dateStr,
       }));
 
-      // 전체 로그 캐시에도 반영 (UI 즉시 업데이트를 위해)
+      // 전체 로그 캐시에도 낙관적 반영
       queryClient.setQueryData(['all_tasks', userId, spaceId], (old: DailyLog[] | undefined) => {
         if (!old) return old;
         const index = old.findIndex(l => l.date === dateStr);

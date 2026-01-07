@@ -83,8 +83,7 @@ export default function App() {
   const { tasks, memo: currentMemo, updateTasks, isLoading } = useTasks({
       currentDate: viewDate,
       userId: user?.id,
-      spaceId: currentSpace?.id ? String(currentSpace.id) : undefined,
-      ignoreRealtimeRef: isInternalUpdate // Pass the ref to ignore realtime events
+      spaceId: currentSpace?.id ? String(currentSpace.id) : undefined
   });
 
   const { data: allLogs } = useAllTaskLogs(user?.id, currentSpace?.id ? String(currentSpace.id) : undefined);

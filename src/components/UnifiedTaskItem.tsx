@@ -232,6 +232,12 @@ export const UnifiedTaskItem = React.memo(({
 
     if (e.key === 'Enter') {
       if (!e.shiftKey) {
+        // 중복 입력 방지 (IME 조합 중이거나, 너무 빠른 연타)
+        if (isComposing.current || e.nativeEvent.isComposing) {
+            e.preventDefault(); // 조합 중 엔터도 막아서 이상 동작 방지
+            return;
+        }
+
         e.preventDefault();
         e.stopPropagation(); // 이벤트 전파 방지
         const cursor = textareaRef.current?.selectionStart || 0;

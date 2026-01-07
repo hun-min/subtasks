@@ -50,6 +50,25 @@ export const UnifiedTaskItem = React.memo(({
   const isFocused = focusedTaskId === task.id;
   const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cursorRef = useRef<number | null>(null);
+  const isComposing = useRef(false);
+
+  // Local state for text input to prevent IME issues
+  const [localText, setLocalText] = useState(task.name || task.text || '');
+  const localTextRef = useRef(localText); // To access latest text in callbacks without re-creating them
+  const updateTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    localTextRef.current = localText;
+  }, [localText]);
+
+  // Sync local text with prop only when not focused (to allow external updates but prevent overwrite while typing)
+  useEffect(() => {
+    const taskText = task.name || task.text || '';
+    if (!isFocused && taskText !== localText) {
+      setLocalText(taskText);
+    }
+  }, [task.name, task.text, isFocused]); // Removed localText from deps
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -59,15 +78,23 @@ export const UnifiedTaskItem = React.memo(({
 
   useLayoutEffect(() => {
     if (isFocused && textareaRef.current) {
-       textareaRef.current.focus({ preventScroll: true });
+       // Check if we already have focus to avoid messing with cursor during typing/re-renders
+       const isAlreadyFocused = document.activeElement === textareaRef.current;
+       
+       if (!isAlreadyFocused) {
+          textareaRef.current.focus({ preventScroll: true });
+       }
+       // 커서 위치 설정 로직은 focus가 처음 되었을 때만 작동하도록 함
+       // 하지만 리렌더링마다 커서가 튀는 문제를 방지하기 위해, 사용자가 입력 중이 아닐 때만 위치 조정 등을 고려할 수 있음.
+       // 여기서는 단순히 focus만 유지.
     }
-  }, [task.depth, isFocused]);
+  }, [task.depth, isFocused]); 
 
   const [suggestions, setSuggestions] = useState<Task[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
   useEffect(() => {
-    const taskName = task.name || task.text || '';
+    const taskName = localText; // Use localText
     if (!isFocused || !taskName.startsWith('/')) { setSuggestions([]); return; }
     const query = taskName.slice(1).toLowerCase();
     const matches: Task[] = [];
@@ -81,10 +108,11 @@ export const UnifiedTaskItem = React.memo(({
     }));
     setSuggestions(matches.slice(0, 5));
     setSelectedSuggestionIndex(-1);
-  }, [task.name, task.text, isFocused, logs]);
+  }, [localText, isFocused, logs]); // Use localText
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    const taskName = task.name || task.text || '';
+    if (isComposing.current) return;
+    const taskName = localTextRef.current; // Use ref for latest value
     
     // Suggestions navigation
     if (suggestions.length > 0) {
@@ -94,6 +122,7 @@ export const UnifiedTaskItem = React.memo(({
             if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
                 e.preventDefault();
                 const selectedName = suggestions[selectedSuggestionIndex].name || suggestions[selectedSuggestionIndex].text || '';
+                setLocalText(selectedName);
                 updateTask(task.id, { name: selectedName, text: selectedName });
                 setSuggestions([]);
                 return;
@@ -112,18 +141,14 @@ export const UnifiedTaskItem = React.memo(({
         // Navigation between tasks
         if (!e.shiftKey && !e.metaKey) {
             const cursor = textareaRef.current?.selectionStart || 0;
-            const value = task.name || task.text || '';
             
-            // 커서가 첫 번째 줄에 있는지 확인
-            const valueBeforeCursor = value.substring(0, cursor);
-            const lineIndex = valueBeforeCursor.split('\n').length - 1;
-
-            if (lineIndex === 0) {
+            // 커서가 맨 앞에 있을 때만 이전 항목으로 이동
+            if (cursor === 0) {
                  e.preventDefault();
                  onFocusPrev?.(task.id);
                  return;
             }
-            // 그 외에는 브라우저 기본 동작(텍스트 내부 이동, 줄바꿈 등) 허용
+            // 그 외에는 브라우저 기본 동작(윗줄 이동) 수행
         }
     }
 
@@ -137,17 +162,15 @@ export const UnifiedTaskItem = React.memo(({
         // Navigation between tasks
         if (!e.shiftKey && !e.metaKey) {
             const cursor = textareaRef.current?.selectionStart || 0;
-            const value = task.name || task.text || '';
-            const lines = value.split('\n');
-            const currentLineIndex = value.substring(0, cursor).split('\n').length - 1;
+            const textLength = textareaRef.current?.value.length || 0;
             
-            // 커서가 마지막 줄에 있는지 확인
-            if (currentLineIndex === lines.length - 1) {
+            // 커서가 맨 뒤에 있을 때만 다음 항목으로 이동
+            if (cursor === textLength) {
                  e.preventDefault();
                  onFocusNext?.(task.id);
                  return;
             }
-            // 그 외에는 브라우저 기본 동작 허용
+            // 그 외에는 브라우저 기본 동작(아랫줄 이동) 수행
         }
     }
 
@@ -162,9 +185,9 @@ export const UnifiedTaskItem = React.memo(({
     if (e.key === 'Enter') {
       if (!e.shiftKey) {
         e.preventDefault();
-        const cursorPos = textareaRef.current?.selectionStart || 0;
-        const textBefore = taskName.substring(0, cursorPos);
-        const textAfter = taskName.substring(cursorPos);
+        const cursor = textareaRef.current?.selectionStart || 0;
+        const textBefore = taskName.substring(0, cursor);
+        const textAfter = taskName.substring(cursor);
         
         const numberMatch = textBefore.match(/^(\d+)\.\s/);
         const bulletMatch = textBefore.match(/^-\s/);
@@ -185,6 +208,11 @@ export const UnifiedTaskItem = React.memo(({
         if (prefixLen > 0) {
             (window as any).__restoreCursorPos = prefixLen;
         }
+
+        // Immediately update current task with textBefore
+        setLocalText(textBefore);
+        if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+        updateTask(task.id, { name: textBefore, text: textBefore });
 
         onAddTaskAtCursor(task.id, textBefore, newTextAfter);
       }
@@ -233,17 +261,24 @@ export const UnifiedTaskItem = React.memo(({
          const lines = text.split('\n');
          const firstLine = lines[0];
          const restLines = lines.slice(1);
-         const currentText = task.name || task.text || '';
+         const currentText = localTextRef.current;
          const cursor = e.currentTarget.selectionStart;
          const textBefore = currentText.substring(0, cursor);
          const textAfter = currentText.substring(cursor);
          
+         // Immediately update
+         setLocalText(textBefore + firstLine);
+         updateTask(task.id, { name: textBefore + firstLine, text: textBefore + firstLine });
+
          onAddTaskAtCursor(task.id, textBefore + firstLine, restLines.join('\n') + textAfter);
       } else {
-         const currentText = task.name || task.text || '';
+         const currentText = localTextRef.current;
          const cursor = e.currentTarget.selectionStart;
          const newVal = currentText.substring(0, cursor) + text + currentText.substring(cursor);
+         
+         setLocalText(newVal);
          updateTask(task.id, { name: newVal, text: newVal });
+         
          setTimeout(() => {
              if (textareaRef.current) {
                  textareaRef.current.selectionStart = textareaRef.current.selectionEnd = cursor + text.length;
@@ -260,10 +295,38 @@ export const UnifiedTaskItem = React.memo(({
   };
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // Composition 중일 때는 업데이트를 건너뛰거나 최소한의 처리만
+    if (isComposing.current) {
+        setLocalText(e.target.value);
+        return;
+    }
+
     const newVal = e.target.value;
     if (newVal === undefined) return;
-    updateTask(task.id, { name: newVal, text: newVal });
+    
+    setLocalText(newVal);
+    cursorRef.current = e.target.selectionStart;
+
+    // Debounce update to prevent frequent re-renders disrupting IME
+    if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+    updateTimeoutRef.current = setTimeout(() => {
+      updateTask(task.id, { name: newVal, text: newVal });
+    }, 500); // 500ms debounce
   }, [task.id, updateTask]);
+
+  const handleBlur = useCallback(() => {
+      isComposing.current = false; // Reset composition state on blur
+      setFocusedTaskId(null);
+      // Ensure final state is saved on blur
+      if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+          updateTimeoutRef.current = null;
+      }
+      // Compare with latest prop to avoid redundant updates if debounce already fired
+      if ((task.name || task.text || '') !== localTextRef.current) {
+          updateTask(task.id, { name: localTextRef.current, text: localTextRef.current });
+      }
+  }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
     <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-white/[0.08]' : ''}`}>
@@ -303,19 +366,27 @@ export const UnifiedTaskItem = React.memo(({
       <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
         <AutoResizeTextarea 
             inputRef={textareaRef} 
-            value={task.name || task.text || ''} 
+            value={localText} 
             autoFocus={isFocused} 
             onFocus={() => setFocusedTaskId(task.id)} 
+            onBlur={handleBlur}
             onChange={handleTextChange} 
             onKeyDown={handleKeyDown} 
             onPaste={handlePaste}
+            onCompositionStart={() => { isComposing.current = true; }}
+            onCompositionEnd={() => { isComposing.current = false; }}
             className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} 
             placeholder="" 
         />
-        {isFocused && (task.name || task.text || '') === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
+        {isFocused && localText === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
         {suggestions.length > 0 && (
           <div className="absolute left-0 top-full z-[110] mt-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[180px]">
-            {suggestions.map((s, idx) => <button key={idx} onClick={() => { updateTask(task.id, { name: s.name || s.text || '', text: s.name || s.text || '' }); setSuggestions([]); }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.name || s.text || ''}</button>)}
+            {suggestions.map((s, idx) => <button key={idx} onClick={() => { 
+                const newName = s.name || s.text || '';
+                setLocalText(newName);
+                updateTask(task.id, { name: newName, text: newName }); 
+                setSuggestions([]); 
+            }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.name || s.text || ''}</button>)}
           </div>
         )}
       </div>

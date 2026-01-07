@@ -1,7 +1,7 @@
 import React, { useRef, useLayoutEffect } from 'react';
 
 // --- [컴포넌트] 자동 높이 조절 Textarea ---
-export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, onBlur, onPaste, placeholder, autoFocus, className, inputRef }: any) => {
+export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFocus, onBlur, onPaste, onCompositionStart, onCompositionEnd, placeholder, autoFocus, className, inputRef }: any) => {
   const localRef = useRef<HTMLTextAreaElement>(null);
   const combinedRef = inputRef || localRef;
 
@@ -37,6 +37,8 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
       onFocus={onFocus}
       onBlur={onBlur}
       onPaste={onPaste}
+      onCompositionStart={onCompositionStart}
+      onCompositionEnd={onCompositionEnd}
       placeholder={placeholder}
       className={`resize-none overflow-hidden bg-transparent outline-none ${className}`}
       style={{ minHeight: '18px' }}

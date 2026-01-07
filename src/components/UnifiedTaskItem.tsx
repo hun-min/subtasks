@@ -112,7 +112,8 @@ export const UnifiedTaskItem = React.memo(({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isComposing.current) return;
-    const taskName = localTextRef.current; // Use ref for latest value
+    // Use directly DOM value for most up-to-date text (ignoring potential state lag)
+    const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
     
     // Suggestions navigation
     if (suggestions.length > 0) {
@@ -328,7 +329,7 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-3 md:px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-white/[0.08]' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-2 md:px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-white/[0.08]' : ''}`}>
        
       <div className="flex flex-shrink-0 pt-1.5" onClick={(e) => onTaskClick(e, task.id, index)}>
         {Array.from({ length: currentDepth }).map((_, i) => (

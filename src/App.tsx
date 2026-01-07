@@ -580,7 +580,7 @@ export default function App() {
         </div>
       </nav>
       <div className="flex-1 overflow-y-auto no-scrollbar relative">
-        <div className="max-w-xl mx-auto flex flex-col px-4 pb-4">
+        <div className="max-w-xl mx-auto flex flex-col px-2 md:px-4 pb-4">
         {viewMode === 'day' ? (
             <>
                 <div className={`calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`} onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>

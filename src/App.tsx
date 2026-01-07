@@ -570,7 +570,6 @@ export default function App() {
       <nav className="flex-none flex items-center justify-between px-2 py-3 md:p-4 max-w-xl mx-auto w-full flex-nowrap overflow-x-auto no-scrollbar">
         <SpaceSelector onSpaceChange={handleSpaceChange} />
         <div className="flex gap-2 md:gap-3 items-center flex-nowrap flex-shrink-0">
-          {isLoading && <div className="text-xs text-blue-500 animate-pulse font-bold flex-shrink-0">LOADING...</div>}
           <div className="flex bg-[#1a1a1f] rounded-lg p-0.5 border border-white/10 flex-shrink-0">
               <button onClick={() => setViewMode('day')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'day' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>DAY</button>
               <button onClick={() => setViewMode('flow')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>

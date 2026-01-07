@@ -229,6 +229,7 @@ export const UnifiedTaskItem = React.memo(({
     if (e.key === 'Enter') {
       if (!e.shiftKey) {
         e.preventDefault();
+        e.stopPropagation(); // 이벤트 전파 방지
         const cursor = textareaRef.current?.selectionStart || 0;
         const textBefore = taskName.substring(0, cursor);
         const textAfter = taskName.substring(cursor);

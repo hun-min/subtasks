@@ -101,9 +101,9 @@ export function SpaceSelector({ onSpaceChange }: SpaceSelectorProps) {
                 top: position.top, 
                 left: position.left,
                 width: position.width,
-                zIndex: 9999 
+                zIndex: 99999 
             }}
-            className="bg-[#18181b] border border-white/10 rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100 origin-top-left"
+            className="bg-black border border-white/10 rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100 origin-top-left"
         >
           <div className="flex items-center justify-between px-2 py-1 border-b border-white/5 mb-1">
             <span className="text-xs text-gray-500">공간 목록</span>

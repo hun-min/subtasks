@@ -42,8 +42,8 @@ export const UnifiedTaskItem = React.memo(({
   onMoveDown: (taskId: number) => void,
   onDelete?: (taskId: number) => void,
   onCopy?: (task: Task) => void,
-  onFocusPrev?: (taskId: number) => void,
-  onFocusNext?: (taskId: number) => void
+  onFocusPrev?: (taskId: number, cursorPosition: 'start' | 'end') => void,
+  onFocusNext?: (taskId: number, cursorPosition: 'start' | 'end') => void
 }) => {
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
@@ -83,10 +83,23 @@ export const UnifiedTaskItem = React.memo(({
        
        if (!isAlreadyFocused) {
           textareaRef.current.focus({ preventScroll: true });
+          
+          // 커서 위치 복원 로직
+          const restorePos = (window as any).__restoreCursorPos;
+          if (typeof restorePos === 'number') {
+              textareaRef.current.setSelectionRange(restorePos, restorePos);
+              delete (window as any).__restoreCursorPos;
+          } else if ((window as any).__cursorPosition) {
+              const pos = (window as any).__cursorPosition;
+              if (pos === 'start') {
+                  textareaRef.current.setSelectionRange(0, 0);
+              } else if (pos === 'end') {
+                  const len = textareaRef.current.value.length;
+                  textareaRef.current.setSelectionRange(len, len);
+              }
+              delete (window as any).__cursorPosition;
+          }
        }
-       // 커서 위치 설정 로직은 focus가 처음 되었을 때만 작동하도록 함
-       // 하지만 리렌더링마다 커서가 튀는 문제를 방지하기 위해, 사용자가 입력 중이 아닐 때만 위치 조정 등을 고려할 수 있음.
-       // 여기서는 단순히 focus만 유지.
     }
   }, [task.depth, isFocused]); 
 
@@ -144,10 +157,10 @@ export const UnifiedTaskItem = React.memo(({
             const cursor = textareaRef.current?.selectionStart || 0;
             const value = textareaRef.current?.value || '';
             
-            // 첫 번째 줄이면 즉시 이전 항목으로 이동
+            // 첫 번째 줄이면 즉시 이전 항목으로 이동 (맨 끝으로)
             if (value.substring(0, cursor).indexOf('\n') === -1) {
                  e.preventDefault();
-                 onFocusPrev?.(task.id);
+                 onFocusPrev?.(task.id, 'end');
                  return;
             }
         }
@@ -165,10 +178,10 @@ export const UnifiedTaskItem = React.memo(({
             const cursor = textareaRef.current?.selectionStart || 0;
             const value = textareaRef.current?.value || '';
             
-            // 마지막 줄이면 즉시 다음 항목으로 이동
+            // 마지막 줄이면 즉시 다음 항목으로 이동 (맨 앞으로)
             if (value.substring(cursor).indexOf('\n') === -1) {
                  e.preventDefault();
-                 onFocusNext?.(task.id);
+                 onFocusNext?.(task.id, 'start');
                  return;
             }
         }

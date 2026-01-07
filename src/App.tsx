@@ -257,17 +257,19 @@ export default function App() {
     setFocusedTaskId(taskId);
   }, [handleUpdateTask, activeTask, tasks, selectedTaskIds, updateTasks, currentMemo]);
 
-  const handleFocusPrev = useCallback((taskId: number) => {
+  const handleFocusPrev = useCallback((taskId: number, cursorPosition: 'start' | 'end' = 'end') => {
     const idx = tasks.findIndex(t => t.id === taskId);
     if (idx > 0) {
       setFocusedTaskId(tasks[idx - 1].id);
+      (window as any).__cursorPosition = cursorPosition;
     }
   }, [tasks]);
 
-  const handleFocusNext = useCallback((taskId: number) => {
+  const handleFocusNext = useCallback((taskId: number, cursorPosition: 'start' | 'end' = 'start') => {
     const idx = tasks.findIndex(t => t.id === taskId);
     if (idx !== -1 && idx < tasks.length - 1) {
       setFocusedTaskId(tasks[idx + 1].id);
+      (window as any).__cursorPosition = cursorPosition;
     }
   }, [tasks]);
 

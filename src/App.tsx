@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './contexts/AuthContext';
 import { useSpace } from './contexts/SpaceContext';
 import { AuthModal } from './components/AuthModal';
@@ -62,6 +63,7 @@ const TaskHistoryModal = React.memo(({ taskName, logs, onClose }: { taskName: st
 // --- 메인 앱 ---
 
 export default function App() {
+  const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
   const { currentSpace, spaces, setCurrentSpace } = useSpace();
 
@@ -192,12 +194,6 @@ export default function App() {
   }, [tasks, currentMemo, updateTasks, selectedTaskIds]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
-      // 안전장치: 너무 빠른 연속 호출 방지 (UI 레벨 방어)
-      // 사용자 피드백 반영: 엔터 연타 시 지연 없이 생성되도록 Throttle 제거
-      // const now = Date.now();
-      // if (now - lastAddTaskTime.current < 100) return;
-      // lastAddTaskTime.current = now;
-
       // 1. 현재 리스트 복사 및 인덱스 찾기
       const idx = tasks.findIndex(t => t.id === taskId);
       if (idx === -1) return;
@@ -205,10 +201,9 @@ export default function App() {
       const current = tasks[idx];
       
       // 2. 새 항목 생성 (아랫줄)
-      // textAfter가 여러 줄일 경우를 대비해 처리하지만, 보통은 한 줄
       const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
         id: Date.now() + i + Math.random(), // 유니크 ID
-        name: line, // trim() 제거하여 공백 유지 (필요 시) - 여기선 일단 그대로 둠
+        name: line,
         status: 'pending', 
         indent: current.indent, 
         parent: current.parent, 
@@ -234,17 +229,22 @@ export default function App() {
         setFocusedTaskId(nextFocusId);
       }
 
-      // 5. 서버 동기화 요청 (낙관적 업데이트는 useMutation onMutate에서 처리됨)
-      // 하지만 엔터 키 입력 시의 즉각적인 반응성을 위해 여기서 queryClient를 직접 조작하는 것이 더 확실할 수 있음.
-      // useTasks 훅 내부의 updateTasks가 onMutate를 가지고 있으므로, updateTasks.mutate 호출만으로 충분해야 함.
-      // 그러나 문제 설명에 따르면 "서버 동기화 과정에서 롤백"된다고 하므로, 
-      // onMutate 로직이 확실하게 작동하는지 확인하거나, 여기서 강제 업데이트를 해주는 것이 안전함.
-      
-      // 여기서는 updateTasks 호출 시 낙관적 업데이트가 이미 구현되어 있으므로(useTasks.ts 참고),
-      // updateTasks를 호출합니다. useTasks.ts의 onMutate가 setQueryData를 수행함.
+      // [CRITICAL FIX] 엔터 키 데이터 유실 방지를 위한 즉시 캐시 업데이트
+      // 서버 응답 대기 중 입력값 증발 방지 (낙관적 업데이트)
+      const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+      queryClient.setQueryData(queryKey, (old: any) => {
+          if (!old) return { tasks: nextTasks, memo: currentMemo };
+          return {
+              ...old,
+              tasks: nextTasks,
+              memo: currentMemo
+          };
+      });
+
+      // 5. 서버 동기화 요청
       updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
       
-  }, [tasks, currentMemo, updateTasks, currentSpace]);
+  }, [tasks, currentMemo, updateTasks, currentSpace, queryClient, viewDate, user]);
 
   const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
       const idx = tasks.findIndex(t => t.id === taskId);

@@ -273,17 +273,26 @@ export const UnifiedTaskItem = React.memo(({
           <div key={i} className="h-full border-r border-white/5" style={{ width: '15px' }} />
         ))}
       </div>
-      <div className="flex flex-col items-center justify-start mt-[5px] flex-shrink-0 gap-1.5">
+      <div className="flex items-center justify-start pt-1.5 flex-shrink-0 gap-2">
         <button 
           onClick={(e) => { 
             e.stopPropagation(); 
             updateTask(task.id, { is_starred: !task.is_starred }); 
-          }} 
-          className="flex-shrink-0 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star"
+          }}
+          disabled={!task.is_starred && !isFocused}
+          className={`flex-shrink-0 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star ${
+             !task.is_starred && !isFocused ? 'cursor-default' : 'cursor-pointer'
+          }`}
         >
           <Star 
             size={13} 
-            className={`${task.is_starred ? 'fill-yellow-400 text-yellow-400' : 'text-gray-700 opacity-0 group-hover:opacity-100 group-hover/star:text-gray-500'} transition-all`} 
+            className={`${
+              task.is_starred 
+                ? 'fill-yellow-400 text-yellow-400 opacity-100' 
+                : isFocused 
+                  ? 'text-gray-500 opacity-30 hover:opacity-100' 
+                  : 'opacity-0'
+            } transition-all`} 
           />
         </button>
         <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>

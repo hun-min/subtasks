@@ -152,14 +152,19 @@ export const UnifiedTaskItem = React.memo(({
             return;
         }
         
-        // Navigation: Only if at start (0)
+        // Navigation: Check if cursor moves; if not, move focus
         if (!e.shiftKey && !e.metaKey) {
-            const cursor = textareaRef.current?.selectionStart ?? 0;
-            if (cursor === 0) {
-                 e.preventDefault();
-                 onFocusPrev?.(task.id, 'end');
-            }
-            // Do NOT call preventDefault otherwise, let browser handle line jumping
+            const startPos = textareaRef.current?.selectionStart ?? 0;
+            // Allow browser default behavior (cursor movement)
+            
+            setTimeout(() => {
+                if (!textareaRef.current) return;
+                const newPos = textareaRef.current.selectionStart;
+                if (startPos === newPos) {
+                    // Cursor didn't move, implies we are at the top boundary
+                    onFocusPrev?.(task.id, 'end');
+                }
+            }, 0);
             return;
         }
     }
@@ -171,15 +176,19 @@ export const UnifiedTaskItem = React.memo(({
             return;
         }
 
-        // Navigation: Only if at end (length)
+        // Navigation: Check if cursor moves; if not, move focus
         if (!e.shiftKey && !e.metaKey) {
-            const cursor = textareaRef.current?.selectionStart ?? 0;
-            const length = textareaRef.current?.value.length ?? 0;
-            if (cursor === length) {
-                 e.preventDefault();
-                 onFocusNext?.(task.id, 'start');
-            }
-            // Do NOT call preventDefault otherwise, let browser handle line jumping
+            const startPos = textareaRef.current?.selectionStart ?? 0;
+            // Allow browser default behavior (cursor movement)
+
+            setTimeout(() => {
+                if (!textareaRef.current) return;
+                const newPos = textareaRef.current.selectionStart;
+                if (startPos === newPos) {
+                    // Cursor didn't move, implies we are at the bottom boundary
+                    onFocusNext?.(task.id, 'start');
+                }
+            }, 0);
             return;
         }
     }

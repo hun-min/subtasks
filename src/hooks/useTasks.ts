@@ -72,7 +72,22 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
   const { data: log, isLoading } = useQuery({
     queryKey: ['tasks', dateStr, userId, spaceId],
     queryFn: async () => {
-      if (!userId || !spaceId) return null;
+      // 비로그인 상태일 경우 로컬 스토리지 사용
+      if (!userId || !spaceId) {
+        try {
+          const localKey = `tasks_${dateStr}`;
+          const saved = localStorage.getItem(localKey);
+          if (!saved) return { tasks: [], memo: '' };
+          const parsed = JSON.parse(saved);
+          return {
+             ...parsed,
+             tasks: migrateTasks(parsed.tasks)
+          } as DailyLog;
+        } catch (e) {
+          console.error("Local storage read error", e);
+          return { tasks: [], memo: '' };
+        }
+      }
 
       const { data, error } = await supabase
         .from('task_logs')
@@ -93,7 +108,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
         tasks: migrateTasks(typeof data.tasks === 'string' ? JSON.parse(data.tasks) : data.tasks),
       } as DailyLog;
     },
-    enabled: !!userId && !!spaceId,
+    enabled: true, // 항상 활성화 (로그인 여부 상관없이)
     staleTime: 1000 * 60 * 5, // 5분
   });
 
@@ -127,7 +142,13 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
   // 3. Mutation (Optimistic Update)
   const saveTasksMutation = useMutation({
     mutationFn: async ({ tasks, memo }: { tasks: Task[], memo: string }) => {
-      if (!userId || !spaceId) throw new Error('User or Space not found');
+      // 비로그인 상태일 경우 로컬 스토리지 사용
+      if (!userId || !spaceId) {
+         const localKey = `tasks_${dateStr}`;
+         const dataToSave = { tasks, memo, date: dateStr };
+         localStorage.setItem(localKey, JSON.stringify(dataToSave));
+         return;
+      }
 
       const { error } = await supabase.from('task_logs').upsert({
         user_id: userId,

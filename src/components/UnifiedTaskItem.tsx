@@ -273,7 +273,7 @@ export const UnifiedTaskItem = React.memo(({
           <div key={i} className="h-full border-r border-white/5" style={{ width: '15px' }} />
         ))}
       </div>
-      <div className="flex items-center justify-start pt-1.5 flex-shrink-0 gap-2">
+      <div className="flex items-center justify-start mt-[5px] flex-shrink-0 gap-2">
         <button 
           onClick={(e) => { 
             e.stopPropagation(); 

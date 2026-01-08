@@ -573,7 +573,14 @@ export default function App() {
           if (viewMode !== 'day' && forceSave) {
             try {
               await forceSave(newTasks, newMemo || currentMemo);
-              queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'tasks' });
+              const singleKey = ['tasks', dateStr, user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+              const allKey = ['tasks', 'all', user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+              try {
+                queryClient.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey) === JSON.stringify(singleKey) });
+                queryClient.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey) === JSON.stringify(allKey) });
+              } catch (err) {
+                queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'tasks' });
+              }
             } catch (e) {
               console.error('Failed to persist flow-mode update:', e);
             }
@@ -598,10 +605,15 @@ export default function App() {
 
            if (error) throw error;
 
-           // Force refresh all task data across all views (Day/Flow)
-           queryClient.invalidateQueries({ 
-             predicate: (query) => query.queryKey[0] === 'tasks' 
-           });
+           // Force refresh specific queries so Day and Flow reflect the change immediately
+           const singleKey = ['tasks', dateStr, user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+           const allKey = ['tasks', 'all', user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+           try {
+              queryClient.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey) === JSON.stringify(singleKey) });
+              queryClient.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey) === JSON.stringify(allKey) });
+           } catch (err) {
+             queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'tasks' });
+           }
            
       } catch (e) {
           console.error("Failed to update remote date:", e);

@@ -265,6 +265,14 @@ export const TodoItem = React.memo(({
       e.preventDefault();
       const newStatus = task.status === 'completed' ? 'pending' : 'completed';
       updateTask(task.id, { status: newStatus, isTimerOn: false });
+      return;
+    }
+
+    // Star Toggle
+    if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
+      e.preventDefault();
+      updateTask(task.id, { is_starred: !task.is_starred });
+      return;
     }
   };
 

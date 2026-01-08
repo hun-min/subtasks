@@ -65,7 +65,7 @@ type UseTasksProps = {
   isAutoSaveEnabled?: boolean;
 };
 
-// Check-Head Pattern: Load from Local Storage first, then Sync with Server
+// Check-Head Pattern: Load from Local Storage first, then Sync with Server intelligently
 export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = true }: UseTasksProps) => {
   const queryClient = useQueryClient();
   const dateStr = currentDate.toDateString();
@@ -89,7 +89,8 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
     return { tasks: [], memo: '', updatedAt: undefined };
   };
 
-  const initialData = getInitialData();
+  // 컴포넌트 마운트 시 한 번만 초기값 로드 (useState 초기값 함수 사용)
+  const [initialData] = useState(getInitialData);
 
   // Local state for immediate UI updates
   const [localTasks, setLocalTasks] = useState<Task[]>(initialData.tasks);
@@ -100,15 +101,47 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
   // Track if the current update is coming from server (to prevent echo)
   const isServerUpdate = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // 서버와 동기화된 마지막 타임스탬프 추적
+  const lastSyncedAt = useRef<string | undefined>(initialData.updatedAt);
 
-  // 2. Fetch Server Data (Lightweight Check first?)
-  // For simplicity and effectiveness, we'll fetch full data but use updated_at to merge intelligently if needed.
-  // Actually, standard useQuery is fine, but we need to handle "Stale-While-Revalidate" carefully.
+  // 2. Fetch Server Data (Smart Sync: Check updated_at first)
   const { data: serverData, isLoading } = useQuery({
     queryKey: ['tasks', dateStr, userId, spaceId],
     queryFn: async () => {
       if (!userId || !spaceId) return null;
 
+      // A. 먼저 메타데이터(updated_at)만 조회 (Head Check)
+      const { data: meta, error: metaError } = await supabase
+        .from('task_logs')
+        .select('updated_at')
+        .eq('user_id', userId)
+        .eq('space_id', spaceId)
+        .eq('date', dateStr)
+        .single();
+
+      if (metaError && metaError.code !== 'PGRST116') throw metaError;
+      
+      // 서버에 데이터가 없는 경우
+      if (!meta) return { tasks: [], memo: '', updated_at: null, notModified: false };
+
+      // B. 로컬 타임스탬프와 비교
+      // 현재 로컬 스토리지의 최신 상태를 확인 (메모리 상태보다 스토리지 기준)
+      let currentLocalUpdatedAt = lastSyncedAt.current;
+      try {
+         const saved = localStorage.getItem(localKey);
+         if (saved) {
+             const parsed = JSON.parse(saved);
+             currentLocalUpdatedAt = parsed.updatedAt;
+         }
+      } catch (e) { console.error(e); }
+
+      // 타임스탬프가 같으면 전체 다운로드 스킵 (대역폭 절약)
+      if (currentLocalUpdatedAt === meta.updated_at) {
+          return { notModified: true, updated_at: meta.updated_at };
+      }
+
+      // C. 타임스탬프가 다르면 전체 데이터 다운로드 (Body Fetch)
       const { data, error } = await supabase
         .from('task_logs')
         .select('*')
@@ -117,72 +150,73 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
         .eq('date', dateStr)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
-      if (!data) return { tasks: [], memo: '', updated_at: null };
+      if (error) throw error;
+      if (!data) return { tasks: [], memo: '', updated_at: null, notModified: false };
 
       return {
         ...data,
         tasks: migrateTasks(typeof data.tasks === 'string' ? JSON.parse(data.tasks) : data.tasks),
+        notModified: false
       };
     },
-    // Use local initial data to prevent loading spinner
-    initialData: initialData.tasks.length > 0 ? { tasks: initialData.tasks, memo: initialData.memo, updated_at: initialData.updatedAt } : undefined,
-    staleTime: 1000 * 60, // 1 minute stale time
+    // 초기 데이터가 있으면 로딩 상태 아님 (Instant UI)
+    initialData: initialData.tasks.length > 0 ? { ...initialData, notModified: true, updated_at: initialData.updatedAt } : undefined,
+    staleTime: 1000 * 60, // 1분간은 다시 체크 안 함
     refetchOnWindowFocus: true,
   });
 
-  // 3. Sync Server -> Local (Conflict Resolution: Server Wins unless Local is Dirty)
+  // 3. Sync Server -> Local (Conflict Resolution)
   useEffect(() => {
     if (!serverData) return;
+    if (serverData.notModified) return; // 변경 없으면 무시
     
-    // If we are editing, DO NOT overwrite with server data
-    if (isEditing.current) return;
-
-    // Compare timestamps or just check if content is different (deep compare might be expensive, so we trust updated_at if available or just overwrite if not editing)
-    // Here we just overwrite if not editing, assuming server is source of truth when idle.
-    const serverTasksStr = JSON.stringify(serverData.tasks);
-    const localTasksStr = JSON.stringify(localTasks);
-    
-    if (serverTasksStr !== localTasksStr || serverData.memo !== localMemo) {
-         // Mark this update as coming from server
-         isServerUpdate.current = true;
-         
-         setLocalTasks(serverData.tasks || []);
-         setLocalMemo(serverData.memo || '');
-         
-         // Update Local Storage as well to keep it fresh
-         localStorage.setItem(localKey, JSON.stringify({ 
-             tasks: serverData.tasks || [], 
-             memo: serverData.memo || '',
-             updatedAt: new Date().toISOString() // Mark sync time
-         }));
-
-         // Reset flag after a short delay to allow state to settle
-         // (React state updates are async, but ref is synchronous. 
-         // We just need to ensure the next effect loop sees this.)
-         setTimeout(() => {
-            isServerUpdate.current = false;
-         }, 100);
+    // If we are editing, DO NOT overwrite with server data (Local Priority)
+    if (isEditing.current) {
+        console.log("Server update ignored due to local editing");
+        return;
     }
-  }, [serverData, localKey]); // removed localTasks dependency to avoid loop
+
+    // Mark this update as coming from server
+    isServerUpdate.current = true;
+    
+    setLocalTasks(serverData.tasks || []);
+    setLocalMemo(serverData.memo || '');
+    lastSyncedAt.current = serverData.updated_at;
+    
+    // Update Local Storage to keep it fresh
+    localStorage.setItem(localKey, JSON.stringify({ 
+        tasks: serverData.tasks || [], 
+        memo: serverData.memo || '',
+        updatedAt: serverData.updated_at
+    }));
+
+    // Reset flag after a short delay
+    setTimeout(() => {
+       isServerUpdate.current = false;
+    }, 100);
+  }, [serverData, localKey]);
 
   // 4. Save to Server (Debounced)
   const saveToSupabase = async (tasks: Task[], memo: string) => {
+      const now = new Date().toISOString();
+      
       // Always save to Local Storage first (Persistence)
       const dataToSave = { 
           tasks, 
           memo, 
-          updatedAt: new Date().toISOString() 
+          updatedAt: now 
       };
       
       localStorage.setItem(localKey, JSON.stringify(dataToSave));
+      lastSyncedAt.current = now; // 로컬 업데이트 시점 갱신
       
-      // Update React Query Cache immediately to prevent UI revert on date switch
+      // Update React Query Cache immediately
       queryClient.setQueryData(['tasks', dateStr, userId, spaceId], (old: any) => ({
           ...old,
           tasks,
           memo,
-          updated_at: dataToSave.updatedAt
+          updated_at: now,
+          notModified: true // 내가 방금 저장했으니 최신임
       }));
 
       if (!userId || !spaceId) return;
@@ -193,27 +227,20 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
         date: dateStr,
         tasks: JSON.stringify(tasks),
         memo: memo,
-        updated_at: new Date().toISOString() // Explicitly set updated_at
+        updated_at: now
       }, { onConflict: 'user_id,space_id,date' });
 
       if (error) throw error;
 
-      // Force refresh all task data across all views (Day/Flow)
-      // Invalidating ['tasks'] ensures all sub-keys like ['tasks', date], ['tasks', 'all'] are refetched.
+      // Invalidate other queries if needed (e.g. flow view)
       await queryClient.invalidateQueries({ 
-        predicate: (query) => query.queryKey[0] === 'tasks' 
-      });
-      // Force refetch to ensure immediate update for active views
-      await queryClient.refetchQueries({ 
-        predicate: (query) => query.queryKey[0] === 'tasks',
-        type: 'all' 
+        predicate: (query) => query.queryKey[0] === 'tasks' && query.queryKey[1] !== dateStr 
       });
   };
 
   const updateTasks = useCallback((newTasks: Task[], newMemo?: string) => {
       // If this update is triggered by server sync, do not save back!
       if (isServerUpdate.current) {
-          // Just update local state without saving
           setLocalTasks(newTasks);
           if (newMemo !== undefined) setLocalMemo(newMemo);
           return;
@@ -238,16 +265,16 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
               isEditing.current = false; // Reset editing flag after save
           } catch (err) {
               console.error("Failed to auto-save", err);
-              // Retry? or Keep isEditing true?
           }
       }, 2000); // 2 seconds debounce
-  }, [localMemo, userId, spaceId, dateStr, localKey]);
+  }, [localMemo, userId, spaceId, dateStr, localKey, isAutoSaveEnabled]);
 
   // Reset state on date/space change
   useEffect(() => {
       const newData = getInitialData();
       setLocalTasks(newData.tasks);
       setLocalMemo(newData.memo);
+      lastSyncedAt.current = newData.updatedAt;
       isEditing.current = false;
   }, [dateStr, spaceId]);
 
@@ -270,7 +297,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
            // Ignore if we are editing
            if (isEditing.current) return;
            
-           // Invalidate query to fetch latest
+           // Invalidate query to fetch latest (will trigger Check-Head logic)
            queryClient.invalidateQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
         }
       )

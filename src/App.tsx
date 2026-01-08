@@ -586,8 +586,10 @@ export default function App() {
 
            if (error) throw error;
 
-           queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'task_logs_all' });
-           queryClient.invalidateQueries({ queryKey: ['tasks', dateStr] });
+           // Force refresh all task data across all views (Day/Flow)
+           queryClient.invalidateQueries({ 
+             predicate: (query) => query.queryKey[0] === 'tasks' 
+           });
            
       } catch (e) {
           console.error("Failed to update remote date:", e);

@@ -263,7 +263,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
 // --- 전체 로그 조회 훅 (캘린더, FlowView용) ---
 export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
   return useQuery({
-    queryKey: ['all_tasks', userId, spaceId],
+    queryKey: ['tasks', 'all', userId, spaceId], // Unified key: 'tasks' is the root
     queryFn: async () => {
       if (!userId || !spaceId) return [];
       

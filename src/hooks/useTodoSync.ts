@@ -68,8 +68,9 @@ type UseTasksProps = {
 // Check-Head Pattern: Load from Local Storage first, then Sync with Server intelligently
 export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = true }: UseTasksProps) => {
   const queryClient = useQueryClient();
-  const dateStr = currentDate.toDateString();
-  const localKey = `tasks_${dateStr}_${spaceId || 'default'}`;
+  const dateKey = currentDate.toDateString();
+  const serverDate = `${currentDate.getFullYear()}-${currentDate.getMonth() + 1}-${currentDate.getDate()}`;
+  const localKey = `tasks_${dateKey}_${spaceId || 'default'}`;
   
   // 1. Initial Data from Local Storage (Instant Load)
   const getInitialData = (): { tasks: Task[], memo: string, updatedAt?: string } => {
@@ -107,7 +108,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
 
   // 2. Fetch Server Data (Smart Sync: Check updated_at first)
   const { data: serverData, isLoading } = useQuery({
-    queryKey: ['tasks', dateStr, userId, spaceId],
+    queryKey: ['tasks', dateKey, userId, spaceId],
     queryFn: async () => {
       if (!userId || !spaceId) return null;
 
@@ -117,7 +118,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
         .select('updated_at')
         .eq('user_id', userId)
         .eq('space_id', spaceId)
-        .eq('date', dateStr)
+        .eq('date', serverDate)
         .single();
 
       if (metaError && metaError.code !== 'PGRST116') throw metaError;
@@ -147,7 +148,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
         .select('*')
         .eq('user_id', userId)
         .eq('space_id', spaceId)
-        .eq('date', dateStr)
+        .eq('date', serverDate)
         .single();
 
       if (error) throw error;
@@ -234,7 +235,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
 
       // Invalidate other queries if needed (e.g. flow view)
       await queryClient.invalidateQueries({ 
-        predicate: (query) => query.queryKey[0] === 'tasks' && query.queryKey[1] !== dateStr 
+        predicate: (query) => query.queryKey[0] === 'tasks' && query.queryKey[1] !== dateKey 
       });
   };
 

@@ -1,5 +1,15 @@
 # Deployment Log
 
+## 2026-01-08
+- **Fix**: 데이터 수정 시 전체 뷰(Flow/Day) 동기화 문제 해결
+    - `useTodoSync.ts`: 태스크 수정(추가/업데이트/삭제) 후 React Query의 `invalidateQueries` 범위를 특정 날짜/Space(`['tasks', dateStr, ...]`)에서 전체(`['tasks']`)로 확장.
+    - Day View에서 수정한 내용이 Flow View(범위 조회)에도 즉시 반영되지 않는 캐싱 불일치 문제 해결.
+    - 이제 어디서 데이터를 수정하든 모든 화면의 데이터가 강제로 최신화됨.
+- **Fix**: 날짜 이동 시 데이터 증발(빈 화면) 버그 수정
+    - `useTasks.ts`: `date`나 `spaceId`가 변경될 때 `isInitialized` 상태가 `false`로 리셋되지 않아, 새 날짜의 데이터를 불러오지 못하고 빈 로컬 상태(`[]`)만 보여주는 문제 수정.
+    - 초기화(`Reset`) `useEffect`를 로직 최상단으로 이동하고, `userId` 의존성 추가 및 `isInitialLoad.current = true` 명시적 재설정.
+    - 이를 통해 날짜 이동 시 확실하게 "새로운 로딩"으로 인식되어 서버 데이터를 로컬 상태로 즉시 동기화하도록 보장.
+
 ## 2026-01-07
 - **Fix**: 엔터 입력 시 텍스트 복제 및 잘림 버그 수정
     - `App.tsx`: `handleAddTaskAtCursor` 함수에서 React Query 캐시를 직접 수정하여 엔터 입력 즉시 UI에 반영되도록 변경.
@@ -32,9 +42,3 @@
     - `saveToSupabase` 및 `saveToSupabaseAtDate` 함수 내 `isLoading` 체크 로직 제거.
     - 데이터 로딩 중에도 사용자 입력이 무시되지 않고 저장되도록 수정.
     - 캘린더 등 UI에서 `isLoading` 시 `pointer-events-none` 스타일 제거하여 조작 불가능 상태 방지.
-
-## 2026-01-08
-- **Fix**: 날짜 이동 시 데이터 증발(빈 화면) 버그 수정
-    - `useTasks.ts`: `date`나 `spaceId`가 변경될 때 `isInitialized` 상태가 `false`로 리셋되지 않아, 새 날짜의 데이터를 불러오지 못하고 빈 로컬 상태(`[]`)만 보여주는 문제 수정.
-    - 초기화(`Reset`) `useEffect`를 로직 최상단으로 이동하고, `userId` 의존성 추가 및 `isInitialLoad.current = true` 명시적 재설정.
-    - 이를 통해 날짜 이동 시 확실하게 "새로운 로딩"으로 인식되어 서버 데이터를 로컬 상태로 즉시 동기화하도록 보장.

@@ -184,6 +184,9 @@ export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => 
       }, { onConflict: 'user_id,space_id,date' });
 
       if (error) throw error;
+
+      // Force refresh all task data across all views (Day/Flow)
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
   };
 
   const updateTasks = useCallback((newTasks: Task[], newMemo?: string) => {

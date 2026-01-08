@@ -66,7 +66,11 @@ type UseTasksProps = {
 
 export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
   const queryClient = useQueryClient();
-  const dateStr = currentDate.toDateString();
+  // Keep the human-readable key for localStorage and UI use, but use a server-friendly
+  // YYYY-M-D string when querying Supabase to avoid parse errors like comparing
+  // "Thu Jan 08 2026" against a date column.
+  const dateKey = currentDate.toDateString();
+  const serverDate = `${currentDate.getFullYear()}-${currentDate.getMonth() + 1}-${currentDate.getDate()}`;
   
   // Local state for immediate UI updates
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
@@ -83,12 +87,12 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
 
   // 1. Fetching (Single Date)
   const { data: serverData, isLoading } = useQuery({
-    queryKey: ['tasks', dateStr, userId, spaceId],
+    queryKey: ['tasks', dateKey, userId, spaceId],
     queryFn: async () => {
       // 비로그인 상태일 경우 로컬 스토리지 사용
       if (!userId || !spaceId) {
         try {
-          const localKey = `tasks_${dateStr}`;
+          const localKey = `tasks_${dateKey}`;
           const saved = localStorage.getItem(localKey);
           if (!saved) return { tasks: [], memo: '' };
           const parsed = JSON.parse(saved);
@@ -107,7 +111,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
         .select('*')
         .eq('user_id', userId)
         .eq('space_id', spaceId)
-        .eq('date', dateStr)
+        .eq('date', serverDate)
         .single();
 
       if (error && error.code !== 'PGRST116') { // PGRST116: No rows found
@@ -133,7 +137,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
     isInitialLoad.current = true;
     setLocalTasks([]);
     setLocalMemo('');
-  }, [dateStr, spaceId, userId]);
+  }, [dateKey, spaceId, userId]);
 
   // 2. Sync Server Data to Local State (Only when safe)
   useEffect(() => {
@@ -169,8 +173,8 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
   // 3. Mutation (Actual Save)
   const saveToSupabase = async (tasks: Task[], memo: string) => {
       if (!userId || !spaceId) {
-          const localKey = `tasks_${dateStr}`;
-          const dataToSave = { tasks, memo, date: dateStr };
+          const localKey = `tasks_${dateKey}`;
+          const dataToSave = { tasks, memo, date: dateKey };
           localStorage.setItem(localKey, JSON.stringify(dataToSave));
           return;
       }
@@ -178,7 +182,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
       const { error } = await supabase.from('task_logs').upsert({
         user_id: userId,
         space_id: spaceId,
-        date: dateStr,
+        date: serverDate,
         tasks: JSON.stringify(tasks),
         memo: memo,
       }, { onConflict: 'user_id,space_id,date' });
@@ -219,20 +223,20 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
           }
       }, 1500); 
 
-  }, [localMemo, userId, spaceId, dateStr]);
+  }, [localMemo, userId, spaceId, dateKey]);
 
   // 5. Realtime Subscription (Optional: Only warn or update if not dirty)
   useEffect(() => {
     if (!userId || !spaceId) return;
 
-    const channel = supabase.channel(`realtime_tasks_${spaceId}_${dateStr}`)
+    const channel = supabase.channel(`realtime_tasks_${spaceId}_${serverDate}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'task_logs',
-          filter: `user_id=eq.${userId} and space_id=eq.${spaceId} and date=eq.${dateStr}`,
+          filter: `user_id=eq.${userId} and space_id=eq.${spaceId} and date=eq.${serverDate}`,
         },
         (payload) => {
            // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -240,7 +244,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
            // 내가 쓴 글이 아닌 경우(다른 기기/사람)에만 반응해야 하는데 구분 어려움.
            // 간단히: 로컬이 Dirty(입력중)가 아닐 때만 invalidate
            if (!isLocalDirty) {
-               queryClient.invalidateQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
+               queryClient.invalidateQueries({ queryKey: ['tasks', dateKey, userId, spaceId] });
            }
         }
       )
@@ -249,7 +253,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, spaceId, dateStr, queryClient, isLocalDirty]);
+  }, [userId, spaceId, dateKey, queryClient, isLocalDirty]);
 
 
   return {

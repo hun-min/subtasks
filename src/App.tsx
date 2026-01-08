@@ -97,7 +97,14 @@ export default function App() {
   // Ensure Flow has at least the current view date's tasks so Day and Flow look consistent
   const logsFromAll = allLogs || [];
   const currentDateStr = viewDate.toDateString();
-  const hasCurrent = logsFromAll.some(l => l.date === currentDateStr);
+  // Normalize date comparison: server/local may use different string formats
+  const hasCurrent = logsFromAll.some(l => {
+    try {
+      return new Date(l.date).toDateString() === currentDateStr;
+    } catch (e) {
+      return l.date === currentDateStr;
+    }
+  });
   const logs = hasCurrent ? logsFromAll : [{ date: currentDateStr, tasks: tasks } as DailyLog].concat(logsFromAll);
 
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);

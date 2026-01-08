@@ -309,14 +309,48 @@ export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
 
       if (error) throw error;
 
-      return (data || []).map((row: any) => ({
+      // Normalize server rows first
+      const serverLogs: DailyLog[] = (data || []).map((row: any) => ({
         ...row,
-        // Normalize server row.date to the same human-readable key used elsewhere
-        date: (() => {
-          try { return new Date(row.date).toDateString(); } catch (e) { return String(row.date); }
-        })(),
+        date: (() => { try { return new Date(row.date).toDateString(); } catch (e) { return String(row.date); } })(),
         tasks: migrateTasks(typeof row.tasks === 'string' ? JSON.parse(row.tasks) : row.tasks),
-      })) as DailyLog[];
+      }));
+
+      // Also read localStorage-backed logs and merge any dates that the server doesn't have.
+      // This ensures Flow shows the same local items the Day view displays, without auto-uploading.
+      try {
+        const localLogs: DailyLog[] = [];
+        Object.keys(localStorage)
+          .filter(k => k.startsWith('tasks_'))
+          .forEach(k => {
+            try {
+              const raw = JSON.parse(localStorage.getItem(k) || '{}');
+              const parts = k.split('_');
+              if (parts.length < 2) return;
+              // last part may be spaceId
+              const maybeSpace = parts[parts.length - 1];
+              const datePart = parts.slice(1, parts.length - 1).join('_') || parts[1];
+              const dateStr = datePart.replace(/_/g, ' ');
+              // include only if key's space matches requested spaceId or if no explicit space part
+              if (!spaceId || String(maybeSpace) === String(spaceId) || parts.length === 2) {
+                const tasksRaw = raw.tasks || [];
+                localLogs.push({ date: dateStr, tasks: migrateTasks(tasksRaw), memo: raw.memo || '' });
+              }
+            } catch (e) {
+              // ignore parse errors
+            }
+          });
+
+        // Merge: prefer serverLogs when same date exists; otherwise include localLog
+        const map = new Map(serverLogs.map(l => [l.date, l]));
+        localLogs.forEach(l => {
+          if (!map.has(l.date)) map.set(l.date, l);
+        });
+
+        return Array.from(map.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      } catch (e) {
+        return serverLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      }
     },
     // Allow this query to run even when unauthenticated so we can
     // aggregate localStorage-backed logs for local development.

@@ -126,6 +126,15 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
     refetchOnMount: true,
   });
 
+  // Reset local state when date/space changes
+  useEffect(() => {
+    setIsInitialized(false);
+    setIsLocalDirty(false);
+    isInitialLoad.current = true;
+    setLocalTasks([]);
+    setLocalMemo('');
+  }, [dateStr, spaceId, userId]);
+
   // 2. Sync Server Data to Local State (Only when safe)
   useEffect(() => {
     if (!serverData) return;
@@ -154,14 +163,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
     }
   }, [serverData, isLocalDirty, isInitialized]);
 
-  // Reset local dirty state when date changes
-  useEffect(() => {
-    setIsLocalDirty(false);
-    setIsInitialized(false); // 날짜 바뀌면 다시 초기화 대기
-    isInitialLoad.current = true;
-    setLocalTasks([]); // Clear while loading new date
-    setLocalMemo('');
-  }, [dateStr, spaceId]);
+
 
 
   // 3. Mutation (Actual Save)

@@ -560,47 +560,155 @@ export default function App() {
   }, [tasks, selectedTaskIds, updateTasks, currentMemo]);
 
   // --- Flow View Handlers ---
-  // Flow view updates multiple dates, which isn't directly supported by the single-date useTasks hook.
-  // Ideally, FlowView should use its own data management or useTasks should support multi-date.
-  // For now, these are placeholders or need to be implemented via direct Supabase calls or a more global hook.
   
-  const handleUpdateTaskInFlow = useCallback((date: string, taskId: number, updates: Partial<Task>) => {
-      // Direct mutation for flow view
-      // This is a bit of a hack since we are bypassing the hook's cache management for other dates
-      // But for the current view date, we should probably check if it matches.
-      if (date === viewDate.toDateString()) {
-          handleUpdateTask(taskId, updates);
-      } else {
-          console.warn("Updating tasks in other dates from Flow View not fully implemented via hook.");
+  // Helper to update tasks for ANY date (bypassing the single-date hook if needed)
+  const updateTasksForDate = async (dateStr: string, newTasks: Task[], newMemo?: string) => {
+      // 1. Check if it's the current view date - use the hook for instant UI update
+      if (dateStr === viewDate.toDateString()) {
+          updateTasks.mutate({ tasks: newTasks, memo: newMemo || currentMemo });
+          return;
       }
-  }, [viewDate, handleUpdateTask]);
+
+      // 2. If it's another date, we must update Server directly and then invalidate queries
+      try {
+           const log = logs.find(l => l.date === dateStr);
+           if (!log) return; 
+
+           const { error } = await import('./supabase').then(m => m.supabase.from('task_logs').upsert({
+                user_id: user?.id,
+                space_id: currentSpace?.id ? String(currentSpace.id) : undefined,
+                date: dateStr,
+                tasks: JSON.stringify(newTasks),
+                memo: newMemo || log.memo || '',
+                updated_at: new Date().toISOString()
+           }, { onConflict: 'user_id,space_id,date' }));
+
+           if (error) throw error;
+
+           queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'task_logs_all' });
+           queryClient.invalidateQueries({ queryKey: ['tasks', dateStr] });
+           
+      } catch (e) {
+          console.error("Failed to update remote date:", e);
+          alert("Failed to save changes to other date. Please check connection.");
+      }
+  };
+
+  const handleUpdateTaskInFlow = useCallback((date: string, taskId: number, updates: Partial<Task>) => {
+      const log = logs.find(l => l.date === date);
+      if (!log) return;
+
+      const currentTasks = log.tasks;
+      const nextTasks = currentTasks.map(t => t.id === taskId ? { ...t, ...updates } : t);
+      
+      updateTasksForDate(date, nextTasks);
+  }, [logs, viewDate, updateTasks, user, currentSpace]);
 
   const handleAddTaskInFlow = useCallback((date: string, taskId: number, textBefore: string, textAfter: string) => {
-     if (date === viewDate.toDateString()) {
-         handleAddTaskAtCursor(taskId, textBefore, textAfter);
-     }
-  }, [viewDate, handleAddTaskAtCursor]);
+      const log = logs.find(l => l.date === date);
+      if (!log) return;
+
+      const currentTasks = log.tasks;
+      const idx = currentTasks.findIndex(t => t.id === taskId);
+      if (idx === -1) return;
+
+      const current = currentTasks[idx];
+      const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
+        id: Date.now() + i + Math.random(),
+        name: line,
+        status: 'pending', 
+        indent: current.indent, 
+        parent: current.parent, 
+        text: line,
+        percent: 0, 
+        planTime: 0, 
+        actTime: 0, 
+        isTimerOn: false, 
+        depth: current.depth || 0, 
+        space_id: String(currentSpace?.id || ''),
+      }));
+
+      const nextTasks = [...currentTasks];
+      nextTasks[idx] = { ...current, name: textBefore, text: textBefore };
+      nextTasks.splice(idx + 1, 0, ...newTasksToAdd);
+      
+      const nextFocusId = newTasksToAdd.length > 0 ? newTasksToAdd[0].id : null;
+      if (nextFocusId) setFocusedTaskId(nextFocusId);
+
+      updateTasksForDate(date, nextTasks);
+  }, [logs, viewDate, updateTasks, user, currentSpace]);
 
   const handleMergeTaskInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
-      if (date === viewDate.toDateString()) {
-          if (direction === 'prev') handleMergeWithPrevious(taskId, currentText);
-          else handleMergeWithNext(taskId);
+      const log = logs.find(l => l.date === date);
+      if (!log) return;
+      const currentTasks = log.tasks;
+      const idx = currentTasks.findIndex(t => t.id === taskId);
+      if (idx === -1) return;
+
+      let nextTasks = [...currentTasks];
+      
+      if (direction === 'prev') {
+          if (idx > 0) {
+              const prevTask = currentTasks[idx - 1];
+              const newPos = (prevTask.name || '').length;
+              nextTasks[idx - 1] = { ...prevTask, name: (prevTask.name || '') + (currentText || ''), text: (prevTask.text || '') + (currentText || '') };
+              nextTasks.splice(idx, 1);
+              setFocusedTaskId(prevTask.id);
+              (window as any).__restoreCursorPos = newPos;
+          } else {
+             nextTasks = nextTasks.filter(t => t.id !== taskId);
+             setFocusedTaskId(null);
+          }
+      } else {
+          // next
+          if (idx < currentTasks.length - 1) {
+              const current = currentTasks[idx];
+              const nextTask = currentTasks[idx + 1];
+              nextTasks[idx] = { ...current, name: (current.name || '') + (nextTask.name || ''), text: (current.text || '') + (nextTask.text || '') };
+              nextTasks.splice(idx + 1, 1);
+          }
       }
-  }, [viewDate, handleMergeWithPrevious, handleMergeWithNext]);
+      
+      updateTasksForDate(date, nextTasks);
+  }, [logs, viewDate, updateTasks, user, currentSpace]);
 
   const handleIndentTaskInFlow = useCallback((date: string, taskId: number, direction: 'in' | 'out') => {
-      if (date === viewDate.toDateString()) {
-          if (direction === 'in') handleIndent(taskId);
-          else handleOutdent(taskId);
-      }
-  }, [viewDate, handleIndent, handleOutdent]);
+      const log = logs.find(l => l.date === date);
+      if (!log) return;
+      
+      const currentTasks = log.tasks;
+      const nextTasks = currentTasks.map(t => {
+          if (t.id === taskId) {
+              const newDepth = direction === 'in' ? (t.depth || 0) + 1 : Math.max(0, (t.depth || 0) - 1);
+              return { ...t, depth: newDepth };
+          }
+          return t;
+      });
+      
+      setFocusedTaskId(taskId);
+      updateTasksForDate(date, nextTasks);
+  }, [logs, viewDate, updateTasks, user, currentSpace]);
   
   const handleMoveTaskInFlow = useCallback((date: string, taskId: number, direction: 'up' | 'down') => {
-      if (date === viewDate.toDateString()) {
-          if (direction === 'up') handleMoveUp(taskId);
-          else handleMoveDown(taskId);
+      const log = logs.find(l => l.date === date);
+      if (!log) return;
+      
+      const currentTasks = log.tasks;
+      const index = currentTasks.findIndex(t => t.id === taskId);
+      if (index === -1) return;
+      
+      const nextTasks = [...currentTasks];
+      
+      if (direction === 'up' && index > 0) {
+          [nextTasks[index - 1], nextTasks[index]] = [nextTasks[index], nextTasks[index - 1]];
+      } else if (direction === 'down' && index < nextTasks.length - 1) {
+          [nextTasks[index], nextTasks[index + 1]] = [nextTasks[index + 1], nextTasks[index]];
+      } else {
+          return;
       }
-  }, [viewDate, handleMoveUp, handleMoveDown]);
+      
+      updateTasksForDate(date, nextTasks);
+  }, [logs, viewDate, updateTasks, user, currentSpace]);
 
   return (
     <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden" style={{ height: 'var(--app-height, 100vh)' }}>

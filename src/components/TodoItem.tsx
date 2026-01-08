@@ -56,10 +56,26 @@ export const TodoItem = React.memo(({
   const [localText, setLocalText] = useState(task.name || task.text || '');
   const localTextRef = useRef(localText); 
   const isComposing = useRef(false); // IME status tracking
+  const taskRef = useRef(task);
+  const updateTaskRef = useRef(updateTask);
 
   useEffect(() => {
     localTextRef.current = localText;
-  }, [localText]);
+    taskRef.current = task;
+    updateTaskRef.current = updateTask;
+  }, [localText, task, updateTask]);
+
+  // Safe-guard: Save on unmount if there are unsaved changes
+  useEffect(() => {
+    return () => {
+      const currentLocal = localTextRef.current;
+      const currentTask = taskRef.current;
+      // Compare current local text with the last known task text
+      if (currentLocal !== (currentTask.name || currentTask.text || '')) {
+        updateTaskRef.current(currentTask.id, { name: currentLocal, text: currentLocal });
+      }
+    };
+  }, []); // Empty dependency ensuring this runs on unmount
 
   // Sync prop changes to local state only when NOT focused (to avoid typing interference)
   useEffect(() => {

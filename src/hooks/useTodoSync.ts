@@ -156,10 +156,20 @@ export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => 
   // 4. Save to Server (Debounced)
   const saveToSupabase = async (tasks: Task[], memo: string) => {
       // Always save to Local Storage first (Persistence)
-      localStorage.setItem(localKey, JSON.stringify({ 
+      const dataToSave = { 
           tasks, 
           memo, 
           updatedAt: new Date().toISOString() 
+      };
+      
+      localStorage.setItem(localKey, JSON.stringify(dataToSave));
+      
+      // Update React Query Cache immediately to prevent UI revert on date switch
+      queryClient.setQueryData(['tasks', dateStr, userId, spaceId], (old: any) => ({
+          ...old,
+          tasks,
+          memo,
+          updated_at: dataToSave.updatedAt
       }));
 
       if (!userId || !spaceId) return;

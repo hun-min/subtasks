@@ -265,22 +265,54 @@ export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
   return useQuery({
     queryKey: ['tasks', 'all', userId, spaceId], // Unified key: 'tasks' is the root
     queryFn: async () => {
-      if (!userId || !spaceId) return [];
-      
+      // If unauthenticated or no space specified, return any localStorage-backed logs
+      if (!userId || !spaceId) {
+        const logs: DailyLog[] = [];
+        try {
+          Object.keys(localStorage)
+            .filter(k => k.startsWith('tasks_'))
+            .forEach(k => {
+              try {
+                const raw = JSON.parse(localStorage.getItem(k) || '{}');
+                // key format: tasks_<date>_<spaceId?>
+                const parts = k.split('_');
+                // date may contain spaces, join until last part which is spaceId
+                if (parts.length < 2) return;
+                const datePart = parts.slice(1, parts.length - 1).join('_');
+                const dateStr = datePart.replace(/_/g, ' ');
+                const tasksRaw = raw.tasks || [];
+                logs.push({
+                  date: dateStr,
+                  tasks: migrateTasks(tasksRaw),
+                  memo: raw.memo || ''
+                });
+              } catch (e) {
+                // ignore parse errors per key
+              }
+            });
+        } catch (e) {
+          return [];
+        }
+        // Sort descending by date
+        return logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      }
+
       const { data, error } = await supabase
         .from('task_logs')
         .select('*')
         .eq('user_id', userId)
         .eq('space_id', spaceId);
-        
+
       if (error) throw error;
-      
+
       return (data || []).map((row: any) => ({
         ...row,
         tasks: migrateTasks(typeof row.tasks === 'string' ? JSON.parse(row.tasks) : row.tasks),
       })) as DailyLog[];
     },
-    enabled: !!userId && !!spaceId,
+    // Allow this query to run even when unauthenticated so we can
+    // aggregate localStorage-backed logs for local development.
+    enabled: true,
     staleTime: 1000 * 60 * 10, // 10분
   });
 };

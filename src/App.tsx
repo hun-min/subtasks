@@ -94,7 +94,11 @@ export default function App() {
   });
 
   const { data: allLogs } = useAllTaskLogs(user?.id, currentSpace?.id ? String(currentSpace.id) : undefined);
-  const logs = allLogs || [];
+  // Ensure Flow has at least the current view date's tasks so Day and Flow look consistent
+  const logsFromAll = allLogs || [];
+  const currentDateStr = viewDate.toDateString();
+  const hasCurrent = logsFromAll.some(l => l.date === currentDateStr);
+  const logs = hasCurrent ? logsFromAll : [{ date: currentDateStr, tasks: tasks } as DailyLog].concat(logsFromAll);
 
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
 

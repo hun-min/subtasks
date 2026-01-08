@@ -172,7 +172,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
     
     // If we are editing, DO NOT overwrite with server data (Local Priority)
     if (isEditing.current) {
-        console.log("Server update ignored due to local editing");
+        // console.debug("Server update ignored due to local editing");
         return;
     }
 
@@ -293,7 +293,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
         },
         (payload) => {
            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-           console.debug('Realtime update', payload);
+           // console.debug('Realtime update', payload);
            // Ignore if we are editing
            if (isEditing.current) return;
            

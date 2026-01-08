@@ -62,10 +62,11 @@ type UseTasksProps = {
   currentDate: Date;
   userId?: string;
   spaceId?: string;
+  isAutoSaveEnabled?: boolean;
 };
 
 // Check-Head Pattern: Load from Local Storage first, then Sync with Server
-export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => {
+export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = true }: UseTasksProps) => {
   const queryClient = useQueryClient();
   const dateStr = currentDate.toDateString();
   const localKey = `tasks_${dateStr}_${spaceId || 'default'}`;
@@ -226,6 +227,10 @@ export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => 
       // Debounce Server Save
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       
+      if (!isAutoSaveEnabled) {
+          return;
+      }
+
       saveTimeoutRef.current = setTimeout(async () => {
           try {
               const memoToSave = newMemo !== undefined ? newMemo : localMemo;

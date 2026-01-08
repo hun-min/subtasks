@@ -82,11 +82,15 @@ export default function App() {
 
   const isInternalUpdate = useRef(false);
 
+  // New State: View Mode
+  const [viewMode, setViewMode] = useState<'day' | 'flow'>('day');
+
   // React Query Hooks (Refactored to useTodoSync)
   const { tasks, memo: currentMemo, updateTasks, isLoading } = useTodoSync({
       currentDate: viewDate,
       userId: user?.id,
-      spaceId: currentSpace?.id ? String(currentSpace.id) : undefined
+      spaceId: currentSpace?.id ? String(currentSpace.id) : undefined,
+      isAutoSaveEnabled: viewMode === 'day'
   });
 
   const { data: allLogs } = useAllTaskLogs(user?.id, currentSpace?.id ? String(currentSpace.id) : undefined);
@@ -105,9 +109,6 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-
-  // New State: View Mode
-  const [viewMode, setViewMode] = useState<'day' | 'flow'>('day');
 
   const activeTask = useMemo(() => {
     if (!focusedTaskId) return undefined;

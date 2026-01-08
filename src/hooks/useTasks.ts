@@ -311,6 +311,10 @@ export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
 
       return (data || []).map((row: any) => ({
         ...row,
+        // Normalize server row.date to the same human-readable key used elsewhere
+        date: (() => {
+          try { return new Date(row.date).toDateString(); } catch (e) { return String(row.date); }
+        })(),
         tasks: migrateTasks(typeof row.tasks === 'string' ? JSON.parse(row.tasks) : row.tasks),
       })) as DailyLog[];
     },

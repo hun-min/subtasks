@@ -294,7 +294,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
               console.error("Failed to auto-save", err);
           }
       }, 2000); // 2 seconds debounce
-  }, [localMemo, userId, spaceId, dateKey, localKey, isAutoSaveEnabled]);
+  }, [localMemo, userId, spaceId, dateStr, localKey, isAutoSaveEnabled]);
 
   // Reset state on date/space change
   useEffect(() => {
@@ -303,20 +303,20 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
       setLocalMemo(newData.memo);
       lastSyncedAt.current = newData.updatedAt;
       isEditing.current = false;
-  }, [dateKey, spaceId]);
+  }, [dateStr, spaceId]);
 
   // Realtime Subscription
   useEffect(() => {
     if (!userId || !spaceId) return;
 
-    const channel = supabase.channel(`realtime_tasks_${spaceId}_${serverDate}`)
+    const channel = supabase.channel(`realtime_tasks_${spaceId}_${dateStr}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'task_logs',
-          filter: `user_id=eq.${userId} and space_id=eq.${spaceId} and date=eq.${serverDate}`,
+          filter: `user_id=eq.${userId} and space_id=eq.${spaceId} and date=eq.${dateStr}`,
         },
         () => {
            // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -325,13 +325,13 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
            if (isEditing.current) return;
            
            // Invalidate query to fetch latest (will trigger Check-Head logic)
-           queryClient.invalidateQueries({ queryKey: ['tasks', dateKey, userId, spaceId] });
+           queryClient.invalidateQueries({ queryKey: ['tasks', dateStr, userId, spaceId] });
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [userId, spaceId, dateKey, queryClient]);
+  }, [userId, spaceId, dateStr, queryClient]);
 
   return {
     tasks: localTasks,

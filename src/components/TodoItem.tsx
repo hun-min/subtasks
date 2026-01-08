@@ -211,7 +211,7 @@ export const TodoItem = React.memo(({
 
     // Task Creation / Splitting
     if (e.key === 'Enter') {
-      if (!e.shiftKey) {
+      if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
         if (isComposing.current) return;
         e.preventDefault();
         
@@ -269,7 +269,7 @@ export const TodoItem = React.memo(({
     }
 
     // Star Toggle
-    if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
+    if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.key === 'd' || e.key === 'D')) {
       e.preventDefault();
       updateTask(task.id, { is_starred: !task.is_starred });
       return;

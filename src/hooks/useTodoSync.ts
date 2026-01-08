@@ -96,6 +96,8 @@ export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => 
   
   // Track if we are currently editing locally (to prevent server overwrite)
   const isEditing = useRef(false);
+  // Track if the current update is coming from server (to prevent echo)
+  const isServerUpdate = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 2. Fetch Server Data (Lightweight Check first?)
@@ -141,6 +143,9 @@ export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => 
     const localTasksStr = JSON.stringify(localTasks);
     
     if (serverTasksStr !== localTasksStr || serverData.memo !== localMemo) {
+         // Mark this update as coming from server
+         isServerUpdate.current = true;
+         
          setLocalTasks(serverData.tasks || []);
          setLocalMemo(serverData.memo || '');
          
@@ -150,6 +155,13 @@ export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => 
              memo: serverData.memo || '',
              updatedAt: new Date().toISOString() // Mark sync time
          }));
+
+         // Reset flag after a short delay to allow state to settle
+         // (React state updates are async, but ref is synchronous. 
+         // We just need to ensure the next effect loop sees this.)
+         setTimeout(() => {
+            isServerUpdate.current = false;
+         }, 100);
     }
   }, [serverData, localKey]); // removed localTasks dependency to avoid loop
 
@@ -193,6 +205,14 @@ export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => 
   };
 
   const updateTasks = useCallback((newTasks: Task[], newMemo?: string) => {
+      // If this update is triggered by server sync, do not save back!
+      if (isServerUpdate.current) {
+          // Just update local state without saving
+          setLocalTasks(newTasks);
+          if (newMemo !== undefined) setLocalMemo(newMemo);
+          return;
+      }
+
       setLocalTasks(newTasks);
       if (newMemo !== undefined) setLocalMemo(newMemo);
       

@@ -238,6 +238,17 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
       });
   };
 
+    // Exposed immediate save (bypass debounce / auto-save flag)
+    const forceSave = async (tasks: Task[], memo?: string) => {
+      try {
+        const memoToSave = memo !== undefined ? memo : localMemo;
+        await saveToSupabase(tasks, memoToSave);
+      } catch (err) {
+        console.error('forceSave failed', err);
+        throw err;
+      }
+    };
+
   const updateTasks = useCallback((newTasks: Task[], newMemo?: string) => {
       // If this update is triggered by server sync, do not save back!
       if (isServerUpdate.current) {
@@ -311,5 +322,6 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
     memo: localMemo,
     isLoading: isLoading && localTasks.length === 0, // Only show loading if no local data
     updateTasks: { mutate: ({ tasks, memo }: { tasks: Task[], memo: string }) => updateTasks(tasks, memo) },
+    forceSave,
   };
 };

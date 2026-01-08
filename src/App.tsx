@@ -86,7 +86,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'day' | 'flow'>('day');
 
   // React Query Hooks (Refactored to useTodoSync)
-  const { tasks, memo: currentMemo, updateTasks, isLoading } = useTodoSync({
+  const { tasks, memo: currentMemo, updateTasks, isLoading, forceSave } = useTodoSync({
       currentDate: viewDate,
       userId: user?.id,
       spaceId: currentSpace?.id ? String(currentSpace.id) : undefined,
@@ -565,10 +565,22 @@ export default function App() {
   // Helper to update tasks for ANY date (bypassing the single-date hook if needed)
   const updateTasksForDate = async (dateStr: string, newTasks: Task[], newMemo?: string) => {
       // 1. Check if it's the current view date - use the hook for instant UI update
-      if (dateStr === viewDate.toDateString()) {
+        if (dateStr === viewDate.toDateString()) {
           updateTasks.mutate({ tasks: newTasks, memo: newMemo || currentMemo });
+
+          // If we're in Flow mode (auto-save disabled), also persist immediately
+          // via the hook's forceSave API and invalidate queries so Day/Flow sync.
+          if (viewMode !== 'day' && forceSave) {
+            try {
+              await forceSave(newTasks, newMemo || currentMemo);
+              queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'tasks' });
+            } catch (e) {
+              console.error('Failed to persist flow-mode update:', e);
+            }
+          }
+
           return;
-      }
+        }
 
       // 2. If it's another date, we must update Server directly and then invalidate queries
       try {

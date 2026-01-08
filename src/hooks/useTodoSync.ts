@@ -199,9 +199,14 @@ export const useTodoSync = ({ currentDate, userId, spaceId }: UseTasksProps) => 
 
       // Force refresh all task data across all views (Day/Flow)
       // Invalidating ['tasks'] ensures all sub-keys like ['tasks', date], ['tasks', 'all'] are refetched.
-      await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      await queryClient.invalidateQueries({ 
+        predicate: (query) => query.queryKey[0] === 'tasks' 
+      });
       // Force refetch to ensure immediate update for active views
-      await queryClient.refetchQueries({ queryKey: ['tasks'], type: 'active', exact: false });
+      await queryClient.refetchQueries({ 
+        predicate: (query) => query.queryKey[0] === 'tasks',
+        type: 'all' 
+      });
   };
 
   const updateTasks = useCallback((newTasks: Task[], newMemo?: string) => {

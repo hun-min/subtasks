@@ -261,7 +261,7 @@ export const TodoItem = React.memo(({
     }
 
     // Completion Toggle
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
       const newStatus = task.status === 'completed' ? 'pending' : 'completed';
       updateTask(task.id, { status: newStatus, isTimerOn: false });
@@ -269,7 +269,7 @@ export const TodoItem = React.memo(({
     }
 
     // Star Toggle
-    if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.key === 'd' || e.key === 'D')) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
       e.preventDefault();
       updateTask(task.id, { is_starred: !task.is_starred });
       return;

@@ -72,6 +72,9 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
   const [localMemo, setLocalMemo] = useState<string>('');
   const [isLocalDirty, setIsLocalDirty] = useState(false);
+  // 서버 데이터가 최초로 로드되어 로컬에 반영되었는지를 추적하는 플래그
+  const [isInitialized, setIsInitialized] = useState(false);
+
   const lastServerDataRef = useRef<{ tasks: Task[], memo: string } | null>(null);
   const isInitialLoad = useRef(true);
 
@@ -127,6 +130,18 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
   useEffect(() => {
     if (!serverData) return;
     
+    // 1. 아직 초기화되지 않았다면(최초 로딩), 서버 데이터가 있으면 무조건 반영 (Local Dirty 무시)
+    //    이는 "앱 켜자마자" 데이터를 보여주기 위함.
+    if (!isInitialized) {
+        setLocalTasks(serverData.tasks || []);
+        setLocalMemo(serverData.memo || '');
+        lastServerDataRef.current = { tasks: serverData.tasks || [], memo: serverData.memo || '' };
+        setIsInitialized(true);
+        if (isInitialLoad.current) isInitialLoad.current = false;
+        return; 
+    }
+
+    // 2. 이미 초기화된 이후에는 기존 로직(충돌 방지) 따름
     // 초기 로딩이거나, 로컬 변경사항이 없는 경우에만 서버 데이터로 덮어씌움
     // 즉, 사용자가 입력 중(isLocalDirty)일 때는 서버 데이터가 와도 무시함 (충돌 방지 우선)
     const isEmptyLocal = localTasks.length === 0 && localMemo === '';
@@ -137,11 +152,12 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
         lastServerDataRef.current = { tasks: serverData.tasks || [], memo: serverData.memo || '' };
         if (isInitialLoad.current) isInitialLoad.current = false;
     }
-  }, [serverData, isLocalDirty]);
+  }, [serverData, isLocalDirty, isInitialized]);
 
   // Reset local dirty state when date changes
   useEffect(() => {
     setIsLocalDirty(false);
+    setIsInitialized(false); // 날짜 바뀌면 다시 초기화 대기
     isInitialLoad.current = true;
     setLocalTasks([]); // Clear while loading new date
     setLocalMemo('');

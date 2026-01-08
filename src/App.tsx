@@ -971,7 +971,7 @@ export default function App() {
                 <div className="space-y-3">
                   <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">General</h3>
                   <div className="flex justify-between items-center"><span className="text-gray-400">Add Task</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Enter</kbd></div>
-                  <div className="flex justify-between items-center"><span className="text-gray-400">Toggle Status</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Toggle Status</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter / Ctrl + Space</kbd></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400">Toggle Star</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + D</kbd></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400">Undo / Redo</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Z / Y</kbd></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400">Help</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">?</kbd></div>

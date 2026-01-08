@@ -120,8 +120,9 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
         .eq('space_id', spaceId)
         .eq('date', serverDate)
         .single();
-
-      if (metaError && metaError.code !== 'PGRST116') throw metaError;
+      // If DB doesn't have updated_at column, supabase returns PGRST204.
+      // Treat that as "no meta available" and fall back to fetching the full row.
+      if (metaError && metaError.code !== 'PGRST116' && metaError.code !== 'PGRST204') throw metaError;
       
       // 서버에 데이터가 없는 경우
       if (!meta) return { tasks: [], memo: '', updated_at: null, notModified: false };
@@ -211,27 +212,41 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
       localStorage.setItem(localKey, JSON.stringify(dataToSave));
       lastSyncedAt.current = now; // 로컬 업데이트 시점 갱신
       
-      // Update React Query Cache immediately
-      queryClient.setQueryData(['tasks', dateStr, userId, spaceId], (old: any) => ({
+        // Update React Query Cache immediately (use dateKey for cache key)
+        queryClient.setQueryData(['tasks', dateKey, userId, spaceId], (old: any) => ({
           ...old,
           tasks,
           memo,
           updated_at: now,
           notModified: true // 내가 방금 저장했으니 최신임
-      }));
+        }));
 
       if (!userId || !spaceId) return;
 
-      const { error } = await supabase.from('task_logs').upsert({
+      // Try upsert including updated_at; if DB doesn't have that column (PGRST204), retry without it.
+      let upsertPayload: any = {
         user_id: userId,
         space_id: spaceId,
-        date: dateStr,
+        date: serverDate,
         tasks: JSON.stringify(tasks),
         memo: memo,
         updated_at: now
-      }, { onConflict: 'user_id,space_id,date' });
+      };
 
-      if (error) throw error;
+      let upsertRes = await supabase.from('task_logs').upsert(upsertPayload, { onConflict: 'user_id,space_id,date' });
+      if (upsertRes.error) {
+        // Handle missing column error by retrying without updated_at
+        if (upsertRes.error.code === 'PGRST204') {
+          try {
+            delete upsertPayload.updated_at;
+            upsertRes = await supabase.from('task_logs').upsert(upsertPayload, { onConflict: 'user_id,space_id,date' });
+          } catch (e) {
+            // fall through to error handling below
+          }
+        }
+      }
+
+      if (upsertRes.error) throw upsertRes.error;
 
       // Invalidate other queries if needed (e.g. flow view)
       await queryClient.invalidateQueries({ 

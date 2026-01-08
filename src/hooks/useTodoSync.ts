@@ -291,7 +291,7 @@ export const useTodoSync = ({ currentDate, userId, spaceId, isAutoSaveEnabled = 
           table: 'task_logs',
           filter: `user_id=eq.${userId} and space_id=eq.${spaceId} and date=eq.${dateStr}`,
         },
-        (payload) => {
+        () => {
            // eslint-disable-next-line @typescript-eslint/no-unused-vars
            // console.debug('Realtime update', payload);
            // Ignore if we are editing

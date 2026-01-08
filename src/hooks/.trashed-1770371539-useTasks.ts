@@ -120,6 +120,7 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
     },
     enabled: true, 
     staleTime: 1000 * 60 * 5, // 5분
+    refetchOnMount: true,
   });
 
   // 2. Sync Server Data to Local State (Only when safe)
@@ -128,7 +129,9 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
     
     // 초기 로딩이거나, 로컬 변경사항이 없는 경우에만 서버 데이터로 덮어씌움
     // 즉, 사용자가 입력 중(isLocalDirty)일 때는 서버 데이터가 와도 무시함 (충돌 방지 우선)
-    if (isInitialLoad.current || !isLocalDirty) {
+    const isEmptyLocal = localTasks.length === 0 && localMemo === '';
+    
+    if (isInitialLoad.current || !isLocalDirty || isEmptyLocal) {
         setLocalTasks(serverData.tasks || []);
         setLocalMemo(serverData.memo || '');
         lastServerDataRef.current = { tasks: serverData.tasks || [], memo: serverData.memo || '' };

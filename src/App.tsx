@@ -9,10 +9,11 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { Play, Pause, BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, ChevronUp, Trash2, Copy, Flame, RotateCcw, RotateCw } from 'lucide-react';
 import { Task, DailyLog } from './types';
 import { formatTimeFull, parseTimeToSeconds } from './utils';
-import { UnifiedTaskItem } from './components/UnifiedTaskItem';
+import { TodoItem } from './components/TodoItem';
 import { FlowView } from './components/FlowView';
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
-import { useTasks, useAllTaskLogs } from './hooks/useTasks';
+import { useTodoSync } from './hooks/useTodoSync';
+import { useAllTaskLogs } from './hooks/useTasks';
 
 // --- [컴포넌트] 태스크 히스토리 모달 ---
 const TaskHistoryModal = React.memo(({ taskName, logs, onClose }: { taskName: string, logs: DailyLog[], onClose: () => void }) => {
@@ -81,8 +82,8 @@ export default function App() {
 
   const isInternalUpdate = useRef(false);
 
-  // React Query Hooks
-  const { tasks, memo: currentMemo, updateTasks, isLoading } = useTasks({
+  // React Query Hooks (Refactored to useTodoSync)
+  const { tasks, memo: currentMemo, updateTasks, isLoading } = useTodoSync({
       currentDate: viewDate,
       userId: user?.id,
       spaceId: currentSpace?.id ? String(currentSpace.id) : undefined
@@ -428,37 +429,16 @@ export default function App() {
             } 
             return t; 
         });
-        // 타이머 업데이트는 로컬 상태 변경으로 처리할 수 있지만, 
-        // 여기서는 useTasks 훅 구조상 tasks 상태가 훅 내부에서 오므로
-        // 매 초마다 mutation을 호출하는 것은 너무 비효율적입니다.
-        // 따라서 타이머 업데이트는 UI에서만 반영되거나, 
-        // 일정 주기로만 저장되도록 수정하는 것이 좋으나,
-        // 기존 로직 유지를 위해 여기서는 setTasks 대신 updateTasks를 호출하되,
-        // 너무 잦은 호출 방지가 필요합니다. (TODO: Debounce or Local State for Timer)
-        // 일단은 1초마다 저장은 너무 잦으므로, 타이머 틱은 별도 로컬 state로 관리하거나
-        // updateTasks를 호출하되 서버 부하를 고려해야 합니다.
-        // 현재 구조상 setTasks가 없으므로 updateTasks를 호출해야 합니다.
+        
         if (changed) {
              console.debug('Timer tick', next);
-            // updateTasks.mutate({ tasks: next, memo: currentMemo }); // 너무 잦은 호출 위험
-            // 임시 방편: 타이머는 실시간 저장을 하지 않고, 
-            // 멈출 때나 다른 액션 시에 저장되도록 하는 것이 일반적입니다.
-            // 하지만 사용자 경험을 위해 여기서는 생략하고, 
-            // Play/Pause 토글 시에만 시간이 저장되도록 수정하는 것이 좋습니다.
-            // (기존 코드에서도 setTasks만 하고 saveToSupabase는 안했을 수도 있음 - 확인 필요)
-            // 기존 코드: setTasks 호출 -> useEffect에 의해 saveToSupabase 호출될 수도 있음.
-            // 확인 결과 기존 코드는 setTasks 후 saveToSupabase를 호출하지 않음 (useEffect가 tasks 변경 감지 안함? 아님)
-            // 기존 useEffect[tasks] 가 없었고, handleUpdateTask 등에서만 saveToSupabase 호출함.
-            // Timer useEffect에서는 setTasks만 호출했음.
-            // 따라서 여기서는 UI 업데이트만 필요함. 하지만 tasks는 이제 prop으로 옴.
-            // 결론: 타이머 기능은 React Query와 같은 서버 상태 동기화 구조에서는 
-            // 로컬 상태로 분리하거나, 별도 처리가 필요함.
-            // 여기서는 일단 주석 처리하고, 타이머 토글 시에만 저장되도록 함.
+             // Note: We avoid mutation on every tick to save performance.
+             // Timer UI is best handled locally, but for now we rely on re-renders if needed.
+             // In this architecture, it's safer to only save when paused.
         }
     }, 1000);
     return () => clearInterval(timer);
   }, [tasks, currentMemo, updateTasks]); 
-  // TODO: 타이머 실시간 UI 업데이트 로직 구현 필요 (서버 저장 없이)
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -714,7 +694,7 @@ export default function App() {
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                           <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                               {tasks.map((t, i) => (
-                                  <UnifiedTaskItem 
+                                  <TodoItem 
                                       key={t.id} 
                                       task={t} 
                                       index={i} 
@@ -730,11 +710,11 @@ export default function App() {
                                       onIndent={handleIndent} 
                                       onOutdent={handleOutdent} 
                                       onMoveUp={handleMoveUp} 
-                                      onMoveDown={handleMoveDown} 
-                                      onDelete={handleDeleteTask}
-                                      onCopy={handleCopyTask}
+                                      onMoveDown={handleMoveDown}
                                       onFocusPrev={handleFocusPrev}
                                       onFocusNext={handleFocusNext}
+                                      onDelete={handleDeleteTask}
+                                      onCopy={handleCopyTask}
                                   />
                               ))}
                           </SortableContext>

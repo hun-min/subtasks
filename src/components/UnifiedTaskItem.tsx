@@ -132,6 +132,13 @@ export const UnifiedTaskItem = React.memo(({
     if (isComposing.current) return;
     // Use directly DOM value for most up-to-date text (ignoring potential state lag)
     const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
+
+    // Ctrl/Cmd + D: Toggle Star (keyboard shortcut)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      updateTask(task.id, { is_starred: !task.is_starred });
+      return;
+    }
     
     // Suggestions navigation
     if (suggestions.length > 0) {

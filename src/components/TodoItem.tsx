@@ -147,6 +147,13 @@ export const TodoItem = React.memo(({
     if (isComposing.current) return;
     const taskName = textareaRef.current ? textareaRef.current.value : localText;
 
+    // Ctrl/Cmd + D: Toggle Star (keyboard shortcut)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      updateTask(task.id, { is_starred: !task.is_starred });
+      return;
+    }
+
     // Suggestions Navigation
     if (suggestions.length > 0) {
         if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedSuggestionIndex(prev => Math.min(prev + 1, suggestions.length - 1)); return; }

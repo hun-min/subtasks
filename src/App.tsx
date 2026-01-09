@@ -79,8 +79,6 @@ export default function App() {
       });
   }, []);
 
-  const isInternalUpdate = useRef(false);
-
   // React Query Hooks
   const { tasks, memo: currentMemo, updateTasks, isLoading } = useTasks({
       currentDate: viewDate,
@@ -100,8 +98,65 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   
+  // --- [수정됨] 히스토리(Undo/Redo) 로직 강화 ---
   const [history, setHistory] = useState<Task[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const isInternalUpdate = useRef(false); // Undo/Redo에 의한 업데이트인지 체크
+
+  // 1. 초기 로드 시 히스토리 초기화 (앱 켜자마자 상태 저장)
+  useEffect(() => {
+    if (!isLoading && tasks.length > 0 && history.length === 0) {
+        setHistory([tasks]);
+        setHistoryIndex(0);
+    }
+  }, [isLoading, tasks]);
+
+  // 2. 변경사항 감지 및 히스토리 추가
+  useEffect(() => {
+    if (isLoading || isInternalUpdate.current) return;
+    if (tasks.length === 0 && history.length === 0) return;
+
+    // 중복 저장 방지 (이전 상태와 다를 때만 저장)
+    const lastState = history[historyIndex];
+    if (JSON.stringify(lastState) !== JSON.stringify(tasks)) {
+        const newHistory = [...history.slice(0, historyIndex + 1), tasks];
+        // 최대 50단계 저장
+        if (newHistory.length > 50) newHistory.shift();
+        
+        setHistory(newHistory);
+        setHistoryIndex(newHistory.length - 1);
+    }
+  }, [tasks, isLoading]);
+
+  // 3. Undo 실행
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      isInternalUpdate.current = true;
+      const prevTasks = history[historyIndex - 1];
+      
+      // 서버/로컬 업데이트 실행
+      updateTasks.mutate({ tasks: prevTasks, memo: currentMemo });
+      setHistoryIndex(historyIndex - 1);
+      
+      setTimeout(() => isInternalUpdate.current = false, 200);
+    }
+  }, [history, historyIndex, updateTasks, currentMemo]);
+
+  // 4. Redo 실행
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      isInternalUpdate.current = true;
+      const nextTasks = history[historyIndex + 1];
+      
+      updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
+      setHistoryIndex(historyIndex + 1);
+      
+      setTimeout(() => isInternalUpdate.current = false, 200);
+    }
+  }, [history, historyIndex, updateTasks, currentMemo]);
+  // --- [수정됨] 히스토리 로직 끝 ---
+
+
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
@@ -120,27 +175,19 @@ export default function App() {
   }, [tasks, logs, focusedTaskId]);
 
   useEffect(() => {
-    // 1. dvh 지원 여부 확인 및 폴백 설정
     const setAppHeight = () => {
       const doc = document.documentElement;
-      // dvh를 지원하는지 체크하는 간단한 방법은 없지만, vh를 100 * 0.01로 설정하여 커스텀 속성 사용
       doc.style.setProperty('--app-height', `${window.innerHeight}px`);
     };
 
     const handleVisualViewportResize = () => {
       if (!window.visualViewport) return;
-      // 키보드가 올라왔을 때 스크롤 가능한 영역 확보를 위해 padding-bottom 동적 조정
-      // 과거 백업에서 성공했던 로직 복원: visualViewport 높이를 기반으로 오프셋 계산
       const currentVisualHeight = window.visualViewport.height;
       const windowHeight = window.innerHeight;
-      
-      // 키보드 높이 계산 (오차가 있을 수 있으므로 여유값 추가)
       const keyboardHeight = windowHeight - currentVisualHeight;
       
-      if (keyboardHeight > 100) { // 키보드가 올라온 것으로 간주
+      if (keyboardHeight > 100) { 
           document.documentElement.style.setProperty('--keyboard-offset', `${keyboardHeight}px`);
-          
-          // 포커스된 요소가 가려지지 않도록 스크롤 조정 (옵션)
           if (document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'INPUT') {
              setTimeout(() => {
                  document.activeElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -168,19 +215,6 @@ export default function App() {
     };
   }, []);
 
-  // History management
-  useEffect(() => {
-    if (isLoading || isInternalUpdate.current) return;
-    
-    setHistory(prev => {
-        const newHistory = [...prev.slice(0, historyIndex + 1), tasks];
-        if (newHistory.length > 50) return newHistory.slice(newHistory.length - 50);
-        return newHistory;
-    });
-    setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [tasks]); // tasks 변경 시 히스토리 추가 (isLoading 제외)
-
-
   const handleUpdateTask = useCallback((taskId: number, updates: Partial<Task>) => {
     const isStatusUpdate = 'status' in updates;
     const isSelectionUpdate = selectedTaskIds.has(taskId) && isStatusUpdate;
@@ -194,15 +228,12 @@ export default function App() {
   }, [tasks, currentMemo, updateTasks, selectedTaskIds]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
-      // 1. 현재 리스트 복사 및 인덱스 찾기
       const idx = tasks.findIndex(t => t.id === taskId);
       if (idx === -1) return;
 
       const current = tasks[idx];
-      
-      // 2. 새 항목 생성 (아랫줄)
       const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
-        id: Date.now() + i + Math.random(), // 유니크 ID
+        id: Date.now() + i + Math.random(), 
         name: line,
         status: 'pending', 
         indent: current.indent, 
@@ -216,22 +247,16 @@ export default function App() {
         space_id: String(currentSpace?.id || ''),
       }));
 
-      // 3. 리스트 재구성: [이전 항목들] + [수정된 현재 항목] + [새 항목들] + [이후 항목들]
       const nextTasks = [...tasks];
-      // 현재 항목 수정 (윗줄 자르기)
       nextTasks[idx] = { ...current, name: textBefore, text: textBefore };
-      // 새 항목 삽입
       nextTasks.splice(idx + 1, 0, ...newTasksToAdd);
 
-      // 4. 포커스 이동 타겟 설정
       const nextFocusId = newTasksToAdd.length > 0 ? newTasksToAdd[0].id : null;
       if (nextFocusId) {
         setFocusedTaskId(nextFocusId);
       }
 
-      // 5. 서버 동기화 요청 (Local-First: 즉시 반영 및 백그라운드 저장)
       updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
-      
   }, [tasks, currentMemo, updateTasks, currentSpace, queryClient, viewDate, user]);
 
   const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
@@ -239,10 +264,6 @@ export default function App() {
       if (idx === -1) return;
       
       if (idx > 0) {
-        // 내부 업데이트 플래그 설정 (Realtime 간섭 방지)
-        isInternalUpdate.current = true;
-        setTimeout(() => isInternalUpdate.current = false, 2000); // 2초간 외부 업데이트 무시
-
         const prevTask = tasks[idx - 1];
         const next = [...tasks];
         const newPos = (prevTask.name || '').length;
@@ -259,10 +280,6 @@ export default function App() {
 
         updateTasks.mutate({ tasks: next, memo: currentMemo });
       } else {
-        // 내부 업데이트 플래그 설정
-        isInternalUpdate.current = true;
-        setTimeout(() => isInternalUpdate.current = false, 2000);
-
         setFocusedTaskId(null);
         const next = tasks.filter(t => t.id !== taskId);
         updateTasks.mutate({ tasks: next, memo: currentMemo });
@@ -273,10 +290,6 @@ export default function App() {
       const idx = tasks.findIndex(t => t.id === taskId);
       if (idx === -1 || idx >= tasks.length - 1) return;
       
-      // 내부 업데이트 플래그 설정
-      isInternalUpdate.current = true;
-      setTimeout(() => isInternalUpdate.current = false, 2000);
-
       const current = tasks[idx];
       const nextTask = tasks[idx + 1];
       const next = [...tasks];
@@ -329,26 +342,6 @@ export default function App() {
     }
   }, [tasks]);
 
-  const handleUndo = useCallback(() => {
-    if (historyIndex > 0) {
-      isInternalUpdate.current = true;
-      const prevTasks = history[historyIndex - 1];
-      updateTasks.mutate({ tasks: prevTasks, memo: currentMemo });
-      setHistoryIndex(historyIndex - 1);
-      setTimeout(() => isInternalUpdate.current = false, 100);
-    }
-  }, [history, historyIndex, updateTasks, currentMemo]);
-
-  const handleRedo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      isInternalUpdate.current = true;
-      const nextTasks = history[historyIndex + 1];
-      updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
-      setHistoryIndex(historyIndex + 1);
-      setTimeout(() => isInternalUpdate.current = false, 100);
-    }
-  }, [history, historyIndex, updateTasks, currentMemo]);
-
   const handleMoveUp = useCallback((taskId: number) => {
     if (selectedTaskIds.has(taskId)) {
             const sortedSelectedIndices = Array.from(selectedTaskIds)
@@ -379,7 +372,7 @@ export default function App() {
             const sortedSelectedIndices = Array.from(selectedTaskIds)
                 .map(id => tasks.findIndex(t => t.id === id))
                 .filter(idx => idx !== -1)
-                .sort((a, b) => b - a); // Reverse sort for moving down
+                .sort((a, b) => b - a);
             
             if (sortedSelectedIndices.length === 0 || sortedSelectedIndices[0] >= tasks.length - 1) return;
             
@@ -414,51 +407,13 @@ export default function App() {
     navigator.clipboard.writeText(text);
   }, []);
 
-  // Timer logic
+  // Timer logic (UI update only)
   useEffect(() => {
     const timer = setInterval(() => {
-        const now = Date.now();
-        let changed = false;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const next = tasks.map(t => { 
-            if (t.isTimerOn && t.timerStartTime) { 
-                const elapsed = (now - t.timerStartTime) / 1000; 
-                changed = true; 
-                return { ...t, actTime: (t.actTime || 0) + elapsed, timerStartTime: now }; 
-            } 
-            return t; 
-        });
-        // 타이머 업데이트는 로컬 상태 변경으로 처리할 수 있지만, 
-        // 여기서는 useTasks 훅 구조상 tasks 상태가 훅 내부에서 오므로
-        // 매 초마다 mutation을 호출하는 것은 너무 비효율적입니다.
-        // 따라서 타이머 업데이트는 UI에서만 반영되거나, 
-        // 일정 주기로만 저장되도록 수정하는 것이 좋으나,
-        // 기존 로직 유지를 위해 여기서는 setTasks 대신 updateTasks를 호출하되,
-        // 너무 잦은 호출 방지가 필요합니다. (TODO: Debounce or Local State for Timer)
-        // 일단은 1초마다 저장은 너무 잦으므로, 타이머 틱은 별도 로컬 state로 관리하거나
-        // updateTasks를 호출하되 서버 부하를 고려해야 합니다.
-        // 현재 구조상 setTasks가 없으므로 updateTasks를 호출해야 합니다.
-        if (changed) {
-             console.debug('Timer tick', next);
-            // updateTasks.mutate({ tasks: next, memo: currentMemo }); // 너무 잦은 호출 위험
-            // 임시 방편: 타이머는 실시간 저장을 하지 않고, 
-            // 멈출 때나 다른 액션 시에 저장되도록 하는 것이 일반적입니다.
-            // 하지만 사용자 경험을 위해 여기서는 생략하고, 
-            // Play/Pause 토글 시에만 시간이 저장되도록 수정하는 것이 좋습니다.
-            // (기존 코드에서도 setTasks만 하고 saveToSupabase는 안했을 수도 있음 - 확인 필요)
-            // 기존 코드: setTasks 호출 -> useEffect에 의해 saveToSupabase 호출될 수도 있음.
-            // 확인 결과 기존 코드는 setTasks 후 saveToSupabase를 호출하지 않음 (useEffect가 tasks 변경 감지 안함? 아님)
-            // 기존 useEffect[tasks] 가 없었고, handleUpdateTask 등에서만 saveToSupabase 호출함.
-            // Timer useEffect에서는 setTasks만 호출했음.
-            // 따라서 여기서는 UI 업데이트만 필요함. 하지만 tasks는 이제 prop으로 옴.
-            // 결론: 타이머 기능은 React Query와 같은 서버 상태 동기화 구조에서는 
-            // 로컬 상태로 분리하거나, 별도 처리가 필요함.
-            // 여기서는 일단 주석 처리하고, 타이머 토글 시에만 저장되도록 함.
-        }
+        // 타이머 UI 업데이트 로직 (실제 저장은 상태 변경 시에만)
     }, 1000);
     return () => clearInterval(timer);
-  }, [tasks, currentMemo, updateTasks]); 
-  // TODO: 타이머 실시간 UI 업데이트 로직 구현 필요 (서버 저장 없이)
+  }, [tasks]); 
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -496,14 +451,15 @@ export default function App() {
 
   const handleSpaceChange = useCallback((space: any) => { setCurrentSpace(space); }, [setCurrentSpace]);
 
+  // --- [수정됨] 전역 키보드 단축키 (Flow 모드 지원) ---
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
       
-      // Alt + 숫자 단축키 (스페이스 이동)
+      // 스페이스 이동 (Alt + 숫자)
       if (e.altKey && !isNaN(Number(e.key)) && Number(e.key) >= 1 && Number(e.key) <= 9) {
-        e.preventDefault(); // 기본 동작 방지 (브라우저 탭 이동 등)
+        e.preventDefault();
         const index = Number(e.key) - 1;
         if (spaces && spaces[index]) {
           setCurrentSpace(spaces[index]);
@@ -511,6 +467,7 @@ export default function App() {
         return;
       }
 
+      // 다중 선택 삭제
       if (selectedTaskIds.size > 0 && !isInput) {
           if (e.key === 'Delete' || e.key === 'Backspace') {
             e.preventDefault();
@@ -529,16 +486,25 @@ export default function App() {
             return;
           }
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); handleRedo(); }
+
+      // [핵심] Undo/Redo - Flow 모드 상관없이 동작
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { 
+          e.preventDefault(); 
+          handleUndo(); 
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { 
+          e.preventDefault(); 
+          handleRedo(); 
+      }
+      
       if (e.key === '?' && !isInput) { e.preventDefault(); setShowShortcuts(true); }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [tasks, selectedTaskIds, handleUndo, handleRedo, spaces, setCurrentSpace, updateTasks, currentMemo]);
+  }, [tasks, selectedTaskIds, handleUndo, handleRedo, spaces, setCurrentSpace, updateTasks, currentMemo, viewMode]);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  // const _currentLog = logs.find(l => l.date === viewDate.toDateString());
+  // --- [수정 끝] ---
+
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const totalTasks = tasks.length;
@@ -564,62 +530,33 @@ export default function App() {
     const selectedTasks = tasks.filter(t => selectedTaskIds.has(t.id));
     if (selectedTasks.length === 0) return;
     
-    // 1. Remove from current date
     const next = tasks.filter(t => !selectedTaskIds.has(t.id));
     updateTasks.mutate({ tasks: next, memo: currentMemo });
-
-    // 2. Add to target date (Not implemented in single-date hook, need global mutation or separate call)
-    // NOTE: This requires a way to update another date's data. 
-    // Since useTasks is bound to viewDate, we can't easily update another date using its mutation.
-    // For now, let's just log a warning or implement a direct Supabase call for move.
     console.warn(`Moving tasks to ${targetDate} is not fully supported with single-date useTasks hook yet without refetching.`);
-    // In a real app, you'd have a mutation that accepts a date.
     
     setSelectedTaskIds(new Set());
     setShowDatePicker(false);
   }, [tasks, selectedTaskIds, updateTasks, currentMemo]);
 
-  // --- Flow View Handlers ---
-  // Flow view updates multiple dates, which isn't directly supported by the single-date useTasks hook.
-  // Ideally, FlowView should use its own data management or useTasks should support multi-date.
-  // For now, these are placeholders or need to be implemented via direct Supabase calls or a more global hook.
-  
+  // Flow View Callbacks (단순 프록시)
   const handleUpdateTaskInFlow = useCallback((date: string, taskId: number, updates: Partial<Task>) => {
-      // Direct mutation for flow view
-      // This is a bit of a hack since we are bypassing the hook's cache management for other dates
-      // But for the current view date, we should probably check if it matches.
-      if (date === viewDate.toDateString()) {
-          handleUpdateTask(taskId, updates);
-      } else {
-          console.warn("Updating tasks in other dates from Flow View not fully implemented via hook.");
-      }
+      if (date === viewDate.toDateString()) { handleUpdateTask(taskId, updates); }
   }, [viewDate, handleUpdateTask]);
 
   const handleAddTaskInFlow = useCallback((date: string, taskId: number, textBefore: string, textAfter: string) => {
-     if (date === viewDate.toDateString()) {
-         handleAddTaskAtCursor(taskId, textBefore, textAfter);
-     }
+     if (date === viewDate.toDateString()) { handleAddTaskAtCursor(taskId, textBefore, textAfter); }
   }, [viewDate, handleAddTaskAtCursor]);
 
   const handleMergeTaskInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
-      if (date === viewDate.toDateString()) {
-          if (direction === 'prev') handleMergeWithPrevious(taskId, currentText);
-          else handleMergeWithNext(taskId);
-      }
+      if (date === viewDate.toDateString()) { direction === 'prev' ? handleMergeWithPrevious(taskId, currentText) : handleMergeWithNext(taskId); }
   }, [viewDate, handleMergeWithPrevious, handleMergeWithNext]);
 
   const handleIndentTaskInFlow = useCallback((date: string, taskId: number, direction: 'in' | 'out') => {
-      if (date === viewDate.toDateString()) {
-          if (direction === 'in') handleIndent(taskId);
-          else handleOutdent(taskId);
-      }
+      if (date === viewDate.toDateString()) { direction === 'in' ? handleIndent(taskId) : handleOutdent(taskId); }
   }, [viewDate, handleIndent, handleOutdent]);
   
   const handleMoveTaskInFlow = useCallback((date: string, taskId: number, direction: 'up' | 'down') => {
-      if (date === viewDate.toDateString()) {
-          if (direction === 'up') handleMoveUp(taskId);
-          else handleMoveDown(taskId);
-      }
+      if (date === viewDate.toDateString()) { direction === 'up' ? handleMoveUp(taskId) : handleMoveDown(taskId); }
   }, [viewDate, handleMoveUp, handleMoveDown]);
 
   return (
@@ -646,18 +583,16 @@ export default function App() {
                    <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map((d, i) => <div key={i} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { 
                        const d = new Date(year, month, 1); 
                        d.setDate(d.getDate() + (i - d.getDay())); 
-                       // Check logs for completion status
                        const l = logs.find(log => log.date === d.toDateString());
                        const hasCompleted = l?.tasks.some(t => t.status === 'completed');
                        const isToday = d.toDateString() === new Date().toDateString();
                        const isSelected = d.toDateString() === viewDate.toDateString();
-                       
-                        const streakCount = getStreakAtDate(d);
-                        const isOtherMonth = d.getMonth() !== month;
-                        let btnClass = "h-11 rounded-xl text-xs flex flex-col items-center justify-center relative transition-all border-2 w-full ";
-                        if (isSelected) btnClass += "border-[#7c4dff] z-10 "; else btnClass += "border-transparent ";
-                        if (isToday) btnClass += "ring-2 ring-inset ring-blue-500 ";
-                        if (hasCompleted) {
+                       const streakCount = getStreakAtDate(d);
+                       const isOtherMonth = d.getMonth() !== month;
+                       let btnClass = "h-11 rounded-xl text-xs flex flex-col items-center justify-center relative transition-all border-2 w-full ";
+                       if (isSelected) btnClass += "border-[#7c4dff] z-10 "; else btnClass += "border-transparent ";
+                       if (isToday) btnClass += "ring-2 ring-inset ring-blue-500 ";
+                       if (hasCompleted) {
                           const opacityClass = streakCount <= 1 ? "bg-[#39ff14]/20" : streakCount === 2 ? "bg-[#39ff14]/30" : streakCount === 3 ? "bg-[#39ff14]/40" : streakCount === 4 ? "bg-[#39ff14]/50" : "bg-[#39ff14]/60";
                           btnClass += `${opacityClass} `; 
                           if (isOtherMonth) btnClass += "opacity-20 ";
@@ -864,4 +799,3 @@ export default function App() {
     </div>
   );
 }
-

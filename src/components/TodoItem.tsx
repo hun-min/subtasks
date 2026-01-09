@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, Star } from 'lucide-react';
+import { Check, Star, Play, Pause, ArrowLeft, ArrowRight, ChevronUp, ChevronDown, Calendar, Copy, BarChart2, Trash2, RotateCcw, RotateCw } from 'lucide-react';
 import { Task, DailyLog } from '../types';
 import { formatTimeShort } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 
-// Check-Head Pattern: High Responsiveness & Cursor Preservation
 export const TodoItem = React.memo(({ 
   task, 
   index,
@@ -52,38 +51,22 @@ export const TodoItem = React.memo(({
   const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  // Local state for maximizing responsiveness (Check-Head Pattern)
-  const [localText, setLocalText] = useState(task.name || task.text || '');
-  const localTextRef = useRef(localText); 
-  const isComposing = useRef(false); // IME status tracking
-  const taskRef = useRef(task);
-  const updateTaskRef = useRef(updateTask);
+  // [Undo 핵심] 부모 데이터(task.text)가 바뀌면 로컬 상태도 강제로 동기화
+  const taskText = task.name || task.text || '';
+  const [localText, setLocalText] = useState(taskText);
+  const isComposing = useRef(false);
 
+  // [Undo 핵심] 외부에서 데이터가 변경되면(Ctrl+Z 등) 로컬 텍스트도 업데이트
   useEffect(() => {
-    localTextRef.current = localText;
-    taskRef.current = task;
-    updateTaskRef.current = updateTask;
-  }, [localText, task, updateTask]);
-
-  // Safe-guard: Save on unmount if there are unsaved changes
-  useEffect(() => {
-    return () => {
-      const currentLocal = localTextRef.current;
-      const currentTask = taskRef.current;
-      // Compare current local text with the last known task text
-      if (currentLocal !== (currentTask.name || currentTask.text || '')) {
-        updateTaskRef.current(currentTask.id, { name: currentLocal, text: currentLocal });
-      }
-    };
-  }, []); // Empty dependency ensuring this runs on unmount
-
-  // Sync prop changes to local state only when NOT focused (to avoid typing interference)
-  useEffect(() => {
-    const taskText = task.name || task.text || '';
-    if (!isFocused && taskText !== localText) {
-      setLocalText(taskText);
+    // 내가 포커스 잡고 입력 중이 아닐 때만 갱신 (입력 충돌 방지)
+    if (document.activeElement !== textareaRef.current) {
+        setLocalText(taskText);
+    } else if (taskText !== localText && !isComposing.current) {
+        // 포커스가 있어도 내용이 외부에서 확 바뀌었으면(Undo) 반영해야 함
+        // 단, 내가 타이핑 중일 땐 제외
+        setLocalText(taskText);
     }
-  }, [task.name, task.text, isFocused]); // Removed localText from dep to allow manual set
+  }, [taskText]); 
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -91,14 +74,12 @@ export const TodoItem = React.memo(({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Focus Handling & Cursor Preservation
+  // 커서 위치 복원 및 포커스 유지 로직
   useLayoutEffect(() => {
     if (isFocused && textareaRef.current) {
-       // Prevent unnecessary focus calls if already focused
        if (document.activeElement !== textareaRef.current) {
           textareaRef.current.focus({ preventScroll: true });
           
-          // Restore Cursor Position Logic
           const restorePos = (window as any).__restoreCursorPos;
           if (typeof restorePos === 'number') {
               textareaRef.current.setSelectionRange(restorePos, restorePos);
@@ -106,32 +87,28 @@ export const TodoItem = React.memo(({
           } else if ((window as any).__cursorPosition !== undefined) {
               const pos = (window as any).__cursorPosition;
               const len = textareaRef.current.value.length;
+              let newPos = 0;
+
+              if (pos === 'start') newPos = 0;
+              else if (pos === 'end') newPos = len;
+              else if (typeof pos === 'number') newPos = Math.min(pos, len);
               
-              if (pos === 'start') {
-                  textareaRef.current.setSelectionRange(0, 0);
-              } else if (pos === 'end') {
-                  textareaRef.current.setSelectionRange(len, len);
-              } else if (typeof pos === 'number') {
-                  // Math.min logic for vertical navigation preservation
-                  const newPos = Math.min(pos, len);
-                  textareaRef.current.setSelectionRange(newPos, newPos);
-              }
+              textareaRef.current.setSelectionRange(newPos, newPos);
               delete (window as any).__cursorPosition;
           }
        }
     }
-  }, [isFocused]); // Depend only on focus state
+  }, [isFocused]);
 
-  // Autocomplete Suggestions
   const [suggestions, setSuggestions] = useState<Task[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
+  // 자동완성 로직
   useEffect(() => {
     if (!isFocused || !localText.startsWith('/')) { setSuggestions([]); return; }
     const query = localText.slice(1).toLowerCase();
     const matches: Task[] = [];
     const seen = new Set();
-    // Optimization: Limit search depth or cache logs if too heavy
     [...logs].reverse().forEach(log => log.tasks.forEach(t => { 
       const tName = t.name || t.text || '';
       if (tName.toLowerCase().includes(query) && !seen.has(tName)) { 
@@ -147,14 +124,19 @@ export const TodoItem = React.memo(({
     if (isComposing.current) return;
     const taskName = textareaRef.current ? textareaRef.current.value : localText;
 
-    // Ctrl/Cmd + D: Toggle Star (keyboard shortcut)
+    // [중요] Ctrl+Z는 여기서 막지 말고 부모(App)로 이벤트 버블링 시켜야 함
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        return; // 그냥 통과시켜서 App.tsx의 handleGlobalKeyDown이 잡게 함
+    }
+
+    // Ctrl + D
     if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
       e.preventDefault();
       updateTask(task.id, { is_starred: !task.is_starred });
       return;
     }
 
-    // Suggestions Navigation
+    // Suggestions
     if (suggestions.length > 0) {
         if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedSuggestionIndex(prev => Math.min(prev + 1, suggestions.length - 1)); return; }
         if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedSuggestionIndex(prev => Math.max(prev - 1, -1)); return; }
@@ -169,12 +151,13 @@ export const TodoItem = React.memo(({
         }
     }
 
-    // Vertical Navigation with Cursor Preservation
+    // [커서 이동] Notion 스타일
     if (e.key === 'ArrowUp') {
         if (!e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
             const currentVal = textareaRef.current?.value || '';
             const startPos = textareaRef.current?.selectionStart ?? 0;
             const firstLineBreak = currentVal.indexOf('\n');
+            // 첫 줄이거나, 첫 줄 내에 커서가 있을 때만 위로 이동
             if (firstLineBreak === -1 || startPos <= firstLineBreak) {
                  e.preventDefault();
                  const currentColumnIndex = startPos;
@@ -190,8 +173,10 @@ export const TodoItem = React.memo(({
             const currentVal = textareaRef.current?.value || '';
             const startPos = textareaRef.current?.selectionStart ?? 0;
             const lastLineBreak = currentVal.lastIndexOf('\n');
+            // 마지막 줄이거나, 마지막 줄 내에 커서가 있을 때만 아래로 이동
             if (lastLineBreak === -1 || startPos > lastLineBreak) {
                 e.preventDefault();
+                // 마지막 줄에서의 가로 위치 계산
                 const currentColumnIndex = lastLineBreak === -1 ? startPos : startPos - (lastLineBreak + 1);
                 (window as any).__cursorPosition = currentColumnIndex;
                 onFocusNext(task.id, currentColumnIndex);
@@ -211,7 +196,7 @@ export const TodoItem = React.memo(({
       return; 
     }
 
-    // Task Creation / Splitting
+    // 엔터 (Task 나누기)
     if (e.key === 'Enter') {
       if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
         if (isComposing.current) return;
@@ -221,7 +206,7 @@ export const TodoItem = React.memo(({
         const textBefore = taskName.substring(0, cursor);
         const textAfter = taskName.substring(cursor);
         
-        // Auto-Numbering / Bullet Logic
+        // 자동 번호 매기기 로직
         let newTextAfter = textAfter;
         let prefixLen = 0;
         const numberMatch = textBefore.match(/^(\d+)\.\s/);
@@ -238,13 +223,10 @@ export const TodoItem = React.memo(({
             prefixLen = prefix.length;
         }
 
-        // Set restoration point for new task
         (window as any).__restoreCursorPos = prefixLen;
 
-        // Immediate Local Update for Responsiveness
+        // [잔상 제거] 즉시 로컬 반영
         setLocalText(textBefore);
-        
-        // Propagate to Parent
         onAddTaskAtCursor(task.id, textBefore, newTextAfter);
       }
       return;
@@ -262,33 +244,23 @@ export const TodoItem = React.memo(({
       return;
     }
 
-    // Completion Toggle
+    // Completion
     if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
       const newStatus = task.status === 'completed' ? 'pending' : 'completed';
       updateTask(task.id, { status: newStatus, isTimerOn: false });
       return;
     }
-
-    // Star Toggle
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
-      e.preventDefault();
-      updateTask(task.id, { is_starred: !task.is_starred });
-      return;
-    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const newVal = e.target.value;
-      setLocalText(newVal);
-      // 입력 중에는 원본 데이터 업데이트를 수행하지 않음. onBlur에서만 커밋.
-};
+      setLocalText(e.target.value);
+  };
 
   const handleBlur = () => {
       isComposing.current = false;
-      setFocusedTaskId(null);
-      // Force sync on blur
-      if ((task.name || task.text || '') !== localText) {
+      // 내용이 변했을 때만 서버 저장
+      if (taskText !== localText) {
           updateTask(task.id, { name: localText, text: localText });
       }
   };
@@ -337,7 +309,7 @@ export const TodoItem = React.memo(({
             onChange={handleChange} 
             onKeyDown={handleKeyDown} 
             onCompositionStart={() => { isComposing.current = true; }}
-            onCompositionEnd={() => { isComposing.current = false; handleChange({ target: { value: textareaRef.current?.value || '' } } as any); }}
+            onCompositionEnd={() => { isComposing.current = false; }}
             className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} 
             placeholder="" 
         />
@@ -351,10 +323,6 @@ export const TodoItem = React.memo(({
             }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.name || s.text || ''}</button>)}
           </div>
         )}
-      </div>
-      
-      <div className="flex items-center gap-1.5 pt-1.5">
-        {task.actTime !== undefined && task.actTime > 0 && <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap">{formatTimeShort(task.actTime)}</span>}
       </div>
     </div>
   );

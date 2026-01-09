@@ -163,7 +163,6 @@ export const TodoItem = React.memo(({
                 e.preventDefault();
                 const selectedName = suggestions[selectedSuggestionIndex].name || suggestions[selectedSuggestionIndex].text || '';
                 setLocalText(selectedName);
-                updateTask(task.id, { name: selectedName, text: selectedName });
                 setSuggestions([]);
                 return;
             }
@@ -176,12 +175,10 @@ export const TodoItem = React.memo(({
             const currentVal = textareaRef.current?.value || '';
             const startPos = textareaRef.current?.selectionStart ?? 0;
             const firstLineBreak = currentVal.indexOf('\n');
-            
-            // If at first line, move to previous task
             if (firstLineBreak === -1 || startPos <= firstLineBreak) {
                  e.preventDefault();
-                 // Calculate visual column index (simplified as char index for now)
                  const currentColumnIndex = startPos;
+                 (window as any).__cursorPosition = currentColumnIndex;
                  onFocusPrev(task.id, currentColumnIndex);
                  return;
             }
@@ -193,12 +190,10 @@ export const TodoItem = React.memo(({
             const currentVal = textareaRef.current?.value || '';
             const startPos = textareaRef.current?.selectionStart ?? 0;
             const lastLineBreak = currentVal.lastIndexOf('\n');
-            
-            // If at last line, move to next task
             if (lastLineBreak === -1 || startPos > lastLineBreak) {
                 e.preventDefault();
-                // Calculate column index relative to last line
                 const currentColumnIndex = lastLineBreak === -1 ? startPos : startPos - (lastLineBreak + 1);
+                (window as any).__cursorPosition = currentColumnIndex;
                 onFocusNext(task.id, currentColumnIndex);
                 return;
             }
@@ -284,19 +279,10 @@ export const TodoItem = React.memo(({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      // Always update local state immediately
       const newVal = e.target.value;
       setLocalText(newVal);
-
-      // If composing (IME), DO NOT save to DB yet
-      if (isComposing.current) return;
-
-      // Debounced Save handled by parent's updateTask or hook, 
-      // but we call it here to trigger the flow.
-      // NOTE: We rely on the parent's debounce or useTodoSync's debounce.
-      // But passing every keystroke up is fine for local state sync.
-      updateTask(task.id, { name: newVal, text: newVal });
-  };
+      // 입력 중에는 원본 데이터 업데이트를 수행하지 않음. onBlur에서만 커밋.
+};
 
   const handleBlur = () => {
       isComposing.current = false;
@@ -361,7 +347,6 @@ export const TodoItem = React.memo(({
             {suggestions.map((s, idx) => <button key={idx} onClick={() => { 
                 const newName = s.name || s.text || '';
                 setLocalText(newName);
-                updateTask(task.id, { name: newName, text: newName }); 
                 setSuggestions([]); 
             }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.name || s.text || ''}</button>)}
           </div>

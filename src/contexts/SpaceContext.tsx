@@ -35,7 +35,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   // [절대 방어선 2] 현재 선택된 공간이 없으면 목록의 첫 번째 강제 선택
   const [currentSpace, setCurrentSpace] = useState<Space | null>(() => {
     try {
-      const savedId = localStorage.getItem('lastSpaceId'); // Changed from 'currentSpaceId' to 'lastSpaceId'
+      const savedId = localStorage.getItem('currentSpaceId');
       const found = savedId ? spaces.find(s => s.id === parseInt(savedId)) : null;
       return found || spaces[0];
     } catch {
@@ -121,7 +121,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
         if (!prev || !prev.id || prev.id < 0) return spacesToUse[0];
         const match = spacesToUse.find(s => s.id === prev.id);
         const next = match || spacesToUse[0];
-        if (next?.id) localStorage.setItem('lastSpaceId', next.id.toString());
+        if (next?.id) localStorage.setItem('currentSpaceId', next.id.toString());
         return next;
       });
     };
@@ -170,7 +170,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
   const handleSetCurrentSpace = (space: Space) => {
     setCurrentSpace(space);
-    if (space.id) localStorage.setItem('lastSpaceId', space.id.toString());
+    if (space.id) localStorage.setItem('currentSpaceId', space.id.toString());
   };
 
   const updateCache = (newSpaces: Space[]) => {
@@ -187,7 +187,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
           const nextSpaces = [...spaces, realSpace];
           updateCache(nextSpaces);
           setCurrentSpace(realSpace);
-          localStorage.setItem('lastSpaceId', realSpace.id.toString());
+          localStorage.setItem('currentSpaceId', realSpace.id.toString());
         }
       } else {
         const id = await db.spaces.add({ title, createdAt: new Date() }) as number;
@@ -195,7 +195,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
         const nextSpaces = [...spaces, realSpace];
         updateCache(nextSpaces);
         setCurrentSpace(realSpace);
-        localStorage.setItem('lastSpaceId', id.toString());
+        localStorage.setItem('currentSpaceId', id.toString());
       }
     } catch (e) { console.warn("저장 실패", e); }
   };
@@ -224,7 +224,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     if (currentSpace?.id === id) {
       const next = nextSpaces[0];
       setCurrentSpace(next);
-      if (next.id) localStorage.setItem('lastSpaceId', next.id.toString());
+      if (next.id) localStorage.setItem('currentSpaceId', next.id.toString());
     }
 
     try {

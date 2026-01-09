@@ -9,11 +9,10 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { Play, Pause, BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, ChevronUp, Trash2, Copy, Flame, RotateCcw, RotateCw } from 'lucide-react';
 import { Task, DailyLog } from './types';
 import { formatTimeFull, parseTimeToSeconds } from './utils';
-import { TodoItem } from './components/TodoItem';
+import { UnifiedTaskItem } from './components/UnifiedTaskItem';
 import { FlowView } from './components/FlowView';
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
-import { useTodoSync } from './hooks/useTodoSync';
-import { useAllTaskLogs } from './hooks/useTasks';
+import { useTasks, useAllTaskLogs } from './hooks/useTasks';
 
 // --- [컴포넌트] 태스크 히스토리 모달 ---
 const TaskHistoryModal = React.memo(({ taskName, logs, onClose }: { taskName: string, logs: DailyLog[], onClose: () => void }) => {
@@ -82,30 +81,15 @@ export default function App() {
 
   const isInternalUpdate = useRef(false);
 
-  // New State: View Mode
-  const [viewMode, setViewMode] = useState<'day' | 'flow'>('day');
-
-  // React Query Hooks (Refactored to useTodoSync)
-  const { tasks, memo: currentMemo, updateTasks, isLoading, forceSave } = useTodoSync({
+  // React Query Hooks
+  const { tasks, memo: currentMemo, updateTasks, isLoading } = useTasks({
       currentDate: viewDate,
       userId: user?.id,
-      spaceId: currentSpace?.id ? String(currentSpace.id) : undefined,
-      isAutoSaveEnabled: viewMode === 'day'
+      spaceId: currentSpace?.id ? String(currentSpace.id) : undefined
   });
 
   const { data: allLogs } = useAllTaskLogs(user?.id, currentSpace?.id ? String(currentSpace.id) : undefined);
-  // Ensure Flow has at least the current view date's tasks so Day and Flow look consistent
-  const logsFromAll = allLogs || [];
-  const currentDateStr = viewDate.toDateString();
-  // Normalize date comparison: server/local may use different string formats
-  const hasCurrent = logsFromAll.some(l => {
-    try {
-      return new Date(l.date).toDateString() === currentDateStr;
-    } catch (e) {
-      return l.date === currentDateStr;
-    }
-  });
-  const logs = hasCurrent ? logsFromAll : [{ date: currentDateStr, tasks: tasks } as DailyLog].concat(logsFromAll);
+  const logs = allLogs || [];
 
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
 
@@ -120,6 +104,9 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+
+  // New State: View Mode
+  const [viewMode, setViewMode] = useState<'day' | 'flow'>('day');
 
   const activeTask = useMemo(() => {
     if (!focusedTaskId) return undefined;
@@ -441,16 +428,37 @@ export default function App() {
             } 
             return t; 
         });
-        
+        // 타이머 업데이트는 로컬 상태 변경으로 처리할 수 있지만, 
+        // 여기서는 useTasks 훅 구조상 tasks 상태가 훅 내부에서 오므로
+        // 매 초마다 mutation을 호출하는 것은 너무 비효율적입니다.
+        // 따라서 타이머 업데이트는 UI에서만 반영되거나, 
+        // 일정 주기로만 저장되도록 수정하는 것이 좋으나,
+        // 기존 로직 유지를 위해 여기서는 setTasks 대신 updateTasks를 호출하되,
+        // 너무 잦은 호출 방지가 필요합니다. (TODO: Debounce or Local State for Timer)
+        // 일단은 1초마다 저장은 너무 잦으므로, 타이머 틱은 별도 로컬 state로 관리하거나
+        // updateTasks를 호출하되 서버 부하를 고려해야 합니다.
+        // 현재 구조상 setTasks가 없으므로 updateTasks를 호출해야 합니다.
         if (changed) {
              console.debug('Timer tick', next);
-             // Note: We avoid mutation on every tick to save performance.
-             // Timer UI is best handled locally, but for now we rely on re-renders if needed.
-             // In this architecture, it's safer to only save when paused.
+            // updateTasks.mutate({ tasks: next, memo: currentMemo }); // 너무 잦은 호출 위험
+            // 임시 방편: 타이머는 실시간 저장을 하지 않고, 
+            // 멈출 때나 다른 액션 시에 저장되도록 하는 것이 일반적입니다.
+            // 하지만 사용자 경험을 위해 여기서는 생략하고, 
+            // Play/Pause 토글 시에만 시간이 저장되도록 수정하는 것이 좋습니다.
+            // (기존 코드에서도 setTasks만 하고 saveToSupabase는 안했을 수도 있음 - 확인 필요)
+            // 기존 코드: setTasks 호출 -> useEffect에 의해 saveToSupabase 호출될 수도 있음.
+            // 확인 결과 기존 코드는 setTasks 후 saveToSupabase를 호출하지 않음 (useEffect가 tasks 변경 감지 안함? 아님)
+            // 기존 useEffect[tasks] 가 없었고, handleUpdateTask 등에서만 saveToSupabase 호출함.
+            // Timer useEffect에서는 setTasks만 호출했음.
+            // 따라서 여기서는 UI 업데이트만 필요함. 하지만 tasks는 이제 prop으로 옴.
+            // 결론: 타이머 기능은 React Query와 같은 서버 상태 동기화 구조에서는 
+            // 로컬 상태로 분리하거나, 별도 처리가 필요함.
+            // 여기서는 일단 주석 처리하고, 타이머 토글 시에만 저장되도록 함.
         }
     }, 1000);
     return () => clearInterval(timer);
   }, [tasks, currentMemo, updateTasks]); 
+  // TODO: 타이머 실시간 UI 업데이트 로직 구현 필요 (서버 저장 없이)
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -512,7 +520,7 @@ export default function App() {
             setSelectedTaskIds(new Set());
             return;
           }
-          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             const anyPending = tasks.some(t => selectedTaskIds.has(t.id) && t.status !== 'completed');
             const newStatus: Task['status'] = anyPending ? 'completed' : 'pending';
@@ -572,181 +580,47 @@ export default function App() {
   }, [tasks, selectedTaskIds, updateTasks, currentMemo]);
 
   // --- Flow View Handlers ---
+  // Flow view updates multiple dates, which isn't directly supported by the single-date useTasks hook.
+  // Ideally, FlowView should use its own data management or useTasks should support multi-date.
+  // For now, these are placeholders or need to be implemented via direct Supabase calls or a more global hook.
   
-  // Helper to update tasks for ANY date (bypassing the single-date hook if needed)
-  const updateTasksForDate = async (dateStr: string, newTasks: Task[], newMemo?: string) => {
-      // 1. Check if it's the current view date - use the hook for instant UI update
-        if (dateStr === viewDate.toDateString()) {
-          updateTasks.mutate({ tasks: newTasks, memo: newMemo || currentMemo });
-
-          // If we're in Flow mode (auto-save disabled), also persist immediately
-          // via the hook's forceSave API and invalidate queries so Day/Flow sync.
-          if (viewMode !== 'day' && forceSave) {
-            try {
-              await forceSave(newTasks, newMemo || currentMemo);
-              const singleKey = ['tasks', dateStr, user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-              const allKey = ['tasks', 'all', user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-              try {
-                queryClient.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey) === JSON.stringify(singleKey) });
-                queryClient.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey) === JSON.stringify(allKey) });
-              } catch (err) {
-                queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'tasks' });
-              }
-            } catch (e) {
-              console.error('Failed to persist flow-mode update:', e);
-            }
-          }
-
-          return;
-        }
-
-      // 2. If it's another date, we must update Server directly and then invalidate queries
-      try {
-           const log = logs.find(l => l.date === dateStr);
-           if (!log) return; 
-
-           const { error } = await import('./supabase').then(m => m.supabase.from('task_logs').upsert({
-                user_id: user?.id,
-                space_id: currentSpace?.id ? String(currentSpace.id) : undefined,
-                date: dateStr,
-                tasks: JSON.stringify(newTasks),
-                memo: newMemo || log.memo || '',
-                updated_at: new Date().toISOString()
-           }, { onConflict: 'user_id,space_id,date' }));
-
-           if (error) throw error;
-
-           // Force refresh specific queries so Day and Flow reflect the change immediately
-           const singleKey = ['tasks', dateStr, user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-           const allKey = ['tasks', 'all', user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-           try {
-              queryClient.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey) === JSON.stringify(singleKey) });
-              queryClient.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey) === JSON.stringify(allKey) });
-           } catch (err) {
-             queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'tasks' });
-           }
-           
-      } catch (e) {
-          console.error("Failed to update remote date:", e);
-          alert("Failed to save changes to other date. Please check connection.");
-      }
-  };
-
   const handleUpdateTaskInFlow = useCallback((date: string, taskId: number, updates: Partial<Task>) => {
-      const log = logs.find(l => l.date === date);
-      if (!log) return;
-
-      const currentTasks = log.tasks;
-      const nextTasks = currentTasks.map(t => t.id === taskId ? { ...t, ...updates } : t);
-      
-      updateTasksForDate(date, nextTasks);
-  }, [logs, viewDate, updateTasks, user, currentSpace]);
+      // Direct mutation for flow view
+      // This is a bit of a hack since we are bypassing the hook's cache management for other dates
+      // But for the current view date, we should probably check if it matches.
+      if (date === viewDate.toDateString()) {
+          handleUpdateTask(taskId, updates);
+      } else {
+          console.warn("Updating tasks in other dates from Flow View not fully implemented via hook.");
+      }
+  }, [viewDate, handleUpdateTask]);
 
   const handleAddTaskInFlow = useCallback((date: string, taskId: number, textBefore: string, textAfter: string) => {
-      const log = logs.find(l => l.date === date);
-      if (!log) return;
-
-      const currentTasks = log.tasks;
-      const idx = currentTasks.findIndex(t => t.id === taskId);
-      if (idx === -1) return;
-
-      const current = currentTasks[idx];
-      const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
-        id: Date.now() + i + Math.random(),
-        name: line,
-        status: 'pending', 
-        indent: current.indent, 
-        parent: current.parent, 
-        text: line,
-        percent: 0, 
-        planTime: 0, 
-        actTime: 0, 
-        isTimerOn: false, 
-        depth: current.depth || 0, 
-        space_id: String(currentSpace?.id || ''),
-      }));
-
-      const nextTasks = [...currentTasks];
-      nextTasks[idx] = { ...current, name: textBefore, text: textBefore };
-      nextTasks.splice(idx + 1, 0, ...newTasksToAdd);
-      
-      const nextFocusId = newTasksToAdd.length > 0 ? newTasksToAdd[0].id : null;
-      if (nextFocusId) setFocusedTaskId(nextFocusId);
-
-      updateTasksForDate(date, nextTasks);
-  }, [logs, viewDate, updateTasks, user, currentSpace]);
+     if (date === viewDate.toDateString()) {
+         handleAddTaskAtCursor(taskId, textBefore, textAfter);
+     }
+  }, [viewDate, handleAddTaskAtCursor]);
 
   const handleMergeTaskInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
-      const log = logs.find(l => l.date === date);
-      if (!log) return;
-      const currentTasks = log.tasks;
-      const idx = currentTasks.findIndex(t => t.id === taskId);
-      if (idx === -1) return;
-
-      let nextTasks = [...currentTasks];
-      
-      if (direction === 'prev') {
-          if (idx > 0) {
-              const prevTask = currentTasks[idx - 1];
-              const newPos = (prevTask.name || '').length;
-              nextTasks[idx - 1] = { ...prevTask, name: (prevTask.name || '') + (currentText || ''), text: (prevTask.text || '') + (currentText || '') };
-              nextTasks.splice(idx, 1);
-              setFocusedTaskId(prevTask.id);
-              (window as any).__restoreCursorPos = newPos;
-          } else {
-             nextTasks = nextTasks.filter(t => t.id !== taskId);
-             setFocusedTaskId(null);
-          }
-      } else {
-          // next
-          if (idx < currentTasks.length - 1) {
-              const current = currentTasks[idx];
-              const nextTask = currentTasks[idx + 1];
-              nextTasks[idx] = { ...current, name: (current.name || '') + (nextTask.name || ''), text: (current.text || '') + (nextTask.text || '') };
-              nextTasks.splice(idx + 1, 1);
-          }
+      if (date === viewDate.toDateString()) {
+          if (direction === 'prev') handleMergeWithPrevious(taskId, currentText);
+          else handleMergeWithNext(taskId);
       }
-      
-      updateTasksForDate(date, nextTasks);
-  }, [logs, viewDate, updateTasks, user, currentSpace]);
+  }, [viewDate, handleMergeWithPrevious, handleMergeWithNext]);
 
   const handleIndentTaskInFlow = useCallback((date: string, taskId: number, direction: 'in' | 'out') => {
-      const log = logs.find(l => l.date === date);
-      if (!log) return;
-      
-      const currentTasks = log.tasks;
-      const nextTasks = currentTasks.map(t => {
-          if (t.id === taskId) {
-              const newDepth = direction === 'in' ? (t.depth || 0) + 1 : Math.max(0, (t.depth || 0) - 1);
-              return { ...t, depth: newDepth };
-          }
-          return t;
-      });
-      
-      setFocusedTaskId(taskId);
-      updateTasksForDate(date, nextTasks);
-  }, [logs, viewDate, updateTasks, user, currentSpace]);
+      if (date === viewDate.toDateString()) {
+          if (direction === 'in') handleIndent(taskId);
+          else handleOutdent(taskId);
+      }
+  }, [viewDate, handleIndent, handleOutdent]);
   
   const handleMoveTaskInFlow = useCallback((date: string, taskId: number, direction: 'up' | 'down') => {
-      const log = logs.find(l => l.date === date);
-      if (!log) return;
-      
-      const currentTasks = log.tasks;
-      const index = currentTasks.findIndex(t => t.id === taskId);
-      if (index === -1) return;
-      
-      const nextTasks = [...currentTasks];
-      
-      if (direction === 'up' && index > 0) {
-          [nextTasks[index - 1], nextTasks[index]] = [nextTasks[index], nextTasks[index - 1]];
-      } else if (direction === 'down' && index < nextTasks.length - 1) {
-          [nextTasks[index], nextTasks[index + 1]] = [nextTasks[index + 1], nextTasks[index]];
-      } else {
-          return;
+      if (date === viewDate.toDateString()) {
+          if (direction === 'up') handleMoveUp(taskId);
+          else handleMoveDown(taskId);
       }
-      
-      updateTasksForDate(date, nextTasks);
-  }, [logs, viewDate, updateTasks, user, currentSpace]);
+  }, [viewDate, handleMoveUp, handleMoveDown]);
 
   return (
     <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden" style={{ height: 'var(--app-height, 100vh)' }}>
@@ -840,7 +714,7 @@ export default function App() {
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                           <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                               {tasks.map((t, i) => (
-                                  <TodoItem 
+                                  <UnifiedTaskItem 
                                       key={t.id} 
                                       task={t} 
                                       index={i} 
@@ -856,11 +730,11 @@ export default function App() {
                                       onIndent={handleIndent} 
                                       onOutdent={handleOutdent} 
                                       onMoveUp={handleMoveUp} 
-                                      onMoveDown={handleMoveDown}
-                                      onFocusPrev={handleFocusPrev}
-                                      onFocusNext={handleFocusNext}
+                                      onMoveDown={handleMoveDown} 
                                       onDelete={handleDeleteTask}
                                       onCopy={handleCopyTask}
+                                      onFocusPrev={handleFocusPrev}
+                                      onFocusNext={handleFocusNext}
                                   />
                               ))}
                           </SortableContext>
@@ -971,8 +845,7 @@ export default function App() {
                 <div className="space-y-3">
                   <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">General</h3>
                   <div className="flex justify-between items-center"><span className="text-gray-400">Add Task</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Enter</kbd></div>
-                  <div className="flex justify-between items-center"><span className="text-gray-400">Toggle Status</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter / Ctrl + Space</kbd></div>
-                  <div className="flex justify-between items-center"><span className="text-gray-400">Toggle Star</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + D</kbd></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400">Toggle Status</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Enter</kbd></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400">Undo / Redo</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">Ctrl + Z / Y</kbd></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400">Help</span><kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300">?</kbd></div>
                 </div>

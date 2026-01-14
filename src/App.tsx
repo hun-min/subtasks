@@ -271,9 +271,8 @@ export default function App() {
       if (idx === -1) return;
       
       if (idx > 0) {
-        // 내부 업데이트 플래그 설정 (Realtime 간섭 방지)
         isInternalUpdate.current = true;
-        setTimeout(() => isInternalUpdate.current = false, 2000); // 2초간 외부 업데이트 무시
+        setTimeout(() => isInternalUpdate.current = false, 2000);
 
         const prevTask = tasks[idx - 1];
         const next = [...tasks];
@@ -289,23 +288,34 @@ export default function App() {
         setFocusedTaskId(prevTask.id);
         (window as any).__restoreCursorPos = newPos;
 
+        const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+        queryClient.setQueryData(queryKey, (old: any) => {
+            if (!old) return { tasks: next, memo: currentMemo };
+            return { ...old, tasks: next, memo: currentMemo };
+        });
+
         updateTasks.mutate({ tasks: next, memo: currentMemo });
       } else {
-        // 내부 업데이트 플래그 설정
         isInternalUpdate.current = true;
         setTimeout(() => isInternalUpdate.current = false, 2000);
 
         setFocusedTaskId(null);
         const next = tasks.filter(t => t.id !== taskId);
+        
+        const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+        queryClient.setQueryData(queryKey, (old: any) => {
+            if (!old) return { tasks: next, memo: currentMemo };
+            return { ...old, tasks: next, memo: currentMemo };
+        });
+        
         updateTasks.mutate({ tasks: next, memo: currentMemo });
       }
-  }, [tasks, currentMemo, updateTasks]);
+  }, [tasks, currentMemo, updateTasks, queryClient, viewDate, user, currentSpace]);
 
-  const handleMergeWithNext = useCallback((taskId: number) => {
+  const handleMergeWithNext = useCallback((taskId: number, currentText: string) => {
       const idx = tasks.findIndex(t => t.id === taskId);
       if (idx === -1 || idx >= tasks.length - 1) return;
       
-      // 내부 업데이트 플래그 설정
       isInternalUpdate.current = true;
       setTimeout(() => isInternalUpdate.current = false, 2000);
 
@@ -313,11 +323,17 @@ export default function App() {
       const nextTask = tasks[idx + 1];
       const next = [...tasks];
       
-      next[idx] = { ...current, name: (current.name || '') + (nextTask.name || ''), text: (current.text || '') + (nextTask.text || '') };
+      next[idx] = { ...current, name: (currentText || '') + (nextTask.name || ''), text: (currentText || '') + (nextTask.text || '') };
       next.splice(idx + 1, 1);
       
+      const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+      queryClient.setQueryData(queryKey, (old: any) => {
+          if (!old) return { tasks: next, memo: currentMemo };
+          return { ...old, tasks: next, memo: currentMemo };
+      });
+      
       updateTasks.mutate({ tasks: next, memo: currentMemo });
-  }, [tasks, currentMemo, updateTasks]);
+  }, [tasks, currentMemo, updateTasks, queryClient, viewDate, user, currentSpace]);
 
   const handleIndent = useCallback((taskId: number) => {
     if (selectedTaskIds.has(taskId)) {
@@ -636,7 +652,7 @@ export default function App() {
   const handleMergeTaskInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
       if (date === viewDate.toDateString()) {
           if (direction === 'prev') handleMergeWithPrevious(taskId, currentText);
-          else handleMergeWithNext(taskId);
+          else handleMergeWithNext(taskId, currentText);
       }
   }, [viewDate, handleMergeWithPrevious, handleMergeWithNext]);
 

@@ -57,6 +57,30 @@ export const UnifiedTaskItem = React.memo(({
   const [localText, setLocalText] = useState(task.name || task.text || '');
   const localTextRef = useRef(localText); // To access latest text in callbacks without re-creating them
   const updateTimeoutRef = useRef<any>(null);
+  
+  // Timer logic
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    let intervalId: any;
+    if (task.isTimerOn && task.timerStartTime) {
+      const updateTimer = () => {
+        const now = Date.now();
+        const start = task.timerStartTime || now;
+        const seconds = Math.floor((now - start) / 1000);
+        setElapsedSeconds(seconds);
+      };
+      
+      updateTimer();
+      intervalId = setInterval(updateTimer, 1000);
+    } else {
+      setElapsedSeconds(0);
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [task.isTimerOn, task.timerStartTime]);
 
   useEffect(() => {
     localTextRef.current = localText;
@@ -459,7 +483,11 @@ export const UnifiedTaskItem = React.memo(({
         )}
       </div>
       <div className="flex items-center gap-1.5 pt-1.5">
-        {task.actTime !== undefined && task.actTime > 0 && <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap">{formatTimeShort(task.actTime)}</span>}
+        {((task.actTime || 0) + elapsedSeconds) > 0 && (
+          <span className={`text-[9px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500'}`}>
+            {formatTimeShort((task.actTime || 0) + elapsedSeconds)}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,13 @@
 # Deployment Log
 
 ## 2026-01-14
+- **Fix**: 플로팅 바 타이머 연동 및 시간 표시 복구
+    - `App.tsx`: 하단 플로팅 바의 타이머가 실제 흐르는 시간을 반영하도록 수정 (타이머 틱 로직 추가).
+    - `UnifiedTaskItem.tsx`: 할 일 우측의 시간 표시 UI가 타이머 작동 중일 때 항상 보이도록 조건 완화 및 스타일 개선.
+- **Fix**: 타이머 UI 실시간 갱신 문제 해결
+    - `UnifiedTaskItem.tsx`: `setInterval`을 이용한 실시간 타이머 갱신 로직 복구.
+    - `task.actTime`과 `elapsedSeconds`를 합산하여 실제 흐르는 시간을 보여주도록 수정.
+    - 타이머 작동 시 보라색 텍스트 및 볼드 처리로 시각적 피드백 강화.
 - **Fix**: 타이머 기능 단축키 복구
     - `UnifiedTaskItem.tsx`: `Shift + Enter` 키 입력 시 타이머를 토글하는 기능 추가.
     - 기존 `Shift + Space`와 함께 사용 가능.

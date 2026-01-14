@@ -119,6 +119,25 @@ export default function App() {
     return undefined;
   }, [tasks, logs, focusedTaskId]);
 
+  // 플로팅 바 타이머 UI 업데이트를 위한 로컬 상태
+  const [activeTimerElapsed, setActiveTimerElapsed] = useState(0);
+
+  useEffect(() => {
+    let interval: any;
+    if (activeTask?.isTimerOn && activeTask.timerStartTime) {
+        const update = () => {
+             const now = Date.now();
+             const seconds = Math.floor((now - activeTask.timerStartTime!) / 1000);
+             setActiveTimerElapsed(seconds);
+        };
+        update();
+        interval = setInterval(update, 1000);
+    } else {
+        setActiveTimerElapsed(0);
+    }
+    return () => clearInterval(interval);
+  }, [activeTask?.isTimerOn, activeTask?.timerStartTime, activeTask?.id]);
+
   useEffect(() => {
     // 1. dvh 지원 여부 확인 및 폴백 설정
     const setAppHeight = () => {
@@ -800,7 +819,7 @@ export default function App() {
                       <>
                         <div className="flex items-center gap-2 flex-shrink-0 pl-1">
                             <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleUpdateTask(activeTask.id, { isTimerOn: !activeTask.isTimerOn, timerStartTime: !activeTask.isTimerOn ? Date.now() : undefined })} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
-                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull(activeTask.actTime || 0)} onChange={(e) => handleUpdateTask(activeTask.id, { actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div>
+                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed)} onChange={(e) => handleUpdateTask(activeTask.id, { actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 flex-shrink-0">

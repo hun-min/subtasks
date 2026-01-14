@@ -483,8 +483,8 @@ export const UnifiedTaskItem = React.memo(({
         )}
       </div>
       <div className="flex items-center gap-1.5 pt-1.5">
-        {((task.actTime || 0) + elapsedSeconds) > 0 && (
-          <span className={`text-[9px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500'}`}>
+        {((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) && (
+          <span className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}>
             {formatTimeShort((task.actTime || 0) + elapsedSeconds)}
           </span>
         )}

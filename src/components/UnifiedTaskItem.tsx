@@ -322,11 +322,18 @@ export const UnifiedTaskItem = React.memo(({
     
     // Alt or Ctrl + Arrows for reordering logic is now handled in the main arrow key blocks above
     
+    // Ctrl + D: Toggle Star
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      updateTask(task.id, { is_starred: !task.is_starred });
+      return;
+    }
+
     // Ctrl + Space: Toggle Completion
-    if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) { 
-      e.preventDefault(); 
-      const newStatus = task.status === 'completed' ? 'pending' : 'completed'; 
-      updateTask(task.id, { status: newStatus, isTimerOn: false }); 
+    if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) {
+      e.preventDefault();
+      const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+      updateTask(task.id, { status: newStatus, isTimerOn: false });
     }
     
     // Shift + Space: Toggle Timer
@@ -441,15 +448,12 @@ export const UnifiedTaskItem = React.memo(({
         </div>
       )}
       <div className="relative flex items-center justify-start mt-1 flex-shrink-0">
-        <button 
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            updateTask(task.id, { is_starred: !task.is_starred }); 
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            updateTask(task.id, { is_starred: !task.is_starred });
           }}
-          disabled={!task.is_starred && !isFocused}
-          className={`absolute right-full mr-1.5 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star ${
-             !task.is_starred && !isFocused ? 'cursor-default' : 'cursor-pointer'
-          }`}
+          className={`absolute right-full mr-1.5 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star cursor-pointer`}
         >
           <Star 
             size={13} 
@@ -496,7 +500,27 @@ export const UnifiedTaskItem = React.memo(({
       </div>
       <div className="flex items-center gap-1.5 pt-1.5">
         {((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) && (
-          <span className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}>
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              const currentMinutes = Math.floor(((task.actTime || 0) + elapsedSeconds) / 60);
+              const newMinutesStr = window.prompt('Set time (minutes):', currentMinutes.toString());
+              if (newMinutesStr !== null) {
+                const newMinutes = parseInt(newMinutesStr, 10);
+                if (!isNaN(newMinutes)) {
+                  const newSeconds = newMinutes * 60;
+                  // Stop timer if running to prevent conflict
+                  const updates: any = { actTime: newSeconds, act_time: newSeconds };
+                  if (task.isTimerOn) {
+                      updates.isTimerOn = false;
+                      updates.timerStartTime = null;
+                  }
+                  updateTask(task.id, updates);
+                }
+              }
+            }}
+            className={`text-[10px] font-mono whitespace-nowrap cursor-pointer hover:underline ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
+          >
             {formatTimeShort((task.actTime || 0) + elapsedSeconds)}
           </span>
         )}

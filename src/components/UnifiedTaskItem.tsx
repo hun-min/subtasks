@@ -57,6 +57,7 @@ export const UnifiedTaskItem = React.memo(({
   const [localText, setLocalText] = useState(task.name || task.text || '');
   const localTextRef = useRef(localText); // To access latest text in callbacks without re-creating them
   const updateTimeoutRef = useRef<any>(null);
+  const skipSyncRef = useRef(false);
   
   // Timer logic
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -88,6 +89,7 @@ export const UnifiedTaskItem = React.memo(({
 
   // Sync local text with prop only when not focused (to allow external updates but prevent overwrite while typing)
   useEffect(() => {
+    if (skipSyncRef.current) return;
     const taskText = task.name || task.text || '';
     if (!isFocused && taskText !== localText) {
       setLocalText(taskText);
@@ -294,9 +296,11 @@ export const UnifiedTaskItem = React.memo(({
         setLocalText(textBefore);
         if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
         
-        // 2. 부모 컴포넌트에 추가 요청 (textAfter 전달)
-        // 로컬 업데이트 후 즉시 호출하여 레이턴시 최소화
-        // onAddTaskAtCursor에서 상태 업데이트와 동기화 처리가 이루어짐
+        // 2. prop 동기화 차단
+        skipSyncRef.current = true;
+        setTimeout(() => { skipSyncRef.current = false; }, 100);
+        
+        // 3. 부모 컴포넌트에 추가 요청 (textAfter 전달)
         onAddTaskAtCursor(task.id, textBefore, newTextAfter);
       }
       return;
@@ -424,17 +428,24 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.id, updateTask]);
 
   const handleBlur = useCallback(() => {
-      isComposing.current = false; // Reset composition state on blur
-      setFocusedTaskId(null);
-      // Ensure final state is saved on blur
+      isComposing.current = false;
+      
+      // Clear debounce and save immediately
       if (updateTimeoutRef.current) {
           clearTimeout(updateTimeoutRef.current);
           updateTimeoutRef.current = null;
       }
-      // Compare with latest prop to avoid redundant updates if debounce already fired
-      if ((task.name || task.text || '') !== localTextRef.current) {
-          updateTask(task.id, { name: localTextRef.current, text: localTextRef.current });
+      
+      const currentLocal = localTextRef.current;
+      if ((task.name || task.text || '') !== currentLocal) {
+          updateTask(task.id, { name: currentLocal, text: currentLocal });
       }
+      
+      // Block prop sync briefly after blur
+      skipSyncRef.current = true;
+      setTimeout(() => { skipSyncRef.current = false; }, 200);
+      
+      setFocusedTaskId(null);
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (

@@ -80,6 +80,7 @@ export default function App() {
   }, []);
 
   const isInternalUpdate = useRef(false);
+  const isPromptOpenRef = useRef<boolean>(false);
 
   // React Query Hooks
   const { tasks, memo: currentMemo, updateTasks, isLoading } = useTasks({
@@ -914,4 +915,3 @@ export default function App() {
     </div>
   );
 }
-

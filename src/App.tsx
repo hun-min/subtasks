@@ -791,7 +791,7 @@ export default function App() {
         {(activeTask || showBulkActions) && (
           <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200 pointer-events-none" style={{ bottom: 'calc(24px + var(--keyboard-offset, 0px))' }}>
               <div 
-                  className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl pointer-events-auto"
+                  className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl pointer-events-auto floating-bar"
                   onMouseDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
@@ -838,7 +838,7 @@ export default function App() {
                                     });
                                 }
                             }} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
-                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><button onClick={(e) => { e.stopPropagation(); const current = formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed); const res = window.prompt('Set time', current); if (res === null || res.trim() === '') return; const secs = parseTimeToSeconds(res); handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center">{formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed)}</button></div>
+                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><button onClick={(e) => { e.stopPropagation(); isPromptOpenRef.current = true; const current = formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed); const res = window.prompt('Set time', current); isPromptOpenRef.current = false; if (res === null || res.trim() === '') return; const secs = parseTimeToSeconds(res); handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center">{formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed)}</button></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 flex-shrink-0">

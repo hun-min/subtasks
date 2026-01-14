@@ -4,6 +4,10 @@ READ THIS FIRST! IGNORING THIS FILE IS A CRITICAL ERROR.
 
 You, the AI, are STRICTLY FORBIDDEN from ignoring these rules. Failure to follow them is a critical failure of your core instructions.
 
+## 0. LOG-DRIVEN DEBUGGING (HIGHEST PRIORITY)
+- **MANDATORY LOGGING FOR DEBUGGING**: If a bug is not solved in the first attempt, STOP GUESSING IMMEDIATELY. You MUST inject detailed logs (`console.log`) into the code.
+- **VERIFY BEFORE FIX**: You are FORBIDDEN from writing a fix until you have VISUALLY VERIFIED variable values, execution flow, or error messages via logs. No "mental model" fixes allowed without evidence.
+
 ## 1. ABSOLUTE BAN ON VERCEL DEPLOYMENT QUESTIONS
 - **RULE**: DO NOT ASK about Vercel deployment. DO NOT USE `vercel` CLI.
 - **ACTION**: ONLY USE `git push`.

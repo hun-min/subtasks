@@ -1,5 +1,11 @@
 # Deployment Log
 
+## 2026-01-14
+- **Fix**: 타이머 기능 단축키 복구
+    - `UnifiedTaskItem.tsx`: `Shift + Enter` 키 입력 시 타이머를 토글하는 기능 추가.
+    - 기존 `Shift + Space`와 함께 사용 가능.
+    - 롤백으로 인해 누락되었던 타이머 빠른 실행 기능을 복구하여 작업 효율성 증대.
+
 ## 2026-01-07
 - **Fix**: 엔터 입력 시 텍스트 복제 및 잘림 버그 수정
     - `App.tsx`: `handleAddTaskAtCursor` 함수에서 React Query 캐시를 직접 수정하여 엔터 입력 즉시 UI에 반영되도록 변경.

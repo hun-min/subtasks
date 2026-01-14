@@ -310,6 +310,13 @@ export const UnifiedTaskItem = React.memo(({
       e.preventDefault();
       updateTask(task.id, { isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined });
     }
+
+    // Shift + Enter: Toggle Timer (Recovered)
+    if (e.shiftKey && e.key === 'Enter') {
+      e.preventDefault();
+      updateTask(task.id, { isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined });
+      return;
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {

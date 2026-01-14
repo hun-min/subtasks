@@ -818,7 +818,23 @@ export default function App() {
                     activeTask && (
                       <>
                         <div className="flex items-center gap-2 flex-shrink-0 pl-1">
-                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleUpdateTask(activeTask.id, { isTimerOn: !activeTask.isTimerOn, timerStartTime: !activeTask.isTimerOn ? Date.now() : undefined })} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => {
+                                if (activeTask.isTimerOn) {
+                                    // Stop Timer: Calculate elapsed and save
+                                    const elapsed = activeTask.timerStartTime ? Math.floor((Date.now() - activeTask.timerStartTime) / 1000) : 0;
+                                    handleUpdateTask(activeTask.id, {
+                                        isTimerOn: false,
+                                        timerStartTime: undefined,
+                                        actTime: (activeTask.actTime || 0) + elapsed
+                                    });
+                                } else {
+                                    // Start Timer
+                                    handleUpdateTask(activeTask.id, {
+                                        isTimerOn: true,
+                                        timerStartTime: Date.now()
+                                    });
+                                }
+                            }} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
                             <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed)} onChange={(e) => handleUpdateTask(activeTask.id, { actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />

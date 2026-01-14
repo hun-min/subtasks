@@ -822,10 +822,15 @@ export default function App() {
                                 if (activeTask.isTimerOn) {
                                     // Stop Timer: Calculate elapsed and save
                                     const elapsed = activeTask.timerStartTime ? Math.floor((Date.now() - activeTask.timerStartTime) / 1000) : 0;
+                                    const newActTime = (activeTask.actTime || 0) + elapsed;
                                     handleUpdateTask(activeTask.id, {
                                         isTimerOn: false,
                                         timerStartTime: undefined,
-                                        actTime: (activeTask.actTime || 0) + elapsed
+                                        actTime: newActTime,
+                                        // @ts-ignore
+                                        timer_start: null,
+                                        // @ts-ignore
+                                        act_time: newActTime
                                     });
                                 } else {
                                     // Start Timer

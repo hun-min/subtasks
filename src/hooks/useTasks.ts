@@ -38,7 +38,7 @@ export const migrateTasks = (tasks: any[]): Task[] => {
           name: t.name || t.text || '',
           status: finalStatus,
           depth: depth,
-          actTime: Number(t.actTime) || 0,
+          actTime: Number(t.actTime ?? t.act_time ?? 0),
           planTime: Number(t.planTime) || 0,
           percent: Number(t.percent) || 0,
           space_id: t.space_id || '',

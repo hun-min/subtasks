@@ -332,13 +332,25 @@ export const UnifiedTaskItem = React.memo(({
     // Shift + Space: Toggle Timer
     if (e.shiftKey && (e.key === ' ' || e.code === 'Space')) {
       e.preventDefault();
-      updateTask(task.id, { isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined });
+      if (task.isTimerOn && task.timerStartTime) {
+          const elapsed = Math.floor((Date.now() - task.timerStartTime) / 1000);
+          const newActTime = (task.actTime || 0) + elapsed;
+          updateTask(task.id, { isTimerOn: false, timerStartTime: undefined, actTime: newActTime, act_time: newActTime });
+      } else {
+          updateTask(task.id, { isTimerOn: true, timerStartTime: Date.now() });
+      }
     }
 
     // Shift + Enter: Toggle Timer (Recovered)
     if (e.shiftKey && e.key === 'Enter') {
       e.preventDefault();
-      updateTask(task.id, { isTimerOn: !task.isTimerOn, timerStartTime: !task.isTimerOn ? Date.now() : undefined });
+      if (task.isTimerOn && task.timerStartTime) {
+          const elapsed = Math.floor((Date.now() - task.timerStartTime) / 1000);
+          const newActTime = (task.actTime || 0) + elapsed;
+          updateTask(task.id, { isTimerOn: false, timerStartTime: undefined, actTime: newActTime, act_time: newActTime });
+      } else {
+          updateTask(task.id, { isTimerOn: true, timerStartTime: Date.now() });
+      }
       return;
     }
   };

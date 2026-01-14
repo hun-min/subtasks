@@ -16,8 +16,9 @@ export type Task = {
   text?: string;
   done?: boolean; 
   percent?: number;      
-  planTime?: number; 
-  actTime?: number; 
+  planTime?: number;
+  actTime?: number;
+  act_time?: number; // DB compatibility
   isTimerOn?: boolean;
   timerStartTime?: number;
   parentId?: number;

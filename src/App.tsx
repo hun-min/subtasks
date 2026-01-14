@@ -827,11 +827,9 @@ export default function App() {
                                         isTimerOn: false,
                                         timerStartTime: undefined,
                                         actTime: newActTime,
-                                        // @ts-ignore
-                                        timer_start: null,
-                                        // @ts-ignore
                                         act_time: newActTime
                                     });
+                                    console.log('Timer Stopped & Saved:', newActTime);
                                 } else {
                                     // Start Timer
                                     handleUpdateTask(activeTask.id, {
@@ -840,7 +838,7 @@ export default function App() {
                                     });
                                 }
                             }} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
-                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed)} onChange={(e) => handleUpdateTask(activeTask.id, { actTime: parseTimeToSeconds(e.target.value) })} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div>
+                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><input type="text" value={formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed)} onChange={(e) => { const secs = parseTimeToSeconds(e.target.value); handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center" /></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 flex-shrink-0">

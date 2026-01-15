@@ -35,39 +35,7 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
         value={value}
         onChange={onChange}
         onKeyDown={(e) => {
-          if (e.key === 'Backspace' && (e.target as HTMLTextAreaElement).selectionStart === (e.target as HTMLTextAreaElement).selectionEnd) {
-            const currentValue = (e.target as HTMLTextAreaElement).value;
-            const newStart = (e.target as HTMLTextAreaElement).selectionStart;
-            if (newStart > 0 && currentValue[newStart - 1] === '\n') {
-              e.preventDefault();
-              const newValue = currentValue.substring(0, newStart - 1) + currentValue.substring(newStart);
-              onChange({ target: { value: newValue } });
-              (e.target as HTMLTextAreaElement).selectionStart = newStart - 1;
-              (e.target as HTMLTextAreaElement).selectionEnd = newStart - 1;
-            } else {
-              onKeyDown(e);
-            }
-          } else if (e.key === 'Delete' && (e.target as HTMLTextAreaElement).selectionStart === (e.target as HTMLTextAreaElement).selectionEnd) {
-            const currentValue = (e.target as HTMLTextAreaElement).value;
-            const start = (e.target as HTMLTextAreaElement).selectionStart;
-            if (start > 0 && currentValue[start - 1] === '\n') {
-              e.preventDefault();
-              const newValue = currentValue.substring(0, start - 1) + currentValue.substring(start);
-              onChange({ target: { value: newValue } });
-              (e.target as HTMLTextAreaElement).selectionStart = start - 1;
-              (e.target as HTMLTextAreaElement).selectionEnd = start - 1;
-            } else if (start < currentValue.length && currentValue[start] === '\n') {
-              e.preventDefault();
-              const newValue = currentValue.substring(0, start) + currentValue.substring(start + 1);
-              onChange({ target: { value: newValue } });
-              (e.target as HTMLTextAreaElement).selectionStart = start;
-              (e.target as HTMLTextAreaElement).selectionEnd = start;
-            } else {
-              onKeyDown(e);
-            }
-          } else {
-            onKeyDown(e);
-          }
+          onKeyDown(e);
         }}
         onFocus={onFocus}
         onBlur={onBlur}

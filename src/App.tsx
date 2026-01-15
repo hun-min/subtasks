@@ -98,6 +98,7 @@ export default function App() {
   const lastClickedIndex = useRef<number | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const timeInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null]);
   
   const [history, setHistory] = useState<Task[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -136,6 +137,26 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [activeTask?.isTimerOn, activeTask?.timerStartTime, activeTask?.id]);
+
+  // Floating bar timer input real-time update
+  useEffect(() => {
+    if (activeTask?.isTimerOn && activeTask.timerStartTime) {
+      const update = () => {
+        const now = Date.now();
+        const seconds = Math.floor((now - activeTask.timerStartTime!) / 1000);
+        const total = (activeTask.actTime || 0) + seconds;
+        const h = Math.floor(total / 3600).toString().padStart(2, '0');
+        const m = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
+        const s = (total % 60).toString().padStart(2, '0');
+        if (timeInputRefs.current[0]) timeInputRefs.current[0].value = h;
+        if (timeInputRefs.current[1]) timeInputRefs.current[1].value = m;
+        if (timeInputRefs.current[2]) timeInputRefs.current[2].value = s;
+      };
+      update();
+      const interval = setInterval(update, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTask?.isTimerOn, activeTask?.timerStartTime, activeTask?.actTime]);
 
   useEffect(() => {
     // 1. dvh 지원 여부 확인 및 폴백 설정
@@ -839,7 +860,7 @@ export default function App() {
                                     });
                                 }
                             }} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
-                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><div className="flex items-center justify-center"><input onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt(e.target.value) || 0; const m = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const s = parseInt((e.target.nextElementSibling?.nextElementSibling?.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(Math.floor(((activeTask.actTime || 0) + activeTimerElapsed) / 3600)).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt(e.target.value) || 0; const s = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(Math.floor((((activeTask.actTime || 0) + activeTimerElapsed) % 3600) / 60)).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling?.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const s = parseInt(e.target.value) || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(((activeTask.actTime || 0) + activeTimerElapsed) % 60).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /></div></div>
+                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><div className="flex items-center justify-center"><input ref={(el) => timeInputRefs.current[0] = el} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt(e.target.value) || 0; const m = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const s = parseInt((e.target.nextElementSibling?.nextElementSibling?.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(Math.floor(((activeTask.actTime || 0) + activeTimerElapsed) / 3600)).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[1] = el} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt(e.target.value) || 0; const s = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(Math.floor((((activeTask.actTime || 0) + activeTimerElapsed) % 3600) / 60)).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[2] = el} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling?.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const s = parseInt(e.target.value) || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(((activeTask.actTime || 0) + activeTimerElapsed) % 60).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /></div></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 flex-shrink-0">

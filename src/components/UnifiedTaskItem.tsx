@@ -71,13 +71,13 @@ export const UnifiedTaskItem = React.memo(({
         const seconds = Math.floor((now - start) / 1000);
         setElapsedSeconds(seconds);
       };
-      
+
       updateTimer();
       intervalId = setInterval(updateTimer, 1000);
     } else {
       setElapsedSeconds(0);
     }
-    
+
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
@@ -463,7 +463,7 @@ export const UnifiedTaskItem = React.memo(({
           ))}
         </div>
       )}
-      <div className="relative flex items-center justify-start mt-1 flex-shrink-0">
+      <div className="relative flex items-center justify-start mt-1.5 flex-shrink-0">
         <button
           onClick={(e) => {
             e.stopPropagation();

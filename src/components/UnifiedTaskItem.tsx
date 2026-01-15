@@ -518,7 +518,6 @@ export const UnifiedTaskItem = React.memo(({
         {(() => {
           const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
           const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
-          console.log('Debug completion time:', { taskId: task.id, status: task.status, end_time: task.end_time, completionTimeDisplay });
           let displayText = '';
           if (timerDisplay) displayText = timerDisplay;
           if (completionTimeDisplay) {

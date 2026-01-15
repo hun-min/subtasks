@@ -41,8 +41,12 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
             if (newStart > 0 && currentValue[newStart - 1] === '\n') {
               e.preventDefault();
               onChange({ target: { value: currentValue.substring(0, newStart - 1) + currentValue.substring(newStart) } });
-              combinedRef.current.selectionStart = newStart - 1;
-              combinedRef.current.selectionEnd = newStart - 1;
+              setTimeout(() => {
+                if (combinedRef.current) {
+                  combinedRef.current.selectionStart = newStart - 1;
+                  combinedRef.current.selectionEnd = newStart - 1;
+                }
+              }, 0);
             } else {
               onKeyDown(e);
             }

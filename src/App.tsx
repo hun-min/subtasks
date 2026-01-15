@@ -301,12 +301,10 @@ export default function App() {
       const prevTask = tasks[idx - 1];
       const mergedText = (prevTask.name || '') + currentText;
       const newPos = (prevTask.name || '').length;
-      
-      const next = tasks.filter((_, i) => i !== idx).map((t, i) => 
+
+      const next = tasks.filter((_, i) => i !== idx).map((t, i) =>
           i === idx - 1 ? { ...t, name: mergedText, text: mergedText } : t
       );
-      
-      console.log('[Merge] prev:', prevTask.name, '+ current:', currentText, '= merged:', mergedText);
       
       // 즉시 캐시 업데이트
       const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
@@ -332,7 +330,7 @@ export default function App() {
           i === idx ? { ...t, name: mergedText, text: mergedText } : t
       );
       
-      console.log('[Merge] current:', currentText, '+ next:', nextTask.name, '= merged:', mergedText);
+
       
       // 즉시 캐시 업데이트
       const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];

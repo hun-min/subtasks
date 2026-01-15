@@ -8,7 +8,6 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Play, Pause, BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, ChevronUp, Trash2, Copy, Flame, RotateCcw, RotateCw } from 'lucide-react';
 import { Task, DailyLog } from './types';
-import { formatTimeFull, parseTimeToSeconds } from './utils';
 import { UnifiedTaskItem } from './components/UnifiedTaskItem';
 import { FlowView } from './components/FlowView';
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
@@ -80,7 +79,6 @@ export default function App() {
   }, []);
 
   const isInternalUpdate = useRef(false);
-  const isPromptOpenRef = useRef<boolean>(false);
 
   // React Query Hooks
   const { tasks, memo: currentMemo, updateTasks, isLoading } = useTasks({
@@ -268,49 +266,30 @@ export default function App() {
 
   const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
       const idx = tasks.findIndex(t => t.id === taskId);
-      if (idx === -1) return;
+      if (idx === -1 || idx === 0) return;
       
-      if (idx > 0) {
-        isInternalUpdate.current = true;
-        setTimeout(() => isInternalUpdate.current = false, 2000);
-
-        const prevTask = tasks[idx - 1];
-        const next = [...tasks];
-        const newPos = (prevTask.name || '').length;
-        
-        next[idx - 1] = { 
-            ...prevTask, 
-            name: (prevTask.name || '') + (currentText || ''), 
-            text: (prevTask.text || '') + (currentText || '') 
-        };
-        next.splice(idx, 1);
-        
-        setFocusedTaskId(prevTask.id);
-        (window as any).__restoreCursorPos = newPos;
-
-        const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-        queryClient.setQueryData(queryKey, (old: any) => {
-            if (!old) return { tasks: next, memo: currentMemo };
-            return { ...old, tasks: next, memo: currentMemo };
-        });
-
-        updateTasks.mutate({ tasks: next, memo: currentMemo });
-      } else {
-        isInternalUpdate.current = true;
-        setTimeout(() => isInternalUpdate.current = false, 2000);
-
-        setFocusedTaskId(null);
-        const next = tasks.filter(t => t.id !== taskId);
-        
-        const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-        queryClient.setQueryData(queryKey, (old: any) => {
-            if (!old) return { tasks: next, memo: currentMemo };
-            return { ...old, tasks: next, memo: currentMemo };
-        });
-        
-        updateTasks.mutate({ tasks: next, memo: currentMemo });
-      }
-  }, [tasks, currentMemo, updateTasks, queryClient, viewDate, user, currentSpace]);
+      isInternalUpdate.current = true;
+      setTimeout(() => isInternalUpdate.current = false, 2000);
+      
+      const prevTask = tasks[idx - 1];
+      const mergedText = (prevTask.name || '') + currentText;
+      const newPos = (prevTask.name || '').length;
+      
+      const next = tasks.filter((_, i) => i !== idx).map((t, i) => 
+          i === idx - 1 ? { ...t, name: mergedText, text: mergedText } : t
+      );
+      
+      console.log('[Merge] prev:', prevTask.name, '+ current:', currentText, '= merged:', mergedText);
+      
+      // 즉시 캐시 업데이트
+      const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+      queryClient.setQueryData(queryKey, { tasks: next, memo: currentMemo });
+      
+      setFocusedTaskId(prevTask.id);
+      (window as any).__restoreCursorPos = newPos;
+      
+      updateTasks.mutate({ tasks: next, memo: currentMemo });
+  }, [tasks, currentMemo, updateTasks, viewDate, user, currentSpace, queryClient]);
 
   const handleMergeWithNext = useCallback((taskId: number, currentText: string) => {
       const idx = tasks.findIndex(t => t.id === taskId);
@@ -318,22 +297,22 @@ export default function App() {
       
       isInternalUpdate.current = true;
       setTimeout(() => isInternalUpdate.current = false, 2000);
-
-      const current = tasks[idx];
+      
       const nextTask = tasks[idx + 1];
-      const next = [...tasks];
+      const mergedText = currentText + (nextTask.name || '');
       
-      next[idx] = { ...current, name: (currentText || '') + (nextTask.name || ''), text: (currentText || '') + (nextTask.text || '') };
-      next.splice(idx + 1, 1);
+      const next = tasks.filter((_, i) => i !== idx + 1).map((t, i) => 
+          i === idx ? { ...t, name: mergedText, text: mergedText } : t
+      );
       
+      console.log('[Merge] current:', currentText, '+ next:', nextTask.name, '= merged:', mergedText);
+      
+      // 즉시 캐시 업데이트
       const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-      queryClient.setQueryData(queryKey, (old: any) => {
-          if (!old) return { tasks: next, memo: currentMemo };
-          return { ...old, tasks: next, memo: currentMemo };
-      });
+      queryClient.setQueryData(queryKey, { tasks: next, memo: currentMemo });
       
       updateTasks.mutate({ tasks: next, memo: currentMemo });
-  }, [tasks, currentMemo, updateTasks, queryClient, viewDate, user, currentSpace]);
+  }, [tasks, currentMemo, updateTasks, viewDate, user, currentSpace, queryClient]);
 
   const handleIndent = useCallback((taskId: number) => {
     if (selectedTaskIds.has(taskId)) {
@@ -811,7 +790,6 @@ export default function App() {
                   className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl pointer-events-auto floating-bar"
                   onMouseDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
               >
                   {showBulkActions ? (
                      <>
@@ -855,7 +833,7 @@ export default function App() {
                                     });
                                 }
                             }} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
-                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><button onClick={(e) => { e.stopPropagation(); isPromptOpenRef.current = true; const current = formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed); const res = window.prompt('Set time', current); isPromptOpenRef.current = false; if (res === null || res.trim() === '') return; const secs = parseTimeToSeconds(res); handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-24 text-center">{formatTimeFull((activeTask.actTime || 0) + activeTimerElapsed)}</button></div>
+                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><div className="flex items-center justify-center"><input onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt(e.target.value) || 0; const m = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const s = parseInt((e.target.nextElementSibling?.nextElementSibling?.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(Math.floor(((activeTask.actTime || 0) + activeTimerElapsed) / 3600)).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt(e.target.value) || 0; const s = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(Math.floor((((activeTask.actTime || 0) + activeTimerElapsed) % 3600) / 60)).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling?.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const s = parseInt(e.target.value) || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(((activeTask.actTime || 0) + activeTimerElapsed) % 60).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /></div></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 flex-shrink-0">

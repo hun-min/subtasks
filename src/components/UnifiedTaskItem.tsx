@@ -155,8 +155,22 @@ export const UnifiedTaskItem = React.memo(({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isComposing.current) return;
-    // Use directly DOM value for most up-to-date text (ignoring potential state lag)
+    
     const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
+    
+    // Backspace at start: merge with previous
+    if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
+      e.preventDefault();
+      onMergeWithPrevious(task.id, taskName);
+      return;
+    }
+    
+    // Delete at end: merge with next
+    if (e.key === 'Delete' && textareaRef.current?.selectionStart === taskName.length && textareaRef.current?.selectionEnd === taskName.length) {
+      e.preventDefault();
+      onMergeWithNext(task.id, taskName);
+      return;
+    }
     
     // Suggestions navigation
     if (suggestions.length > 0) {
@@ -306,26 +320,12 @@ export const UnifiedTaskItem = React.memo(({
       return;
     }
     
-    if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
-      e.preventDefault();
-      onMergeWithPrevious(task.id, taskName);
-      return;
-    }
-    
-    if (e.key === 'Delete' && textareaRef.current?.selectionStart === taskName.length && textareaRef.current?.selectionEnd === taskName.length) {
-      e.preventDefault();
-      onMergeWithNext(task.id, taskName);
-      return;
-    }
-    
     if (e.key === 'Tab') { 
       e.preventDefault(); 
       if (e.shiftKey) onOutdent(task.id); else onIndent(task.id); 
       return; 
     }
-    
-    // Alt or Ctrl + Arrows for reordering logic is now handled in the main arrow key blocks above
-    
+
     // Ctrl + D: Toggle Star
     if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
       e.preventDefault();
@@ -427,8 +427,13 @@ export const UnifiedTaskItem = React.memo(({
     }, 500); // 500ms debounce
   }, [task.id, updateTask]);
 
-  const handleBlur = useCallback(() => {
+  const handleBlur = useCallback((e: React.FocusEvent) => {
       isComposing.current = false;
+      
+      // 플로팅 바로 포커스 이동하는 경우 focusedTaskId 유지
+      if (e.relatedTarget?.closest?.('.floating-bar')) {
+          return;
+      }
       
       // Clear debounce and save immediately
       if (updateTimeoutRef.current) {
@@ -512,25 +517,7 @@ export const UnifiedTaskItem = React.memo(({
       <div className="flex items-center gap-1.5 pt-1.5">
         {((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) && (
           <span
-            onClick={(e) => {
-              e.stopPropagation();
-              const currentMinutes = Math.floor(((task.actTime || 0) + elapsedSeconds) / 60);
-              const newMinutesStr = window.prompt('Set time (minutes):', currentMinutes.toString());
-              if (newMinutesStr !== null) {
-                const newMinutes = parseInt(newMinutesStr, 10);
-                if (!isNaN(newMinutes)) {
-                  const newSeconds = newMinutes * 60;
-                  // Stop timer if running to prevent conflict
-                  const updates: any = { actTime: newSeconds, act_time: newSeconds };
-                  if (task.isTimerOn) {
-                      updates.isTimerOn = false;
-                      updates.timerStartTime = null;
-                  }
-                  updateTask(task.id, updates);
-                }
-              }
-            }}
-            className={`text-[10px] font-mono whitespace-nowrap cursor-pointer hover:underline ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
+            className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
           >
             {formatTimeShort((task.actTime || 0) + elapsedSeconds)}
           </span>

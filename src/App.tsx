@@ -204,8 +204,14 @@ export default function App() {
     const isSelectionUpdate = selectedTaskIds.has(taskId) && isStatusUpdate;
 
     const nextTasks = tasks.map(t => {
-        if (t.id === taskId) return { ...t, ...updates };
-        if (isSelectionUpdate && selectedTaskIds.has(t.id)) return { ...t, ...updates };
+        if (t.id === taskId || (isSelectionUpdate && selectedTaskIds.has(t.id))) {
+            let updatedTask = { ...t, ...updates };
+            // Set end_time when status changes to completed
+            if (isStatusUpdate && updates.status === 'completed' && t.status !== 'completed') {
+                updatedTask.end_time = Date.now();
+            }
+            return updatedTask;
+        }
         return t;
     });
     updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });

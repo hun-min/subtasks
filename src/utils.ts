@@ -17,3 +17,10 @@ export const parseTimeToSeconds = (timeStr: string) => {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return parts[0] || 0;
 };
+
+export const formatCompletionTime = (timestamp: number) => {
+  const date = new Date(timestamp);
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+};

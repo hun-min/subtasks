@@ -3,7 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Check, Star } from 'lucide-react';
 import { Task, DailyLog } from '../types';
-import { formatTimeShort } from '../utils';
+import { formatTimeShort, formatCompletionTime } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 
 export const UnifiedTaskItem = React.memo(({ 
@@ -515,13 +515,24 @@ export const UnifiedTaskItem = React.memo(({
         )}
       </div>
       <div className="flex items-center gap-1.5 pt-1.5">
-        {((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) && (
-          <span
-            className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
-          >
-            {formatTimeShort((task.actTime || 0) + elapsedSeconds)}
-          </span>
-        )}
+        {(() => {
+          const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
+          const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
+          console.log('Debug completion time:', { taskId: task.id, status: task.status, end_time: task.end_time, completionTimeDisplay });
+          let displayText = '';
+          if (timerDisplay) displayText = timerDisplay;
+          if (completionTimeDisplay) {
+            if (displayText) displayText += ` / ${completionTimeDisplay}`;
+            else displayText = completionTimeDisplay;
+          }
+          return displayText ? (
+            <span
+              className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
+            >
+              {displayText}
+            </span>
+          ) : null;
+        })()}
       </div>
     </div>
   );

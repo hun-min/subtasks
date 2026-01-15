@@ -10,6 +10,7 @@ import { Play, Pause, BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight,
 import { Task, DailyLog } from './types';
 import { UnifiedTaskItem } from './components/UnifiedTaskItem';
 import { FlowView } from './components/FlowView';
+
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
 import { useTasks, useAllTaskLogs } from './hooks/useTasks';
 
@@ -754,7 +755,7 @@ export default function App() {
                     <div className="h-1.5 w-full bg-[#1a1a1f] rounded-full overflow-hidden mb-4">
                         <div className="h-full bg-[#7c4dff] transition-all duration-500" style={{ width: `${progressPercent}%` }} />
                     </div>
-                    <AutoResizeTextarea value={currentMemo || ''} onChange={(e: any) => { updateTasks.mutate({ tasks, memo: e.target.value }); }} placeholder="M E M O" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none" />
+                    <AutoResizeTextarea value={currentMemo || ''} onChange={(e: any) => { updateTasks.mutate({ tasks, memo: e.target.value }); }} placeholder="M E M O - Write anything here..." className="w-full bg-transparent text-[18px] text-[#e0e0e0] leading-[1.6] outline-none min-h-[200px] resize-none" />
                 </div>
                 <div className={`flex-1 space-y-8 pb-48 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
                   <div>

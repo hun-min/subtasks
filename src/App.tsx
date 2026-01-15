@@ -776,9 +776,8 @@ export default function App() {
                                       selectedTaskIds={selectedTaskIds} 
                                       onTaskClick={onTaskClickWithRange} 
                                       logs={logs} 
-                                      onAddTaskAtCursor={handleAddTaskAtCursor} 
-                                      onMergeWithPrevious={handleMergeWithPrevious} 
-                                      onMergeWithNext={handleMergeWithNext} 
+                                  onAddTaskAtCursor={handleAddTaskAtCursor}
+                                  onMergeWithNext={handleMergeWithNext}
                                       onIndent={handleIndent} 
                                       onOutdent={handleOutdent} 
                                       onMoveUp={handleMoveUp} 

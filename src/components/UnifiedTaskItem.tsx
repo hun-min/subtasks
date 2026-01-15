@@ -16,7 +16,6 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick,
   logs, 
   onAddTaskAtCursor,
-  onMergeWithPrevious,
   onMergeWithNext,
   onIndent, 
   onOutdent,
@@ -34,7 +33,6 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick: (e: React.MouseEvent, taskId: number, index: number) => void,
   logs: DailyLog[], 
   onAddTaskAtCursor: (taskId: number, textBefore: string, textAfter: string) => void,
-  onMergeWithPrevious: (taskId: number, currentText: string) => void,
   onMergeWithNext: (taskId: number, currentText: string) => void,
   onIndent: (taskId: number) => void, 
   onOutdent: (taskId: number) => void,
@@ -158,10 +156,10 @@ export const UnifiedTaskItem = React.memo(({
 
     const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
     
-    // Backspace at start: merge with previous
+    // Backspace at start: merge with next
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
-      onMergeWithPrevious(task.id, taskName);
+      onMergeWithNext(task.id, taskName);
       return;
     }
     

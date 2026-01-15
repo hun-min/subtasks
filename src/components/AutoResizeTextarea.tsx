@@ -35,10 +35,10 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
         value={value}
         onChange={onChange}
         onKeyDown={(e) => {
-          console.log('AutoResizeTextarea onKeyDown:', e.key, combinedRef.current?.selectionStart, combinedRef.current?.selectionEnd);
-          if (e.key === 'Backspace' && combinedRef.current?.selectionStart === combinedRef.current?.selectionEnd) {
-            const currentValue = combinedRef.current.value;
-            const newStart = combinedRef.current.selectionStart;
+          console.log('AutoResizeTextarea onKeyDown:', e.key, (e.target as HTMLTextAreaElement).selectionStart, (e.target as HTMLTextAreaElement).selectionEnd);
+          if (e.key === 'Backspace' && (e.target as HTMLTextAreaElement).selectionStart === (e.target as HTMLTextAreaElement).selectionEnd) {
+            const currentValue = (e.target as HTMLTextAreaElement).value;
+            const newStart = (e.target as HTMLTextAreaElement).selectionStart;
             console.log('Backspace check:', newStart > 0 && currentValue[newStart - 1] === '\n', currentValue);
             if (newStart > 0 && currentValue[newStart - 1] === '\n') {
               e.preventDefault();
@@ -46,17 +46,15 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
               console.log('Merging lines:', currentValue, '->', newValue);
               onChange({ target: { value: newValue } });
               setTimeout(() => {
-                if (combinedRef.current) {
-                  combinedRef.current.selectionStart = newStart - 1;
-                  combinedRef.current.selectionEnd = newStart - 1;
-                }
+                (e.target as HTMLTextAreaElement).selectionStart = newStart - 1;
+                (e.target as HTMLTextAreaElement).selectionEnd = newStart - 1;
               }, 0);
             } else {
               onKeyDown(e);
             }
-          } else if (e.key === 'Delete' && combinedRef.current?.selectionStart === combinedRef.current?.selectionEnd) {
-            const currentValue = combinedRef.current.value;
-            const start = combinedRef.current.selectionStart;
+          } else if (e.key === 'Delete' && (e.target as HTMLTextAreaElement).selectionStart === (e.target as HTMLTextAreaElement).selectionEnd) {
+            const currentValue = (e.target as HTMLTextAreaElement).value;
+            const start = (e.target as HTMLTextAreaElement).selectionStart;
             console.log('Delete check:', start < currentValue.length && currentValue[start] === '\n', currentValue);
             if (start < currentValue.length && currentValue[start] === '\n') {
               e.preventDefault();
@@ -64,10 +62,8 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
               console.log('Merging lines:', currentValue, '->', newValue);
               onChange({ target: { value: newValue } });
               setTimeout(() => {
-                if (combinedRef.current) {
-                  combinedRef.current.selectionStart = start;
-                  combinedRef.current.selectionEnd = start;
-                }
+                (e.target as HTMLTextAreaElement).selectionStart = start;
+                (e.target as HTMLTextAreaElement).selectionEnd = start;
               }, 0);
             } else {
               onKeyDown(e);

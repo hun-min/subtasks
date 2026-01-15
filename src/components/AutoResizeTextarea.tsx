@@ -35,16 +35,38 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
         value={value}
         onChange={onChange}
         onKeyDown={(e) => {
+          console.log('AutoResizeTextarea onKeyDown:', e.key, combinedRef.current?.selectionStart, combinedRef.current?.selectionEnd);
           if (e.key === 'Backspace' && combinedRef.current?.selectionStart === combinedRef.current?.selectionEnd) {
             const currentValue = combinedRef.current.value;
             const newStart = combinedRef.current.selectionStart;
+            console.log('Backspace check:', newStart > 0 && currentValue[newStart - 1] === '\n', currentValue);
             if (newStart > 0 && currentValue[newStart - 1] === '\n') {
               e.preventDefault();
-              onChange({ target: { value: currentValue.substring(0, newStart - 1) + currentValue.substring(newStart) } });
+              const newValue = currentValue.substring(0, newStart - 1) + currentValue.substring(newStart);
+              console.log('Merging lines:', currentValue, '->', newValue);
+              onChange({ target: { value: newValue } });
               setTimeout(() => {
                 if (combinedRef.current) {
                   combinedRef.current.selectionStart = newStart - 1;
                   combinedRef.current.selectionEnd = newStart - 1;
+                }
+              }, 0);
+            } else {
+              onKeyDown(e);
+            }
+          } else if (e.key === 'Delete' && combinedRef.current?.selectionStart === combinedRef.current?.selectionEnd) {
+            const currentValue = combinedRef.current.value;
+            const start = combinedRef.current.selectionStart;
+            console.log('Delete check:', start < currentValue.length && currentValue[start] === '\n', currentValue);
+            if (start < currentValue.length && currentValue[start] === '\n') {
+              e.preventDefault();
+              const newValue = currentValue.substring(0, start) + currentValue.substring(start + 1);
+              console.log('Merging lines:', currentValue, '->', newValue);
+              onChange({ target: { value: newValue } });
+              setTimeout(() => {
+                if (combinedRef.current) {
+                  combinedRef.current.selectionStart = start;
+                  combinedRef.current.selectionEnd = start;
                 }
               }, 0);
             } else {

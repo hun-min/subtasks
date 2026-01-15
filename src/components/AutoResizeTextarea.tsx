@@ -35,15 +35,12 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
         value={value}
         onChange={onChange}
         onKeyDown={(e) => {
-          console.log('AutoResizeTextarea onKeyDown:', e.key, (e.target as HTMLTextAreaElement).selectionStart, (e.target as HTMLTextAreaElement).selectionEnd);
           if (e.key === 'Backspace' && (e.target as HTMLTextAreaElement).selectionStart === (e.target as HTMLTextAreaElement).selectionEnd) {
             const currentValue = (e.target as HTMLTextAreaElement).value;
             const newStart = (e.target as HTMLTextAreaElement).selectionStart;
-            console.log('Backspace check:', newStart > 0 && currentValue[newStart - 1] === '\n', currentValue);
             if (newStart > 0 && currentValue[newStart - 1] === '\n') {
               e.preventDefault();
               const newValue = currentValue.substring(0, newStart - 1) + currentValue.substring(newStart);
-              console.log('Merging lines:', currentValue, '->', newValue);
               onChange({ target: { value: newValue } });
               setTimeout(() => {
                 (e.target as HTMLTextAreaElement).selectionStart = newStart - 1;
@@ -55,11 +52,9 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
           } else if (e.key === 'Delete' && (e.target as HTMLTextAreaElement).selectionStart === (e.target as HTMLTextAreaElement).selectionEnd) {
             const currentValue = (e.target as HTMLTextAreaElement).value;
             const start = (e.target as HTMLTextAreaElement).selectionStart;
-            console.log('Delete check:', start < currentValue.length && currentValue[start] === '\n', currentValue);
             if (start < currentValue.length && currentValue[start] === '\n') {
               e.preventDefault();
               const newValue = currentValue.substring(0, start) + currentValue.substring(start + 1);
-              console.log('Merging lines:', currentValue, '->', newValue);
               onChange({ target: { value: newValue } });
               setTimeout(() => {
                 (e.target as HTMLTextAreaElement).selectionStart = start;

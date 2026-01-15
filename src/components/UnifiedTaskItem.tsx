@@ -156,8 +156,6 @@ export const UnifiedTaskItem = React.memo(({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isComposing.current) return;
 
-    console.log('UnifiedTaskItem handleKeyDown:', e.key, textareaRef.current?.selectionStart, textareaRef.current?.selectionEnd);
-
     const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
     
     // Backspace at start: merge with previous

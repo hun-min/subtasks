@@ -280,42 +280,9 @@ export const UnifiedTaskItem = React.memo(({
 
         e.preventDefault();
         e.stopPropagation(); // 이벤트 전파 방지
-        const cursor = textareaRef.current?.selectionStart || 0;
-        const textBefore = taskName.substring(0, cursor);
-        const textAfter = taskName.substring(cursor);
-        
-        const numberMatch = textBefore.match(/^(\d+)\.\s/);
-        const bulletMatch = textBefore.match(/^-\s/);
-        
-        let newTextAfter = textAfter;
-        let prefixLen = 0;
-        if (numberMatch) {
-            const currentNum = parseInt(numberMatch[1], 10);
-            const prefix = `${currentNum + 1}. `;
-            newTextAfter = `${prefix}${textAfter}`;
-            prefixLen = prefix.length;
-        } else if (bulletMatch) {
-            const prefix = `- `;
-            newTextAfter = `${prefix}${textAfter}`;
-            prefixLen = prefix.length;
-        }
 
-        if (prefixLen > 0) {
-            (window as any).__restoreCursorPos = prefixLen;
-        } else {
-             (window as any).__restoreCursorPos = 0;
-        }
-
-        // 1. 현재 태스크 즉시 로컬 업데이트 (데이터 유실 방지)
-        setLocalText(textBefore);
-        if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-        
-        // 2. prop 동기화 차단
-        skipSyncRef.current = true;
-        setTimeout(() => { skipSyncRef.current = false; }, 100);
-        
-        // 3. 부모 컴포넌트에 추가 요청 (textAfter 전달)
-        onAddTaskAtCursor(task.id, textBefore, newTextAfter);
+        // 다음 태스크로 포커스 이동
+        onFocusNext?.(task.id, 'start');
       }
       return;
     }

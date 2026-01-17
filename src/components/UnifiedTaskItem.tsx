@@ -281,8 +281,8 @@ export const UnifiedTaskItem = React.memo(({
         e.preventDefault();
         e.stopPropagation(); // 이벤트 전파 방지
 
-        // 다음 태스크로 포커스 이동
-        onFocusNext?.(task.id, 'start');
+        // 현재 태스크 아래에 새 빈 태스크 추가하고 포커스 이동
+        onAddTaskAtCursor(task.id, taskName, '');
       }
       return;
     }

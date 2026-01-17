@@ -38,7 +38,7 @@ export const UnifiedTaskItem = React.memo(({
   onOutdent: (taskId: number) => void,
   onMoveUp: (taskId: number) => void,
   onMoveDown: (taskId: number) => void,
-  onDelete?: (taskId: number, options?: { mergeDirection?: 'prev' | 'next' }) => void,
+  onDelete?: (taskId: number, options?: { mergeDirection?: 'prev' | 'next', currentText?: string }) => void,
   onCopy?: (task: Task) => void,
   onFocusPrev?: (taskId: number, cursorIndex: number | 'start' | 'end') => void,
   onFocusNext?: (taskId: number, cursorIndex: number | 'start' | 'end') => void
@@ -171,13 +171,7 @@ export const UnifiedTaskItem = React.memo(({
         return;
       }
 
-      // If cursor is at the end of a line with content, allow merging with next line
-      if (e.key === 'Delete' && cursorPos === currentText.length && currentText !== '' && onDelete) {
-        e.preventDefault();
-        // Delete at end of line: merge with next line
-        onDelete(task.id, { mergeDirection: 'next' });
-        return;
-      }
+
 
       // Allow normal backspace/delete behavior for text editing
       return;

@@ -427,7 +427,7 @@ export default function App() {
       }
   }, [tasks, selectedTaskIds, updateTasks, currentMemo]);
 
-  const handleDeleteTask = useCallback((taskId: number, options?: { mergeDirection?: 'prev' | 'next' }) => {
+  const handleDeleteTask = useCallback((taskId: number, options?: { mergeDirection?: 'prev' | 'next', currentText?: string }) => {
     const taskIndex = tasks.findIndex(t => t.id === taskId);
     if (taskIndex === -1) return;
 
@@ -456,7 +456,7 @@ export default function App() {
           return; // Don't merge if user cancels
         }
 
-        const currentTaskContent = (tasks[taskIndex].name || tasks[taskIndex].text || '');
+        const currentTaskContent = options?.currentText || (tasks[taskIndex].name || tasks[taskIndex].text || '');
         const mergedText = currentTaskContent + (nextTask.name || nextTask.text || '');
         const next = tasks.filter((_, i) => i !== taskIndex + 1).map((t, i) =>
           i === taskIndex ? { ...t, name: mergedText, text: mergedText } : t

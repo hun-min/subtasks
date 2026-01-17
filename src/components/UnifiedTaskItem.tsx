@@ -16,7 +16,6 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick,
   logs, 
   onAddTaskAtCursor,
-  onMergeWithNext,
   onIndent, 
   onOutdent,
   onMoveUp,
@@ -33,7 +32,6 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick: (e: React.MouseEvent, taskId: number, index: number) => void,
   logs: DailyLog[], 
   onAddTaskAtCursor: (taskId: number, textBefore: string, textAfter: string) => void,
-  onMergeWithNext: (taskId: number, currentText: string) => void,
   onIndent: (taskId: number) => void, 
   onOutdent: (taskId: number) => void,
   onMoveUp: (taskId: number) => void,
@@ -163,12 +161,7 @@ export const UnifiedTaskItem = React.memo(({
       return;
     }
     
-    // Delete at end: merge with next
-    if (e.key === 'Delete' && textareaRef.current?.selectionStart === taskName.length && textareaRef.current?.selectionEnd === taskName.length) {
-      e.preventDefault();
-      onMergeWithNext(task.id, taskName);
-      return;
-    }
+
     
     // Suggestions navigation
     if (suggestions.length > 0) {
@@ -276,44 +269,54 @@ export const UnifiedTaskItem = React.memo(({
             return;
         }
 
-        e.preventDefault();
-        e.stopPropagation(); // 이벤트 전파 방지
+        // Check if we should split task or just add newline
         const cursor = textareaRef.current?.selectionStart || 0;
         const textBefore = taskName.substring(0, cursor);
+
+        // Only split task if cursor is at the end (empty textAfter) or for list continuations
         const textAfter = taskName.substring(cursor);
-        
-        const numberMatch = textBefore.match(/^(\d+)\.\s/);
-        const bulletMatch = textBefore.match(/^-\s/);
-        
-        let newTextAfter = textAfter;
-        let prefixLen = 0;
-        if (numberMatch) {
-            const currentNum = parseInt(numberMatch[1], 10);
-            const prefix = `${currentNum + 1}. `;
-            newTextAfter = `${prefix}${textAfter}`;
-            prefixLen = prefix.length;
-        } else if (bulletMatch) {
-            const prefix = `- `;
-            newTextAfter = `${prefix}${textAfter}`;
-            prefixLen = prefix.length;
-        }
+        const shouldSplitTask = textAfter.length === 0 ||
+          textBefore.match(/^(\d+)\.\s/) ||
+          textBefore.match(/^-\s/);
 
-        if (prefixLen > 0) {
-            (window as any).__restoreCursorPos = prefixLen;
-        } else {
-             (window as any).__restoreCursorPos = 0;
-        }
+        if (shouldSplitTask) {
+          e.preventDefault();
+          e.stopPropagation(); // 이벤트 전파 방지
 
-        // 1. 현재 태스크 즉시 로컬 업데이트 (데이터 유실 방지)
-        setLocalText(textBefore);
-        if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-        
-        // 2. prop 동기화 차단
-        skipSyncRef.current = true;
-        setTimeout(() => { skipSyncRef.current = false; }, 100);
-        
-        // 3. 부모 컴포넌트에 추가 요청 (textAfter 전달)
-        onAddTaskAtCursor(task.id, textBefore, newTextAfter);
+          const numberMatch = textBefore.match(/^(\d+)\.\s/);
+          const bulletMatch = textBefore.match(/^-\s/);
+
+          let newTextAfter = textAfter;
+          let prefixLen = 0;
+          if (numberMatch) {
+              const currentNum = parseInt(numberMatch[1], 10);
+              const prefix = `${currentNum + 1}. `;
+              newTextAfter = `${prefix}${textAfter}`;
+              prefixLen = prefix.length;
+          } else if (bulletMatch) {
+              const prefix = `- `;
+              newTextAfter = `${prefix}${textAfter}`;
+              prefixLen = prefix.length;
+          }
+
+          if (prefixLen > 0) {
+              (window as any).__restoreCursorPos = prefixLen;
+          } else {
+               (window as any).__restoreCursorPos = 0;
+          }
+
+          // 1. 현재 태스크 즉시 로컬 업데이트 (데이터 유실 방지)
+          setLocalText(textBefore);
+          if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+
+          // 2. prop 동기화 차단
+          skipSyncRef.current = true;
+          setTimeout(() => { skipSyncRef.current = false; }, 100);
+
+          // 3. 부모 컴포넌트에 추가 요청 (textAfter 전달)
+          onAddTaskAtCursor(task.id, textBefore, newTextAfter);
+        }
+        // If not splitting, allow default Enter behavior (newline insertion)
       }
       return;
     }

@@ -292,53 +292,7 @@ export default function App() {
       
   }, [tasks, currentMemo, updateTasks, currentSpace, queryClient, viewDate, user]);
 
-  const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
-      const idx = tasks.findIndex(t => t.id === taskId);
-      if (idx === -1 || idx === 0) return;
-      
-      isInternalUpdate.current = true;
-      setTimeout(() => isInternalUpdate.current = false, 2000);
-      
-      const prevTask = tasks[idx - 1];
-      const mergedText = (prevTask.name || '') + currentText;
-      const newPos = (prevTask.name || '').length;
 
-      const next = tasks.filter((_, i) => i !== idx).map((t, i) =>
-          i === idx - 1 ? { ...t, name: mergedText, text: mergedText } : t
-      );
-      
-      // 즉시 캐시 업데이트
-      const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-      queryClient.setQueryData(queryKey, { tasks: next, memo: currentMemo });
-      
-      setFocusedTaskId(prevTask.id);
-      (window as any).__restoreCursorPos = newPos;
-      
-      updateTasks.mutate({ tasks: next, memo: currentMemo });
-  }, [tasks, currentMemo, updateTasks, viewDate, user, currentSpace, queryClient]);
-
-  const handleMergeWithNext = useCallback((taskId: number, currentText: string) => {
-      const idx = tasks.findIndex(t => t.id === taskId);
-      if (idx === -1 || idx >= tasks.length - 1) return;
-      
-      isInternalUpdate.current = true;
-      setTimeout(() => isInternalUpdate.current = false, 2000);
-      
-      const nextTask = tasks[idx + 1];
-      const mergedText = currentText + (nextTask.name || '');
-      
-      const next = tasks.filter((_, i) => i !== idx + 1).map((t, i) => 
-          i === idx ? { ...t, name: mergedText, text: mergedText } : t
-      );
-      
-
-      
-      // 즉시 캐시 업데이트
-      const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-      queryClient.setQueryData(queryKey, { tasks: next, memo: currentMemo });
-      
-      updateTasks.mutate({ tasks: next, memo: currentMemo });
-  }, [tasks, currentMemo, updateTasks, viewDate, user, currentSpace, queryClient]);
 
   const handleIndent = useCallback((taskId: number) => {
     if (selectedTaskIds.has(taskId)) {
@@ -654,12 +608,7 @@ export default function App() {
      }
   }, [viewDate, handleAddTaskAtCursor]);
 
-  const handleMergeTaskInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
-      if (date === viewDate.toDateString()) {
-          if (direction === 'prev') handleMergeWithPrevious(taskId, currentText);
-          else handleMergeWithNext(taskId, currentText);
-      }
-  }, [viewDate, handleMergeWithPrevious, handleMergeWithNext]);
+
 
   const handleIndentTaskInFlow = useCallback((date: string, taskId: number, direction: 'in' | 'out') => {
       if (date === viewDate.toDateString()) {
@@ -778,7 +727,6 @@ export default function App() {
                                       onTaskClick={onTaskClickWithRange} 
                                       logs={logs} 
                                   onAddTaskAtCursor={handleAddTaskAtCursor}
-                                  onMergeWithNext={handleMergeWithNext}
                                       onIndent={handleIndent} 
                                       onOutdent={handleOutdent} 
                                       onMoveUp={handleMoveUp} 
@@ -795,13 +743,12 @@ export default function App() {
                 </div>
             </>
         ) : (
-            <FlowView 
-                logs={logs} 
-                currentSpaceId={String(currentSpace?.id || '')} 
-                onUpdateTask={handleUpdateTaskInFlow} 
-                onAddTask={handleAddTaskInFlow} 
-                onMergeTask={handleMergeTaskInFlow} 
-                onIndentTask={handleIndentTaskInFlow} 
+            <FlowView
+                logs={logs}
+                currentSpaceId={String(currentSpace?.id || '')}
+                onUpdateTask={handleUpdateTaskInFlow}
+                onAddTask={handleAddTaskInFlow}
+                onIndentTask={handleIndentTaskInFlow}
                 onMoveTask={handleMoveTaskInFlow}
                 setFocusedTaskId={setFocusedTaskId}
                 focusedTaskId={focusedTaskId}

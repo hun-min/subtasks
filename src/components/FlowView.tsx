@@ -9,7 +9,6 @@ interface FlowViewProps {
   currentSpaceId: string;
   onUpdateTask: (date: string, taskId: number, updates: Partial<Task>) => void;
   onAddTask: (date: string, taskId: number, textBefore: string, textAfter: string) => void;
-  onMergeTask: (date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => void;
   onIndentTask: (date: string, taskId: number, direction: 'in' | 'out') => void;
   onMoveTask: (date: string, taskId: number, direction: 'up' | 'down') => void;
   setFocusedTaskId: (id: number | null) => void;
@@ -17,16 +16,15 @@ interface FlowViewProps {
   onViewDateChange?: (date: Date) => void;
 }
 
-export const FlowView: React.FC<FlowViewProps> = ({ 
-  logs, 
-  onUpdateTask, 
-  onAddTask, 
-  onMergeTask,
+export const FlowView: React.FC<FlowViewProps> = ({
+  logs,
+  onUpdateTask,
+  onAddTask,
   onIndentTask,
   onMoveTask,
-  setFocusedTaskId, 
-  focusedTaskId, 
-  onViewDateChange 
+  setFocusedTaskId,
+  focusedTaskId,
+  onViewDateChange
 }) => {
     // 1. Flatten Logs into Active Days (filtering out empty ones)
     const activeDays = useMemo(() => {
@@ -144,22 +142,20 @@ export const FlowView: React.FC<FlowViewProps> = ({
                    <div className="px-0">
                        <SortableContext items={log.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                            {log.tasks.map((t, i) => (
-                               <UnifiedTaskItem 
-                                   key={t.id} 
-                                   task={t} 
-                                   index={i} 
+                               <UnifiedTaskItem
+                                   key={t.id}
+                                   task={t}
+                                   index={i}
                                    updateTask={(tid, updates) => onUpdateTask(log.date, tid, updates)}
                                    setFocusedTaskId={setFocusedTaskId}
                                    focusedTaskId={focusedTaskId}
-                                   selectedTaskIds={new Set()} 
-                                   onTaskClick={() => {}} 
+                                   selectedTaskIds={new Set()}
+                                   onTaskClick={() => {}}
                                    logs={logs}
                                    onAddTaskAtCursor={(tid, before, after) => onAddTask(log.date, tid, before, after)}
-                                   onMergeWithPrevious={(tid, txt) => onMergeTask(log.date, tid, txt, 'prev')} 
-                                   onMergeWithNext={(tid, txt) => onMergeTask(log.date, tid, txt, 'next')} 
-                                   onIndent={(tid) => onIndentTask(log.date, tid, 'in')} 
-                                   onOutdent={(tid) => onIndentTask(log.date, tid, 'out')} 
-                                   onMoveUp={(tid) => onMoveTask(log.date, tid, 'up')} 
+                                   onIndent={(tid) => onIndentTask(log.date, tid, 'in')}
+                                   onOutdent={(tid) => onIndentTask(log.date, tid, 'out')}
+                                   onMoveUp={(tid) => onMoveTask(log.date, tid, 'up')}
                                    onMoveDown={(tid) => onMoveTask(log.date, tid, 'down')}
                                    onFocusPrev={handleFocusPrev}
                                    onFocusNext={handleFocusNext}

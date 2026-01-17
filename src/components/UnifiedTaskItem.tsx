@@ -25,19 +25,19 @@ export const UnifiedTaskItem = React.memo(({
   onDelete,
   onFocusPrev,
   onFocusNext
-}: { 
-  task: Task, 
+}: {
+  task: Task,
   index: number,
-  updateTask: (taskId: number, updates: Partial<Task>) => void, 
-  setFocusedTaskId: (id: number | null) => void, 
-  focusedTaskId: number | null, 
+  updateTask: (taskId: number, updates: Partial<Task>) => void,
+  setFocusedTaskId: (id: number | null) => void,
+  focusedTaskId: number | null,
   selectedTaskIds: Set<number>,
   onTaskClick: (e: React.MouseEvent, taskId: number, index: number) => void,
-  logs: DailyLog[], 
+  logs: DailyLog[],
   onAddTaskAtCursor: (taskId: number, textBefore: string, textAfter: string) => void,
   onMergeWithPrevious: (taskId: number, currentText: string) => void,
   onMergeWithNext: (taskId: number, currentText: string) => void,
-  onIndent: (taskId: number) => void, 
+  onIndent: (taskId: number) => void,
   onOutdent: (taskId: number) => void,
   onMoveUp: (taskId: number) => void,
   onMoveDown: (taskId: number) => void,
@@ -59,7 +59,7 @@ export const UnifiedTaskItem = React.memo(({
   const localTextRef = useRef(localText); // To access latest text in callbacks without re-creating them
   const updateTimeoutRef = useRef<any>(null);
   const skipSyncRef = useRef(false);
-  
+
   // Timer logic
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -107,10 +107,10 @@ export const UnifiedTaskItem = React.memo(({
     if (isFocused && textareaRef.current) {
        // Check if we already have focus to avoid messing with cursor during typing/re-renders
        const isAlreadyFocused = document.activeElement === textareaRef.current;
-       
+
        if (!isAlreadyFocused) {
           textareaRef.current.focus({ preventScroll: true });
-          
+
           // 커서 위치 복원 로직
           const restorePos = (window as any).__restoreCursorPos;
           if (typeof restorePos === 'number') {
@@ -132,7 +132,7 @@ export const UnifiedTaskItem = React.memo(({
           }
        }
     }
-  }, [task.depth, isFocused]); 
+  }, [task.depth, isFocused]);
 
   const [suggestions, setSuggestions] = useState<Task[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
@@ -143,12 +143,12 @@ export const UnifiedTaskItem = React.memo(({
     const query = taskName.slice(1).toLowerCase();
     const matches: Task[] = [];
     const seen = new Set();
-    [...logs].reverse().forEach(log => log.tasks.forEach(t => { 
+    [...logs].reverse().forEach(log => log.tasks.forEach(t => {
       const tName = t.name || t.text || '';
-      if (tName.toLowerCase().includes(query) && !seen.has(tName)) { 
-        matches.push(t); 
-        seen.add(tName); 
-      } 
+      if (tName.toLowerCase().includes(query) && !seen.has(tName)) {
+        matches.push(t);
+        seen.add(tName);
+      }
     }));
     setSuggestions(matches.slice(0, 5));
     setSelectedSuggestionIndex(-1);
@@ -156,9 +156,9 @@ export const UnifiedTaskItem = React.memo(({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isComposing.current) return;
-    
+
     const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
-    
+
     // Handle backspace/delete for empty tasks or normal editing
     if (e.key === 'Backspace' || e.key === 'Delete') {
       const currentText = textareaRef.current?.value || '';
@@ -179,7 +179,7 @@ export const UnifiedTaskItem = React.memo(({
       // Allow normal backspace/delete behavior for text editing
       return;
     }
-    
+
     // Suggestions navigation
     if (suggestions.length > 0) {
         if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
@@ -203,13 +203,13 @@ export const UnifiedTaskItem = React.memo(({
             onMoveUp(task.id);
             return;
         }
-        
+
         // Navigation: Check if cursor moves; if not, move focus
         if (!e.shiftKey && !e.metaKey) {
             const currentVal = textareaRef.current?.value || '';
             const startPos = textareaRef.current?.selectionStart ?? 0;
             const firstLineBreakIndex = currentVal.indexOf('\n');
-            
+
             // 첫 줄에 있거나, 한 줄 짜리 텍스트인데 위로 갈 때
             // startPos <= firstLineBreakIndex : 첫 줄에 커서가 있음
             // firstLineBreakIndex === -1 : 전체가 한 줄임
@@ -234,7 +234,7 @@ export const UnifiedTaskItem = React.memo(({
             const currentVal = textareaRef.current?.value || '';
             const startPos = textareaRef.current?.selectionStart ?? 0;
             const lastLineBreakIndex = currentVal.lastIndexOf('\n');
-            
+
             // 마지막 줄에 있을 때
             // lastLineBreakIndex === -1 : 전체가 한 줄 (무조건 마지막 줄)
             // startPos > lastLineBreakIndex : 마지막 줄바꿈 이후에 커서가 있음 (즉 마지막 줄)
@@ -251,7 +251,7 @@ export const UnifiedTaskItem = React.memo(({
     // 좌우 방향키로 항목 간 이동
     if (e.key === 'ArrowLeft') {
         if (e.shiftKey || e.metaKey || e.altKey || e.ctrlKey) return; // 조합키 제외
-        
+
         const cursor = textareaRef.current?.selectionStart || 0;
         if (cursor === 0) {
              e.preventDefault();
@@ -261,7 +261,7 @@ export const UnifiedTaskItem = React.memo(({
 
     if (e.key === 'ArrowRight') {
         if (e.shiftKey || e.metaKey || e.altKey || e.ctrlKey) return; // 조합키 제외
-        
+
         const cursor = textareaRef.current?.selectionStart || 0;
         const length = textareaRef.current?.value.length || 0;
         if (cursor === length) {
@@ -289,16 +289,16 @@ export const UnifiedTaskItem = React.memo(({
         e.preventDefault();
         e.stopPropagation(); // 이벤트 전파 방지
 
-        // 현재 태스크 아래에 새 빈 태스크 추가하고 포커스 이동
-        onAddTaskAtCursor(task.id, taskName, '');
+        // 다음 태스크로 포커스 이동
+        onFocusNext?.(task.id, 'start');
       }
       return;
     }
-    
-    if (e.key === 'Tab') { 
-      e.preventDefault(); 
-      if (e.shiftKey) onOutdent(task.id); else onIndent(task.id); 
-      return; 
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) onOutdent(task.id); else onIndent(task.id);
+      return;
     }
 
     // Ctrl + D: Toggle Star
@@ -314,7 +314,7 @@ export const UnifiedTaskItem = React.memo(({
       const newStatus = task.status === 'completed' ? 'pending' : 'completed';
       updateTask(task.id, { status: newStatus, isTimerOn: false });
     }
-    
+
     // Shift + Space: Toggle Timer
     if (e.shiftKey && (e.key === ' ' || e.code === 'Space')) {
       e.preventDefault();
@@ -391,7 +391,7 @@ export const UnifiedTaskItem = React.memo(({
 
     const newVal = e.target.value;
     if (newVal === undefined) return;
-    
+
     setLocalText(newVal);
     cursorRef.current = e.target.selectionStart;
 
@@ -404,33 +404,33 @@ export const UnifiedTaskItem = React.memo(({
 
   const handleBlur = useCallback((e: React.FocusEvent) => {
       isComposing.current = false;
-      
+
       // 플로팅 바로 포커스 이동하는 경우 focusedTaskId 유지
       if (e.relatedTarget?.closest?.('.floating-bar')) {
           return;
       }
-      
+
       // Clear debounce and save immediately
       if (updateTimeoutRef.current) {
           clearTimeout(updateTimeoutRef.current);
           updateTimeoutRef.current = null;
       }
-      
+
       const currentLocal = localTextRef.current;
       if ((task.name || task.text || '') !== currentLocal) {
           updateTask(task.id, { name: currentLocal, text: currentLocal });
       }
-      
+
       // Block prop sync briefly after blur
       skipSyncRef.current = true;
       setTimeout(() => { skipSyncRef.current = false; }, 200);
-      
+
       setFocusedTaskId(null);
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
     <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-white/[0.08]' : ''}`}>
-       
+
       {currentDepth > 0 && (
         <div className="flex flex-shrink-0 pt-1.5" onClick={(e) => onTaskClick(e, task.id, index)}>
           {Array.from({ length: currentDepth }).map((_, i) => (
@@ -446,15 +446,15 @@ export const UnifiedTaskItem = React.memo(({
           }}
           className={`absolute right-full mr-1.5 w-[15px] h-[15px] flex items-center justify-center transition-colors group/star cursor-pointer`}
         >
-          <Star 
-            size={13} 
+          <Star
+            size={13}
             className={`${
-              task.is_starred 
-                ? 'fill-yellow-400 text-yellow-400 opacity-100' 
-                : isFocused 
-                  ? 'text-gray-500 opacity-30 hover:opacity-100' 
+              task.is_starred
+                ? 'fill-yellow-400 text-yellow-400 opacity-100'
+                : isFocused
+                  ? 'text-gray-500 opacity-30 hover:opacity-100'
                   : 'opacity-0'
-            } transition-all`} 
+            } transition-all`}
           />
         </button>
         <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
@@ -463,28 +463,28 @@ export const UnifiedTaskItem = React.memo(({
         </button>
       </div>
       <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
-        <AutoResizeTextarea 
-            inputRef={textareaRef} 
-            value={localText} 
-            autoFocus={isFocused} 
-            onFocus={() => setFocusedTaskId(task.id)} 
+        <AutoResizeTextarea
+            inputRef={textareaRef}
+            value={localText}
+            autoFocus={isFocused}
+            onFocus={() => setFocusedTaskId(task.id)}
             onBlur={handleBlur}
-            onChange={handleTextChange} 
-            onKeyDown={handleKeyDown} 
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             onCompositionStart={() => { isComposing.current = true; }}
             onCompositionEnd={() => { isComposing.current = false; }}
-            className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`} 
-            placeholder="" 
+            className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`}
+            placeholder=""
         />
         {isFocused && localText === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
         {suggestions.length > 0 && (
           <div className="absolute left-0 top-full z-[110] mt-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[180px]">
-            {suggestions.map((s, idx) => <button key={idx} onClick={() => { 
+            {suggestions.map((s, idx) => <button key={idx} onClick={() => {
                 const newName = s.name || s.text || '';
                 setLocalText(newName);
-                updateTask(task.id, { name: newName, text: newName }); 
-                setSuggestions([]); 
+                updateTask(task.id, { name: newName, text: newName });
+                setSuggestions([]);
             }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.name || s.text || ''}</button>)}
           </div>
         )}
@@ -493,7 +493,6 @@ export const UnifiedTaskItem = React.memo(({
         {(() => {
           const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
           const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
-          console.log('Debug completion time:', { taskId: task.id, status: task.status, end_time: task.end_time, completionTimeDisplay });
           let displayText = '';
           if (timerDisplay) displayText = timerDisplay;
           if (completionTimeDisplay) {

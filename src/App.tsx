@@ -10,6 +10,7 @@ import { Play, Pause, BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight,
 import { Task, DailyLog } from './types';
 import { UnifiedTaskItem } from './components/UnifiedTaskItem';
 import { FlowView } from './components/FlowView';
+
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
 import { useTasks, useAllTaskLogs } from './hooks/useTasks';
 
@@ -291,55 +292,7 @@ export default function App() {
       
   }, [tasks, currentMemo, updateTasks, currentSpace, queryClient, viewDate, user]);
 
-  const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
-      const idx = tasks.findIndex(t => t.id === taskId);
-      if (idx === -1 || idx === 0) return;
-      
-      isInternalUpdate.current = true;
-      setTimeout(() => isInternalUpdate.current = false, 2000);
-      
-      const prevTask = tasks[idx - 1];
-      const mergedText = (prevTask.name || '') + currentText;
-      const newPos = (prevTask.name || '').length;
-      
-      const next = tasks.filter((_, i) => i !== idx).map((t, i) => 
-          i === idx - 1 ? { ...t, name: mergedText, text: mergedText } : t
-      );
-      
-      console.log('[Merge] prev:', prevTask.name, '+ current:', currentText, '= merged:', mergedText);
-      
-      // 즉시 캐시 업데이트
-      const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-      queryClient.setQueryData(queryKey, { tasks: next, memo: currentMemo });
-      
-      setFocusedTaskId(prevTask.id);
-      (window as any).__restoreCursorPos = newPos;
-      
-      updateTasks.mutate({ tasks: next, memo: currentMemo });
-  }, [tasks, currentMemo, updateTasks, viewDate, user, currentSpace, queryClient]);
 
-  const handleMergeWithNext = useCallback((taskId: number, currentText: string) => {
-      const idx = tasks.findIndex(t => t.id === taskId);
-      if (idx === -1 || idx >= tasks.length - 1) return;
-      
-      isInternalUpdate.current = true;
-      setTimeout(() => isInternalUpdate.current = false, 2000);
-      
-      const nextTask = tasks[idx + 1];
-      const mergedText = currentText + (nextTask.name || '');
-      
-      const next = tasks.filter((_, i) => i !== idx + 1).map((t, i) => 
-          i === idx ? { ...t, name: mergedText, text: mergedText } : t
-      );
-      
-      console.log('[Merge] current:', currentText, '+ next:', nextTask.name, '= merged:', mergedText);
-      
-      // 즉시 캐시 업데이트
-      const queryKey = ['tasks', viewDate.toDateString(), user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
-      queryClient.setQueryData(queryKey, { tasks: next, memo: currentMemo });
-      
-      updateTasks.mutate({ tasks: next, memo: currentMemo });
-  }, [tasks, currentMemo, updateTasks, viewDate, user, currentSpace, queryClient]);
 
   const handleIndent = useCallback((taskId: number) => {
     if (selectedTaskIds.has(taskId)) {
@@ -382,6 +335,14 @@ export default function App() {
       (window as any).__cursorPosition = cursorIndex;
     }
   }, [tasks]);
+
+  const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
+    // Placeholder - merge logic is handled in handleDeleteTask
+  }, []);
+
+  const handleMergeWithNext = useCallback((taskId: number, currentText: string) => {
+    // Placeholder - merge logic is handled in handleDeleteTask
+  }, []);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
@@ -466,10 +427,22 @@ export default function App() {
       // For empty tasks, merge with adjacent line instead of deleting
       if (options?.mergeDirection === 'prev' && taskIndex > 0) {
         // Backspace: merge with previous line
-        handleMergeWithPrevious(taskId, '');
+        const prevTask = tasks[taskIndex - 1];
+        const mergedText = (prevTask.name || '') + '';
+        const next = tasks.filter((_, i) => i !== taskIndex).map((t, i) =>
+          i === taskIndex - 1 ? { ...t, name: mergedText, text: mergedText } : t
+        );
+        updateTasks.mutate({ tasks: next, memo: currentMemo });
+        setFocusedTaskId(prevTask.id);
+        (window as any).__restoreCursorPos = (prevTask.name || '').length;
       } else if (options?.mergeDirection === 'next' && taskIndex < tasks.length - 1) {
         // Delete: merge with next line
-        handleMergeWithNext(taskId, '');
+        const nextTask = tasks[taskIndex + 1];
+        const mergedText = '' + (nextTask.name || '');
+        const next = tasks.filter((_, i) => i !== taskIndex + 1).map((t, i) =>
+          i === taskIndex ? { ...t, name: mergedText, text: mergedText } : t
+        );
+        updateTasks.mutate({ tasks: next, memo: currentMemo });
       } else {
         // No adjacent line to merge with, just delete normally
         const next = tasks.filter(t => t.id !== taskId);
@@ -482,7 +455,7 @@ export default function App() {
       updateTasks.mutate({ tasks: next, memo: currentMemo });
       setFocusedTaskId(null);
     }
-  }, [tasks, updateTasks, currentMemo, handleMergeWithPrevious, handleMergeWithNext]);
+  }, [tasks, updateTasks, currentMemo]);
 
   const handleCopyTask = useCallback((task: Task) => {
     const text = task.name || task.text || '';
@@ -676,12 +649,7 @@ export default function App() {
      }
   }, [viewDate, handleAddTaskAtCursor]);
 
-  const handleMergeTaskInFlow = useCallback((date: string, taskId: number, currentText: string, direction: 'prev' | 'next') => {
-      if (date === viewDate.toDateString()) {
-          if (direction === 'prev') handleMergeWithPrevious(taskId, currentText);
-          else handleMergeWithNext(taskId, currentText);
-      }
-  }, [viewDate, handleMergeWithPrevious, handleMergeWithNext]);
+
 
   const handleIndentTaskInFlow = useCallback((date: string, taskId: number, direction: 'in' | 'out') => {
       if (date === viewDate.toDateString()) {
@@ -777,7 +745,7 @@ export default function App() {
                     <div className="h-1.5 w-full bg-[#1a1a1f] rounded-full overflow-hidden mb-4">
                         <div className="h-full bg-[#7c4dff] transition-all duration-500" style={{ width: `${progressPercent}%` }} />
                     </div>
-                    <AutoResizeTextarea value={currentMemo || ''} onChange={(e: any) => { updateTasks.mutate({ tasks, memo: e.target.value }); }} placeholder="M E M O" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none" />
+                    <AutoResizeTextarea value={currentMemo || ''} onChange={(e: any) => { updateTasks.mutate({ tasks, memo: e.target.value }); }} placeholder="M E M O - Write anything here..." className="w-full bg-transparent text-[18px] text-[#e0e0e0] leading-[1.6] outline-none min-h-[200px] resize-none" />
                 </div>
                 <div className={`flex-1 space-y-8 pb-48 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
                   <div>
@@ -789,23 +757,23 @@ export default function App() {
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                           <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                               {tasks.map((t, i) => (
-                                  <UnifiedTaskItem 
-                                      key={t.id} 
-                                      task={t} 
-                                      index={i} 
-                                      updateTask={handleUpdateTask} 
-                                      setFocusedTaskId={setFocusedTaskId} 
-                                      focusedTaskId={focusedTaskId} 
-                                      selectedTaskIds={selectedTaskIds} 
-                                      onTaskClick={onTaskClickWithRange} 
-                                      logs={logs} 
-                                      onAddTaskAtCursor={handleAddTaskAtCursor} 
-                                      onMergeWithPrevious={handleMergeWithPrevious} 
-                                      onMergeWithNext={handleMergeWithNext} 
-                                      onIndent={handleIndent} 
-                                      onOutdent={handleOutdent} 
-                                      onMoveUp={handleMoveUp} 
-                                      onMoveDown={handleMoveDown} 
+                                  <UnifiedTaskItem
+                                      key={t.id}
+                                      task={t}
+                                      index={i}
+                                      updateTask={handleUpdateTask}
+                                      setFocusedTaskId={setFocusedTaskId}
+                                      focusedTaskId={focusedTaskId}
+                                      selectedTaskIds={selectedTaskIds}
+                                      onTaskClick={onTaskClickWithRange}
+                                      logs={logs}
+                                      onAddTaskAtCursor={handleAddTaskAtCursor}
+                                      onMergeWithPrevious={handleMergeWithPrevious}
+                                      onMergeWithNext={handleMergeWithNext}
+                                      onIndent={handleIndent}
+                                      onOutdent={handleOutdent}
+                                      onMoveUp={handleMoveUp}
+                                      onMoveDown={handleMoveDown}
                                       onDelete={handleDeleteTask}
                                       onCopy={handleCopyTask}
                                       onFocusPrev={handleFocusPrev}
@@ -818,13 +786,12 @@ export default function App() {
                 </div>
             </>
         ) : (
-            <FlowView 
-                logs={logs} 
-                currentSpaceId={String(currentSpace?.id || '')} 
-                onUpdateTask={handleUpdateTaskInFlow} 
-                onAddTask={handleAddTaskInFlow} 
-                onMergeTask={handleMergeTaskInFlow} 
-                onIndentTask={handleIndentTaskInFlow} 
+            <FlowView
+                logs={logs}
+                currentSpaceId={String(currentSpace?.id || '')}
+                onUpdateTask={handleUpdateTaskInFlow}
+                onAddTask={handleAddTaskInFlow}
+                onIndentTask={handleIndentTaskInFlow}
                 onMoveTask={handleMoveTaskInFlow}
                 setFocusedTaskId={setFocusedTaskId}
                 focusedTaskId={focusedTaskId}

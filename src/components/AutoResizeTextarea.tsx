@@ -28,20 +28,24 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
   }, [autoFocus, value]);
 
   return (
-    <textarea
-      ref={combinedRef}
-      rows={1}
-      value={value}
-      onChange={onChange}
-      onKeyDown={onKeyDown}
-      onFocus={onFocus}
-      onBlur={onBlur}
-      onPaste={onPaste}
-      onCompositionStart={onCompositionStart}
-      onCompositionEnd={onCompositionEnd}
-      placeholder={placeholder}
-      className={`resize-none overflow-hidden bg-transparent outline-none ${className}`}
-      style={{ minHeight: '18px' }}
-    />
+    <div>
+      <textarea
+        ref={combinedRef}
+        rows={1}
+        value={value}
+        onChange={onChange}
+        onKeyDown={(e) => {
+          onKeyDown(e);
+        }}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onPaste={onPaste}
+        onCompositionStart={onCompositionStart}
+        onCompositionEnd={onCompositionEnd}
+        placeholder={placeholder}
+        className={`resize-none overflow-hidden bg-transparent outline-none ${className}`}
+        style={{ minHeight: '18px' }}
+      />
+    </div>
   );
 });

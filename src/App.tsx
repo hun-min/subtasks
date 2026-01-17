@@ -427,12 +427,33 @@ export default function App() {
       }
   }, [tasks, selectedTaskIds, updateTasks, currentMemo]);
 
-  const handleDeleteTask = useCallback((taskId: number, options?: { mergeDirection?: 'prev' | 'next', currentText?: string }) => {
+  const handleDeleteTask = useCallback((taskId: number, options?: { mergeDirection?: 'prev' | 'next', currentText?: string, deleteNext?: boolean }) => {
     const taskIndex = tasks.findIndex(t => t.id === taskId);
     if (taskIndex === -1) return;
 
     const taskToDelete = tasks[taskIndex];
     const isEmpty = !(taskToDelete.name || taskToDelete.text || '').trim();
+
+    if (options?.deleteNext) {
+      const nextTaskIndex = taskIndex + 1;
+      if (nextTaskIndex < tasks.length) {
+        const nextTask = tasks[nextTaskIndex];
+        const nextTaskContent = (nextTask.name || nextTask.text || '').trim();
+
+        if (nextTaskContent === '') {
+          // 빈 줄이면 확인 없이 삭제
+          const nextTasks = tasks.filter((_, i) => i !== nextTaskIndex);
+          updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
+        } else {
+          // 내용이 있으면 확인 창
+          if (window.confirm("Delete the next line?")) {
+            const nextTasks = tasks.filter((_, i) => i !== nextTaskIndex);
+            updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
+          }
+        }
+      }
+      return;
+    }
 
     if (isEmpty) {
       // For empty tasks, merge with adjacent line instead of deleting

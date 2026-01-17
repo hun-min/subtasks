@@ -212,7 +212,7 @@ export const UnifiedTaskItem = React.memo(({
             // firstLineBreakIndex === -1 : 전체가 한 줄임
         if (firstLineBreakIndex === -1 || startPos <= firstLineBreakIndex) {
              e.preventDefault();
-             onFocusPrev?.(task.id, 'end');
+             onFocusPrev?.(task.id, startPos);
              return;
         }
             // 그 외(두 번째 줄 이상)는 브라우저 기본 동작

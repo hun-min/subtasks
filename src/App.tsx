@@ -446,9 +446,16 @@ export default function App() {
         updateTasks.mutate({ tasks: next, memo: currentMemo });
         setFocusedTaskId(prevTask.id);
         (window as any).__restoreCursorPos = (prevTask.name || '').length;
-      } else if (options?.mergeDirection === 'next' && taskIndex < tasks.length - 1) {
+  } else if (options?.mergeDirection === 'next' && taskIndex < tasks.length - 1) {
         // Delete: merge with next line
         const nextTask = tasks[taskIndex + 1];
+        const nextTaskContent = (nextTask.name || nextTask.text || '').trim();
+
+        // If next task has content, ask for confirmation
+        if (nextTaskContent && !window.confirm("Delete this task?")) {
+          return; // Don't merge if user cancels
+        }
+
         const mergedText = '' + (nextTask.name || '');
         const next = tasks.filter((_, i) => i !== taskIndex + 1).map((t, i) =>
           i === taskIndex ? { ...t, name: mergedText, text: mergedText } : t

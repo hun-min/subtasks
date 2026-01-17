@@ -153,6 +153,8 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                    onTaskClick={() => {}}
                                    logs={logs}
                                    onAddTaskAtCursor={(tid, before, after) => onAddTask(log.date, tid, before, after)}
+                                   onMergeWithPrevious={() => {}}
+                                   onMergeWithNext={() => {}}
                                    onIndent={(tid) => onIndentTask(log.date, tid, 'in')}
                                    onOutdent={(tid) => onIndentTask(log.date, tid, 'out')}
                                    onMoveUp={(tid) => onMoveTask(log.date, tid, 'up')}

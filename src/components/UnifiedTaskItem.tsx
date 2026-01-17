@@ -16,8 +16,7 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick,
   logs,
   onAddTaskAtCursor,
-  onMergeWithPrevious,
-  onMergeWithNext,
+
   onIndent,
   onOutdent,
   onMoveUp,
@@ -156,8 +155,6 @@ export const UnifiedTaskItem = React.memo(({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isComposing.current) return;
-
-    const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
 
     // Handle backspace/delete for empty tasks or normal editing
     if (e.key === 'Backspace' || e.key === 'Delete') {

@@ -336,11 +336,11 @@ export default function App() {
     }
   }, [tasks]);
 
-  const handleMergeWithPrevious = useCallback((taskId: number, currentText: string) => {
+  const handleMergeWithPrevious = useCallback((_taskId: number, _currentText: string) => {
     // Placeholder - merge logic is handled in handleDeleteTask
   }, []);
 
-  const handleMergeWithNext = useCallback((taskId: number, currentText: string) => {
+  const handleMergeWithNext = useCallback((_taskId: number, _currentText: string) => {
     // Placeholder - merge logic is handled in handleDeleteTask
   }, []);
 

@@ -35,7 +35,7 @@ export const AutoResizeTextarea = React.memo(({ value, onChange, onKeyDown, onFo
         value={value}
         onChange={onChange}
         onKeyDown={(e) => {
-          onKeyDown(e);
+          onKeyDown?.(e);
         }}
         onFocus={onFocus}
         onBlur={onBlur}

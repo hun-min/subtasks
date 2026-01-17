@@ -156,9 +156,10 @@ export const UnifiedTaskItem = React.memo(({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isComposing.current) return;
 
-    // Handle backspace/delete for empty tasks or normal editing
+    // Handle backspace/delete for empty tasks or end-of-line merging
     if (e.key === 'Backspace' || e.key === 'Delete') {
       const currentText = textareaRef.current?.value || '';
+      const cursorPos = textareaRef.current?.selectionStart || 0;
 
       // If task is empty, merge with adjacent line instead of deleting
       if (currentText === '' && onDelete) {
@@ -170,6 +171,14 @@ export const UnifiedTaskItem = React.memo(({
           // Delete: merge with next line (cursor stays)
           onDelete(task.id, { mergeDirection: 'next' });
         }
+        return;
+      }
+
+      // If cursor is at the end of a line with content, allow merging with next line
+      if (e.key === 'Delete' && cursorPos === currentText.length && currentText !== '' && onDelete) {
+        e.preventDefault();
+        // Delete at end of line: merge with next line
+        onDelete(task.id, { mergeDirection: 'next' });
         return;
       }
 

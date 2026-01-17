@@ -149,7 +149,6 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                    updateTask={(tid, updates) => onUpdateTask(log.date, tid, updates)}
                                    setFocusedTaskId={setFocusedTaskId}
                                    focusedTaskId={focusedTaskId}
-                                   selectedTaskIds={new Set()}
                                    onTaskClick={() => {}}
                                    logs={logs}
                                    onAddTaskAtCursor={(tid, before, after) => onAddTask(log.date, tid, before, after)}

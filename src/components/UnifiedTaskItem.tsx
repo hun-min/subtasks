@@ -12,7 +12,6 @@ export const UnifiedTaskItem = React.memo(({
   updateTask,
   setFocusedTaskId,
   focusedTaskId,
-  selectedTaskIds,
   onTaskClick,
   logs,
   onAddTaskAtCursor,
@@ -30,7 +29,6 @@ export const UnifiedTaskItem = React.memo(({
   updateTask: (taskId: number, updates: Partial<Task>) => void,
   setFocusedTaskId: (id: number | null) => void,
   focusedTaskId: number | null,
-  selectedTaskIds: Set<number>,
   onTaskClick: (e: React.MouseEvent, taskId: number, index: number) => void,
   logs: DailyLog[],
   onAddTaskAtCursor: (taskId: number, textBefore: string, textAfter: string) => void,
@@ -48,7 +46,6 @@ export const UnifiedTaskItem = React.memo(({
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
   const isFocused = focusedTaskId === task.id;
-  const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorRef = useRef<number | null>(null);
   const isComposing = useRef(false);

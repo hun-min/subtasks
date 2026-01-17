@@ -106,8 +106,16 @@ export default function App() {
   const swipeTouchStart = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
-  // Memo debouncing
+  // Memo state and debouncing
+  const [localMemo, setLocalMemo] = useState(currentMemo || '');
   const memoTimeoutRef = useRef<any>(null);
+
+  // Update local memo when currentMemo changes
+  useEffect(() => {
+    if (currentMemo !== localMemo) {
+      setLocalMemo(currentMemo || '');
+    }
+  }, [currentMemo]);
 
   // New State: View Mode
   const [viewMode, setViewMode] = useState<'day' | 'flow'>('day');
@@ -740,13 +748,21 @@ export default function App() {
                     <div className="h-1.5 w-full bg-[#1a1a1f] rounded-full overflow-hidden mb-4">
                         <div className="h-full bg-[#7c4dff] transition-all duration-500" style={{ width: `${progressPercent}%` }} />
                     </div>
-                    <AutoResizeTextarea value={currentMemo || ''} onChange={(e: any) => {
-                      const newValue = e.target.value;
-                      if (memoTimeoutRef.current) clearTimeout(memoTimeoutRef.current);
-                      memoTimeoutRef.current = setTimeout(() => {
-                        updateTasks.mutate({ tasks, memo: newValue });
-                      }, 500);
-                    }} onCompositionStart={() => {}} onCompositionEnd={() => {}} placeholder="M E M O" className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none" />
+                    <AutoResizeTextarea
+                      value={localMemo}
+                      onChange={(e: any) => {
+                        const newValue = e.target.value;
+                        setLocalMemo(newValue);
+                        if (memoTimeoutRef.current) clearTimeout(memoTimeoutRef.current);
+                        memoTimeoutRef.current = setTimeout(() => {
+                          updateTasks.mutate({ tasks, memo: newValue });
+                        }, 300);
+                      }}
+                      onCompositionStart={() => {}}
+                      onCompositionEnd={() => {}}
+                      placeholder="M E M O"
+                      className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none"
+                    />
                 </div>
                 <div className={`flex-1 space-y-8 pb-48 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
                   <div>

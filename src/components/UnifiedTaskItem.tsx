@@ -158,14 +158,14 @@ export const UnifiedTaskItem = React.memo(({
     
     const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
     
-    // Backspace at start: do nothing (disable merge with previous)
-    if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
+    // Backspace: disable all merge/delete operations
+    if (e.key === 'Backspace') {
       e.preventDefault();
       return;
     }
-    
-    // Delete at end: do nothing (disable merge with next)
-    if (e.key === 'Delete' && textareaRef.current?.selectionStart === taskName.length && textareaRef.current?.selectionEnd === taskName.length) {
+
+    // Delete: disable all merge/delete operations
+    if (e.key === 'Delete') {
       e.preventDefault();
       return;
     }

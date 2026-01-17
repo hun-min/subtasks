@@ -164,10 +164,9 @@ export const UnifiedTaskItem = React.memo(({
       return;
     }
     
-    // Delete at end: merge with next
+    // Delete at end: do nothing (disable merge with next)
     if (e.key === 'Delete' && textareaRef.current?.selectionStart === taskName.length && textareaRef.current?.selectionEnd === taskName.length) {
       e.preventDefault();
-      onMergeWithNext(task.id, taskName);
       return;
     }
     

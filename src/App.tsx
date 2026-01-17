@@ -781,6 +781,7 @@ export default function App() {
                                       updateTask={handleUpdateTask}
                                       setFocusedTaskId={setFocusedTaskId}
                                       focusedTaskId={focusedTaskId}
+                                      selectedTaskIds={selectedTaskIds}
                                       onTaskClick={onTaskClickWithRange}
                                       logs={logs}
                                       onAddTaskAtCursor={handleAddTaskAtCursor}

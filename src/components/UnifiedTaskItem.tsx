@@ -426,7 +426,7 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-white/[0.08]' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors`}>
 
       {currentDepth > 0 && (
         <div className="flex flex-shrink-0 pt-1.5" onClick={(e) => onTaskClick(e, task.id, index)}>

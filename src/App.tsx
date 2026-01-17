@@ -448,24 +448,28 @@ export default function App() {
         (window as any).__restoreCursorPos = (prevTask.name || '').length;
   } else if (options?.mergeDirection === 'next' && taskIndex < tasks.length - 1) {
         // Delete: merge with next line
+        const currentTask = tasks[taskIndex];
         const nextTask = tasks[taskIndex + 1];
-        const nextTaskContent = (nextTask.name || nextTask.text || '').trim();
 
-        // If next task has content, ask for confirmation
-        if (nextTaskContent && !window.confirm("Delete this task?")) {
-          return; // Don't merge if user cancels
-        }
+        // Always merge - no confirmation needed for line merging
+        // Merge current task content with next task content
+        const currentContent = (currentTask.name || currentTask.text || '');
+        const nextContent = (nextTask.name || nextTask.text || '');
+        const mergedText = currentContent + nextContent;
 
-        const mergedText = '' + (nextTask.name || '');
-        const next = tasks.filter((_, i) => i !== taskIndex + 1).map((t, i) =>
-          i === taskIndex ? { ...t, name: mergedText, text: mergedText } : t
-        );
-        updateTasks.mutate({ tasks: next, memo: currentMemo });
+        // Create new array by splicing
+        const newTasks = [...tasks];
+        newTasks[taskIndex] = { ...currentTask, name: mergedText, text: mergedText };
+        newTasks.splice(taskIndex + 1, 1); // Remove the next task
+
+        // Set cursor position after the merged content
+        setFocusedTaskId(currentTask.id);
+        (window as any).__restoreCursorPos = currentContent.length;
+
+        updateTasks.mutate({ tasks: newTasks, memo: currentMemo });
       } else {
-        // No adjacent line to merge with, just delete normally
-        const next = tasks.filter(t => t.id !== taskId);
-        updateTasks.mutate({ tasks: next, memo: currentMemo });
-        setFocusedTaskId(null);
+        // No adjacent line to merge with, do nothing
+        return;
       }
     } else if (window.confirm("Delete this task?")) {
       // For non-empty tasks, show confirmation
@@ -788,7 +792,6 @@ export default function App() {
                                       updateTask={handleUpdateTask}
                                       setFocusedTaskId={setFocusedTaskId}
                                       focusedTaskId={focusedTaskId}
-                                      selectedTaskIds={selectedTaskIds}
                                       onTaskClick={onTaskClickWithRange}
                                       logs={logs}
                                       onAddTaskAtCursor={handleAddTaskAtCursor}

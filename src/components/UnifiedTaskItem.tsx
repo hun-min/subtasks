@@ -12,7 +12,6 @@ export const UnifiedTaskItem = React.memo(({
   updateTask,
   setFocusedTaskId,
   focusedTaskId,
-  selectedTaskIds,
   onTaskClick,
   logs,
   onAddTaskAtCursor,
@@ -30,7 +29,6 @@ export const UnifiedTaskItem = React.memo(({
   updateTask: (taskId: number, updates: Partial<Task>) => void,
   setFocusedTaskId: (id: number | null) => void,
   focusedTaskId: number | null,
-  selectedTaskIds: Set<number>,
   onTaskClick: (e: React.MouseEvent, taskId: number, index: number) => void,
   logs: DailyLog[],
   onAddTaskAtCursor: (taskId: number, textBefore: string, textAfter: string) => void,
@@ -48,7 +46,6 @@ export const UnifiedTaskItem = React.memo(({
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
   const isFocused = focusedTaskId === task.id;
-  const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorRef = useRef<number | null>(null);
   const isComposing = useRef(false);
@@ -174,10 +171,10 @@ export const UnifiedTaskItem = React.memo(({
         return;
       }
 
-      // If cursor is at the end of a line with content, allow merging with next line
-      if (e.key === 'Delete' && cursorPos === currentText.length && currentText !== '' && onDelete) {
+      // If cursor is not at the beginning, allow merging with next line (like text editor)
+      if (e.key === 'Delete' && cursorPos > 0 && onDelete) {
         e.preventDefault();
-        // Delete at end of line: merge with next line
+        // Delete: merge with next line
         onDelete(task.id, { mergeDirection: 'next' });
         return;
       }

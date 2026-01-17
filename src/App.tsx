@@ -456,7 +456,8 @@ export default function App() {
           return; // Don't merge if user cancels
         }
 
-        const mergedText = '' + (nextTask.name || '');
+        const currentTaskContent = (tasks[taskIndex].name || tasks[taskIndex].text || '');
+        const mergedText = currentTaskContent + (nextTask.name || nextTask.text || '');
         const next = tasks.filter((_, i) => i !== taskIndex + 1).map((t, i) =>
           i === taskIndex ? { ...t, name: mergedText, text: mergedText } : t
         );

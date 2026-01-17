@@ -158,10 +158,9 @@ export const UnifiedTaskItem = React.memo(({
     
     const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
     
-    // Backspace at start: merge with previous
+    // Backspace at start: do nothing (disable merge with previous)
     if (e.key === 'Backspace' && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
-      onMergeWithPrevious(task.id, taskName);
       return;
     }
     

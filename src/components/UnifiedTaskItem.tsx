@@ -171,10 +171,10 @@ export const UnifiedTaskItem = React.memo(({
         return;
       }
 
-      // If cursor is not at the beginning, allow merging with next line (like text editor)
-      if (e.key === 'Delete' && cursorPos > 0 && onDelete) {
+      // If cursor is at the end of a line with content, allow merging with next line
+      if (e.key === 'Delete' && cursorPos === currentText.length && currentText !== '' && onDelete) {
         e.preventDefault();
-        // Delete: merge with next line
+        // Delete at end of line: merge with next line
         onDelete(task.id, { mergeDirection: 'next' });
         return;
       }

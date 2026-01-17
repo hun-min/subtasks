@@ -745,7 +745,7 @@ export default function App() {
                     <div className="h-1.5 w-full bg-[#1a1a1f] rounded-full overflow-hidden mb-4">
                         <div className="h-full bg-[#7c4dff] transition-all duration-500" style={{ width: `${progressPercent}%` }} />
                     </div>
-                    <AutoResizeTextarea value={currentMemo || ''} onChange={(e: any) => { updateTasks.mutate({ tasks, memo: e.target.value }); }} placeholder="M E M O - Write anything here..." className="w-full bg-transparent text-[18px] text-[#e0e0e0] leading-[1.6] outline-none min-h-[200px] resize-none" />
+                    <textarea value={currentMemo || ''} onChange={(e: any) => { updateTasks.mutate({ tasks, memo: e.target.value }); }} placeholder="M E M O - Write anything here..." className="w-full bg-transparent text-[18px] text-[#e0e0e0] leading-[1.6] outline-none min-h-[200px] resize-none" />
                 </div>
                 <div className={`flex-1 space-y-8 pb-48 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
                   <div>

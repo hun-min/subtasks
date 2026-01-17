@@ -210,11 +210,11 @@ export const UnifiedTaskItem = React.memo(({
             // 첫 줄에 있거나, 한 줄 짜리 텍스트인데 위로 갈 때
             // startPos <= firstLineBreakIndex : 첫 줄에 커서가 있음
             // firstLineBreakIndex === -1 : 전체가 한 줄임
-            if (firstLineBreakIndex === -1 || startPos <= firstLineBreakIndex) {
-                 e.preventDefault();
-                 onFocusPrev?.(task.id, startPos);
-                 return;
-            }
+        if (firstLineBreakIndex === -1 || startPos <= firstLineBreakIndex) {
+             e.preventDefault();
+             onFocusPrev?.(task.id, 'end');
+             return;
+        }
             // 그 외(두 번째 줄 이상)는 브라우저 기본 동작
         }
     }

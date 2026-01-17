@@ -560,14 +560,6 @@ export default function App() {
       }
 
       if (selectedTaskIds.size > 0 && !isInput) {
-          if (e.key === 'Delete' || e.key === 'Backspace') {
-            e.preventDefault();
-            const nextTasks = tasks.filter(t => !selectedTaskIds.has(t.id));
-            updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
-            setFocusedTaskId(null);
-            setSelectedTaskIds(new Set());
-            return;
-          }
           if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             const anyPending = tasks.some(t => selectedTaskIds.has(t.id) && t.status !== 'completed');

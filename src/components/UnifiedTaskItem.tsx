@@ -394,29 +394,37 @@ export const UnifiedTaskItem = React.memo(({
 
   const handleBlur = useCallback((e: React.FocusEvent) => {
       isComposing.current = false;
-      
+
       // 플로팅 바로 포커스 이동하는 경우 focusedTaskId 유지
       if (e.relatedTarget?.closest?.('.floating-bar')) {
           return;
       }
-      
+
       // Clear debounce and save immediately
       if (updateTimeoutRef.current) {
           clearTimeout(updateTimeoutRef.current);
           updateTimeoutRef.current = null;
       }
-      
+
       const currentLocal = localTextRef.current;
+
+      // 빈 태스크인 경우 자동 삭제
+      if (!currentLocal.trim()) {
+          onDelete?.(task.id);
+          setFocusedTaskId(null);
+          return;
+      }
+
       if ((task.name || task.text || '') !== currentLocal) {
           updateTask(task.id, { name: currentLocal, text: currentLocal });
       }
-      
+
       // Block prop sync briefly after blur
       skipSyncRef.current = true;
       setTimeout(() => { skipSyncRef.current = false; }, 200);
-      
+
       setFocusedTaskId(null);
-  }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
+  }, [task.name, task.text, task.id, updateTask, setFocusedTaskId, onDelete]);
 
   return (
     <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-white/[0.08]' : ''}`}>

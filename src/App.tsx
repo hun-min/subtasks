@@ -455,13 +455,34 @@ export default function App() {
       }
   }, [tasks, selectedTaskIds, updateTasks, currentMemo]);
 
-  const handleDeleteTask = useCallback((taskId: number) => {
-    if (window.confirm("Delete this task?")) { 
+  const handleDeleteTask = useCallback((taskId: number, options?: { mergeDirection?: 'prev' | 'next' }) => {
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    const taskToDelete = tasks[taskIndex];
+    const isEmpty = !(taskToDelete.name || taskToDelete.text || '').trim();
+
+    if (isEmpty) {
+      // For empty tasks, merge with adjacent line instead of deleting
+      if (options?.mergeDirection === 'prev' && taskIndex > 0) {
+        // Backspace: merge with previous line
+        handleMergeWithPrevious(taskId, '');
+      } else if (options?.mergeDirection === 'next' && taskIndex < tasks.length - 1) {
+        // Delete: merge with next line
+        handleMergeWithNext(taskId, '');
+      } else {
+        // No adjacent line to merge with, just delete normally
         const next = tasks.filter(t => t.id !== taskId);
         updateTasks.mutate({ tasks: next, memo: currentMemo });
-        setFocusedTaskId(null); 
-    } 
-  }, [tasks, updateTasks, currentMemo]);
+        setFocusedTaskId(null);
+      }
+    } else if (window.confirm("Delete this task?")) {
+      // For non-empty tasks, show confirmation
+      const next = tasks.filter(t => t.id !== taskId);
+      updateTasks.mutate({ tasks: next, memo: currentMemo });
+      setFocusedTaskId(null);
+    }
+  }, [tasks, updateTasks, currentMemo, handleMergeWithPrevious, handleMergeWithNext]);
 
   const handleCopyTask = useCallback((task: Task) => {
     const text = task.name || task.text || '';

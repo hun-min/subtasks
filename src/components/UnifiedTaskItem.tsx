@@ -6,22 +6,23 @@ import { Task, DailyLog } from '../types';
 import { formatTimeShort, formatCompletionTime } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 
-export const UnifiedTaskItem = React.memo(({ 
-  task, 
+export const UnifiedTaskItem = React.memo(({
+  task,
   index,
-  updateTask, 
-  setFocusedTaskId, 
+  updateTask,
+  setFocusedTaskId,
   focusedTaskId,
   selectedTaskIds,
   onTaskClick,
-  logs, 
+  logs,
   onAddTaskAtCursor,
   onMergeWithPrevious,
   onMergeWithNext,
-  onIndent, 
+  onIndent,
   onOutdent,
   onMoveUp,
   onMoveDown,
+  onDelete,
   onFocusPrev,
   onFocusNext
 }: { 
@@ -40,7 +41,7 @@ export const UnifiedTaskItem = React.memo(({
   onOutdent: (taskId: number) => void,
   onMoveUp: (taskId: number) => void,
   onMoveDown: (taskId: number) => void,
-  onDelete?: (taskId: number) => void,
+  onDelete?: (taskId: number, options?: { mergeDirection?: 'prev' | 'next' }) => void,
   onCopy?: (task: Task) => void,
   onFocusPrev?: (taskId: number, cursorIndex: number | 'start' | 'end') => void,
   onFocusNext?: (taskId: number, cursorIndex: number | 'start' | 'end') => void
@@ -158,15 +159,24 @@ export const UnifiedTaskItem = React.memo(({
     
     const taskName = textareaRef.current ? textareaRef.current.value : localTextRef.current;
     
-    // Backspace: disable all merge/delete operations
-    if (e.key === 'Backspace') {
-      e.preventDefault();
-      return;
-    }
+    // Handle backspace/delete for empty tasks or normal editing
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      const currentText = textareaRef.current?.value || '';
 
-    // Delete: disable all merge/delete operations
-    if (e.key === 'Delete') {
-      e.preventDefault();
+      // If task is empty, merge with adjacent line instead of deleting
+      if (currentText === '' && onDelete) {
+        e.preventDefault();
+        if (e.key === 'Backspace') {
+          // Backspace: merge with previous line (cursor moves up)
+          onDelete(task.id, { mergeDirection: 'prev' });
+        } else {
+          // Delete: merge with next line (cursor stays)
+          onDelete(task.id, { mergeDirection: 'next' });
+        }
+        return;
+      }
+
+      // Allow normal backspace/delete behavior for text editing
       return;
     }
     
@@ -343,7 +353,7 @@ export const UnifiedTaskItem = React.memo(({
          const cursor = e.currentTarget.selectionStart;
          const textBefore = currentText.substring(0, cursor);
          const textAfter = currentText.substring(cursor);
-         
+
          // Immediately update
          setLocalText(textBefore + firstLine);
          updateTask(task.id, { name: textBefore + firstLine, text: textBefore + firstLine });
@@ -353,10 +363,10 @@ export const UnifiedTaskItem = React.memo(({
          const currentText = localTextRef.current;
          const cursor = e.currentTarget.selectionStart;
          const newVal = currentText.substring(0, cursor) + text + currentText.substring(cursor);
-         
+
          setLocalText(newVal);
          updateTask(task.id, { name: newVal, text: newVal });
-         
+
          setTimeout(() => {
              if (textareaRef.current) {
                  textareaRef.current.selectionStart = textareaRef.current.selectionEnd = cursor + text.length;
@@ -394,37 +404,29 @@ export const UnifiedTaskItem = React.memo(({
 
   const handleBlur = useCallback((e: React.FocusEvent) => {
       isComposing.current = false;
-
+      
       // 플로팅 바로 포커스 이동하는 경우 focusedTaskId 유지
       if (e.relatedTarget?.closest?.('.floating-bar')) {
           return;
       }
-
+      
       // Clear debounce and save immediately
       if (updateTimeoutRef.current) {
           clearTimeout(updateTimeoutRef.current);
           updateTimeoutRef.current = null;
       }
-
+      
       const currentLocal = localTextRef.current;
-
-      // 빈 태스크인 경우 자동 삭제
-      if (!currentLocal.trim()) {
-          onDelete?.(task.id);
-          setFocusedTaskId(null);
-          return;
-      }
-
       if ((task.name || task.text || '') !== currentLocal) {
           updateTask(task.id, { name: currentLocal, text: currentLocal });
       }
-
+      
       // Block prop sync briefly after blur
       skipSyncRef.current = true;
       setTimeout(() => { skipSyncRef.current = false; }, 200);
-
+      
       setFocusedTaskId(null);
-  }, [task.name, task.text, task.id, updateTask, setFocusedTaskId, onDelete]);
+  }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
     <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''} ${isSelected ? 'bg-white/[0.08]' : ''}`}>

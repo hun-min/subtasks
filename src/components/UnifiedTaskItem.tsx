@@ -15,7 +15,7 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick,
   logs,
   onAddTaskAtCursor,
-  selectedTaskIds,
+  isSelected,
 
   onIndent,
   onOutdent,
@@ -33,9 +33,9 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick: (e: React.MouseEvent, taskId: number, index: number) => void,
   logs: DailyLog[],
   onAddTaskAtCursor: (taskId: number, textBefore: string, textAfter: string) => void,
-  selectedTaskIds: Set<number>,
   onMergeWithPrevious: (taskId: number, currentText: string) => void,
   onMergeWithNext: (taskId: number, currentText: string) => void,
+  isSelected?: boolean,
   onIndent: (taskId: number) => void,
   onOutdent: (taskId: number) => void,
   onMoveUp: (taskId: number) => void,
@@ -48,7 +48,6 @@ export const UnifiedTaskItem = React.memo(({
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
   const isFocused = focusedTaskId === task.id;
-  const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorRef = useRef<number | null>(null);
   const isComposing = useRef(false);
@@ -150,9 +149,12 @@ export const UnifiedTaskItem = React.memo(({
         const matches: Task[] = [];
         const seen = new Set();
         [...logs].reverse().forEach(log => log.tasks.forEach(t => {
-          const tName = t.name || t.text || '';
+          const tName = (t.name || t.text || '').trim();
           if (tName.toLowerCase().includes(query) && !seen.has(tName)) {
-            matches.push(t);
+            // [FIX] Strip leading / if it exists in the suggestion name (though usually it doesn't)
+            // The requirement is: "the suggestions should not include the leading slash (/). It should just show the task name."
+            const displayName = tName.startsWith('/') ? tName.slice(1) : tName;
+            matches.push({ ...t, name: displayName, text: displayName });
             seen.add(tName);
           }
         }));
@@ -203,9 +205,21 @@ export const UnifiedTaskItem = React.memo(({
         if (e.key === 'Enter' || e.key === 'Tab') {
             if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
                 e.preventDefault();
-                const selectedName = suggestions[selectedSuggestionIndex].name || suggestions[selectedSuggestionIndex].text || '';
-                setLocalText(selectedName);
-                updateTask(task.id, { name: selectedName, text: selectedName });
+                const selectedTask = suggestions[selectedSuggestionIndex];
+                const selectedName = selectedTask.name || selectedTask.text || '';
+                
+                // Ensure we don't have a leading slash in the final name
+                const finalName = selectedName.startsWith('/') ? selectedName.slice(1) : selectedName;
+                
+                setLocalText(finalName);
+                updateTask(task.id, { 
+                  name: finalName, 
+                  text: finalName,
+                  percent: selectedTask.percent,
+                  planTime: selectedTask.planTime,
+                  actTime: selectedTask.actTime,
+                  act_time: selectedTask.act_time
+                });
                 setSuggestions([]);
                 return;
             } else if (e.key === 'Enter' && localText.startsWith('/')) {
@@ -469,15 +483,13 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.06]' : isSelected ? 'bg-white/10' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 md:gap-3 py-0.5 px-2 transition-colors ${isFocused ? 'bg-zinc-800/20' : ''} ${(isSelected || false) ? 'bg-zinc-800/40' : ''}`}>
 
-      {currentDepth > 0 && (
-        <div className="flex flex-shrink-0 pt-1.5" onClick={(e) => onTaskClick(e, task.id, index)}>
-          {Array.from({ length: currentDepth }).map((_, i) => (
-            <div key={i} className="h-full border-r border-white/5" style={{ width: '15px' }} />
-          ))}
-        </div>
-      )}
+      <div className="flex flex-shrink-0" onClick={(e) => onTaskClick(e, task.id, index)}>
+        {Array.from({ length: currentDepth }).map((_, i) => (
+          <div key={i} className="h-full" style={{ width: '15px' }} />
+        ))}
+      </div>
       <div className="relative flex items-center justify-start mt-1.5 flex-shrink-0">
         <button
           onClick={(e) => {

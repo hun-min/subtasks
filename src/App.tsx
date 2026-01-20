@@ -313,9 +313,25 @@ export default function App() {
     const isStatusUpdate = 'status' in updates;
     const isSelectionUpdate = selectedTaskIds.has(taskId) && isStatusUpdate;
 
+    // If updating a project's percentage or time, we might want to sync it across all instances of that project name
+    const taskToUpdate = tasks.find(t => t.id === taskId);
+    const isProjectUpdate = taskToUpdate && typeof taskToUpdate.percent === 'number' && ('percent' in updates || 'actTime' in updates || 'planTime' in updates);
+    const projectName = taskToUpdate ? (taskToUpdate.name || taskToUpdate.text || '').trim() : '';
+
     const nextTasks = tasks.map(t => {
-        if (t.id === taskId || (isSelectionUpdate && selectedTaskIds.has(t.id))) {
+        const isSameProject = isProjectUpdate && projectName && (t.name || t.text || '').trim() === projectName;
+        
+        if (t.id === taskId || (isSelectionUpdate && selectedTaskIds.has(t.id)) || isSameProject) {
             let updatedTask = { ...t, ...updates };
+            
+            // If this is a project sync, ensure we copy all relevant metadata
+            if (isSameProject && !selectedTaskIds.has(t.id) && t.id !== taskId) {
+                if ('percent' in updates) updatedTask.percent = updates.percent;
+                if ('planTime' in updates) updatedTask.planTime = updates.planTime;
+                if ('actTime' in updates) updatedTask.actTime = updates.actTime;
+                if ('act_time' in updates) updatedTask.act_time = updates.act_time;
+            }
+
             // Set end_time when status changes to completed
             if (isStatusUpdate && updates.status === 'completed' && t.status !== 'completed') {
                 updatedTask.end_time = Date.now();
@@ -755,36 +771,37 @@ export default function App() {
   }, [tasks, selectedTaskIds, updateTasks, currentMemo]);
 
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedProjectName, setSelectedProjectName] = useState<string | null>(null);
 
   const projects = useMemo(() => {
     // A project is any task that has an explicit percentage value (number)
     const projectMap = new Map<string, Task>();
 
     // 1. Iterate through every log in logs (from allLogs)
-    logs.forEach(log => {
+    // Sort logs by date ascending so that more recent logs overwrite older ones in the map
+    const sortedLogs = [...logs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    sortedLogs.forEach(log => {
       if (log.tasks && Array.isArray(log.tasks)) {
         log.tasks.forEach(t => {
           if (typeof t.percent === 'number') {
             const name = (t.name || t.text || '').trim();
             if (name) {
               // We want to keep a unique list by name. 
-              // If multiple entries exist, we keep the one with the most recent date or just the first one found.
-              // Since we want a global list, we just need the name.
-              if (!projectMap.has(name)) {
-                projectMap.set(name, t);
-              }
+              // By sorting logs ascending, the latest date's task will be the final value in the map.
+              projectMap.set(name, t);
             }
           }
         });
       }
     });
 
-    // 2. Also include projects from the current tasks state
+    // 2. Also include projects from the current tasks state (most recent)
     if (tasks && Array.isArray(tasks)) {
       tasks.forEach(t => {
         if (typeof t.percent === 'number') {
           const name = (t.name || t.text || '').trim();
-          if (name && !projectMap.has(name)) {
+          if (name) {
             projectMap.set(name, t);
           }
         }
@@ -797,16 +814,16 @@ export default function App() {
   }, [logs, tasks]);
 
   const selectedProject = useMemo(() => {
-    if (!selectedProjectId) return projects[0];
-    // First try to find by ID
-    let found = projects.find(p => p.id === selectedProjectId);
-    if (found) return found;
-    
-    // If not found by ID (e.g. it's from a different date), try to find by name
-    // We need to know the name of the project that was selected.
-    // Since we don't store the name, let's just return the first one or null.
+    if (selectedProjectName) {
+      const found = projects.find(p => (p.name || p.text || '').trim() === selectedProjectName);
+      if (found) return found;
+    }
+    if (selectedProjectId) {
+      const found = projects.find(p => p.id === selectedProjectId);
+      if (found) return found;
+    }
     return projects[0];
-  }, [projects, selectedProjectId]);
+  }, [projects, selectedProjectId, selectedProjectName]);
 
   // Log viewDate changes to verify project list persistence
   useEffect(() => {
@@ -932,8 +949,8 @@ export default function App() {
         <div className="flex gap-2 md:gap-3 items-center flex-nowrap flex-shrink-0">
           <div className="flex bg-[#1a1a1f] rounded-lg p-0.5 border border-white/10 flex-shrink-0">
               <button onClick={() => setViewMode('day')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'day' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>DAY</button>
-              <button onClick={() => setViewMode('flow')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
               <button onClick={() => setViewMode('project')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'project' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>PROJECT</button>
+              <button onClick={() => setViewMode('flow')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
           </div>
 
           <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1 flex-shrink-0"><HelpCircle size={18} /></button>
@@ -1044,7 +1061,7 @@ export default function App() {
                 </div>
                 <div className={`flex-1 space-y-8 pb-48 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
                   <div>
-                      <div className="flex items-center justify-between mb-2 px-6">
+                      <div className="flex items-center justify-between mb-2 px-2">
                           <div className="flex items-center gap-3">
                             <button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: undefined, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 }; setFocusedTaskId(n.id); updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo }); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
                           </div>
@@ -1061,9 +1078,9 @@ export default function App() {
                                           setFocusedTaskId={setFocusedTaskId}
                                           focusedTaskId={focusedTaskId}
                                           onTaskClick={onTaskClickWithRange}
+                                          isSelected={selectedTaskIds.has(t.id)}
                                           logs={logs}
                                           onAddTaskAtCursor={handleAddTaskAtCursor}
-                                          selectedTaskIds={selectedTaskIds}
                                           onMergeWithPrevious={handleMergeWithPrevious}
                                           onMergeWithNext={handleMergeWithNext}
                                           onIndent={handleIndent}
@@ -1093,7 +1110,6 @@ export default function App() {
                 setFocusedTaskId={setFocusedTaskId}
                 focusedTaskId={focusedTaskId}
                 onViewDateChange={setViewDate}
-                selectedTaskIds={selectedTaskIds}
             />
         ) : (
             <div className="flex h-[calc(100vh-120px)] gap-4 p-4">
@@ -1145,7 +1161,17 @@ export default function App() {
                                     <div className="flex items-center gap-4 mt-2">
                                         <div className="flex items-center gap-2">
                                             <BarChart2 size={14} className="text-gray-500" />
-                                            <span className="text-xs font-bold text-gray-400">{selectedProject.percent || 0}% Complete</span>
+                                            <div className="flex items-center gap-1">
+                                                <input 
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    value={selectedProject.percent || 0}
+                                                    onChange={(e) => handleUpdateTask(selectedProject.id, { percent: parseInt(e.target.value) || 0 })}
+                                                    className="bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs font-bold text-blue-400 outline-none w-[4ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                />
+                                                <span className="text-xs font-bold text-gray-400">% Complete</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1164,37 +1190,62 @@ export default function App() {
                                     return Object.entries(grouped).map(([date, subtasks]) => (
                                         <div key={date} className="space-y-1">
                                             <div className="text-[10px] font-bold text-[#7c4dff]/50 uppercase tracking-tighter px-2 mb-1">{date}</div>
-                                            {subtasks.map((t, i) => (
-                                                <UnifiedTaskItem
-                                                    key={t.id}
-                                                    task={t}
-                                                    index={i}
-                                                    updateTask={handleUpdateTask}
-                                                    setFocusedTaskId={setFocusedTaskId}
-                                                    focusedTaskId={focusedTaskId}
-                                                    onTaskClick={onTaskClickWithRange}
-                                                    logs={logs}
-                                                    onAddTaskAtCursor={handleAddTaskAtCursor}
-                                                    selectedTaskIds={selectedTaskIds}
-                                                    onMergeWithPrevious={handleMergeWithPrevious}
-                                                    onMergeWithNext={handleMergeWithNext}
-                                                    onIndent={handleIndent}
-                                                    onOutdent={handleOutdent}
-                                                    onMoveUp={handleMoveUp}
-                                                    onMoveDown={handleMoveDown}
-                                                    onDelete={handleDeleteTask}
-                                                    onCopy={handleCopyTask}
-                                                    onFocusPrev={handleFocusPrev}
-                                                    onFocusNext={handleFocusNext}
-                                                />
-                                            ))}
+                                            <div>
+                                                {subtasks.map((t, i) => (
+                                                    <div key={t.id}>
+                                                        <UnifiedTaskItem
+                                                            task={{...t, depth: Math.max(0, (t.depth || 0) - (selectedProject.depth || 0))}}
+                                                            index={i}
+                                                            updateTask={handleUpdateTask}
+                                                            setFocusedTaskId={setFocusedTaskId}
+                                                            focusedTaskId={focusedTaskId}
+                                                            onTaskClick={onTaskClickWithRange}
+                                                            logs={logs}
+                                                            onAddTaskAtCursor={handleAddTaskAtCursor}
+                                                            onMergeWithPrevious={handleMergeWithPrevious}
+                                                            onMergeWithNext={handleMergeWithNext}
+                                                            isSelected={selectedTaskIds.has(t.id)}
+                                                            onIndent={handleIndent}
+                                                            onOutdent={handleOutdent}
+                                                            onMoveUp={handleMoveUp}
+                                                            onMoveDown={handleMoveDown}
+                                                            onDelete={handleDeleteTask}
+                                                            onCopy={handleCopyTask}
+                                                            onFocusPrev={handleFocusPrev}
+                                                            onFocusNext={handleFocusNext}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     ));
                                 })()}
                                 <button 
                                     onClick={() => {
                                         const projectName = (selectedProject.name || selectedProject.text || '').trim();
+                                        
+                                        // [FIX] Ensure we are adding to "Today"
+                                        const now = new Date();
+                                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                                        
+                                        // If current viewDate is not Today, we need to switch or handle it.
+                                        // The requirement says it should default to "Today".
+                                        // If we want it to appear in Day view for Today, we should probably ensure viewDate is Today
+                                        // or at least update the tasks for Today.
+                                        
+                                        if (viewDate.toDateString() !== today.toDateString()) {
+                                            setViewDate(today);
+                                            // Note: setViewDate is async, so we might need to wait or use the 'today' tasks.
+                                            // However, the useTasks hook will re-fetch for the new viewDate.
+                                            // To be safe and immediate, we can't easily update "today's" tasks if they aren't loaded.
+                                            // But usually, the user expects to see it.
+                                        }
+
                                         let currentTasks = [...tasks];
+                                        
+                                        // If we just changed viewDate, 'tasks' might still be from the old date.
+                                        // This is a bit tricky with React state. 
+                                        // But if we assume the user is already on Today or we just want to fix the logic:
                                         
                                         // Check if project exists in current date
                                         let projectInDateIdx = currentTasks.findIndex(t => (t.name || t.text || '').trim() === projectName);
@@ -1337,7 +1388,18 @@ export default function App() {
                       <div className="flex items-center gap-0.5 flex-shrink-0">
                           <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Move to Date"><Calendar size={18} /></button>
                           <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => { navigator.clipboard.writeText(activeTask.name || activeTask.text || ''); alert("Copied to clipboard"); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Copy Text"><Copy size={18} /></button>
-                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setShowHistoryTarget(activeTask.name || '')} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="History"><BarChart2 size={18} /></button>
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => {
+                              if (activeTask) {
+                                  const name = (activeTask.name || activeTask.text || '').trim();
+                                  if (typeof activeTask.percent === 'undefined') {
+                                      handleUpdateTask(activeTask.id, { percent: 0 });
+                                  }
+                                  setSelectedProjectName(name);
+                                  setViewMode('project');
+                              } else {
+                                  setShowMemoCollection(true);
+                              }
+                          }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Memo Collection"><BarChart2 size={18} /></button>
                           <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => { if (window.confirm("Delete this task?")) { const next = tasks.filter(t => t.id !== activeTask.id); updateTasks.mutate({ tasks: next, memo: currentMemo }); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
                       </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />

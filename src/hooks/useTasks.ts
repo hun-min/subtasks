@@ -40,7 +40,7 @@ export const migrateTasks = (tasks: any[]): Task[] => {
           depth: depth,
           actTime: Number(t.actTime ?? t.act_time ?? 0),
           planTime: Number(t.planTime) || 0,
-          percent: Number(t.percent) || 0,
+          percent: t.percent !== undefined && t.percent !== null ? Number(t.percent) : undefined,
           space_id: t.space_id || '',
           is_starred: t.is_starred || false,
           subtasks: undefined 
@@ -211,8 +211,31 @@ export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
   return useQuery({
     queryKey: ['all_tasks', userId, spaceId],
     queryFn: async () => {
-      if (!userId || !spaceId) return [];
+      if (!userId || !spaceId) {
+        // 비로그인 상태일 경우 로컬 스토리지에서 모든 tasks_ 키를 찾아 반환
+        try {
+          const logs: DailyLog[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('tasks_')) {
+              const saved = localStorage.getItem(key);
+              if (saved) {
+                const parsed = JSON.parse(saved);
+                logs.push({
+                  ...parsed,
+                  tasks: migrateTasks(parsed.tasks)
+                } as DailyLog);
+              }
+            }
+          }
+          return logs;
+        } catch (e) {
+          console.error("Local storage read error (all logs)", e);
+          return [];
+        }
+      }
       
+      console.log('Fetching ALL task logs for projects list...');
       const { data, error } = await supabase
         .from('task_logs')
         .select('*')
@@ -221,12 +244,14 @@ export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
         
       if (error) throw error;
       
-      return (data || []).map((row: any) => ({
+      const logs = (data || []).map((row: any) => ({
         ...row,
         tasks: migrateTasks(typeof row.tasks === 'string' ? JSON.parse(row.tasks) : row.tasks),
       })) as DailyLog[];
+      console.log(`Fetched ${logs.length} logs`);
+      return logs;
     },
-    enabled: !!userId && !!spaceId,
+    enabled: true,
     staleTime: 1000 * 60 * 10, // 10분
   });
 };

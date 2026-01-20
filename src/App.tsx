@@ -91,7 +91,10 @@ const DatePickerModal = React.memo(({ currentDate, onDateSelect, onClose }: { cu
           <input
             type="date"
             value={selectedDate.toISOString().split('T')[0]}
-            onChange={(e) => handleDateChange(new Date(e.target.value))}
+            onChange={(e) => {
+              const [y, m, d] = e.target.value.split('-').map(Number);
+              handleDateChange(new Date(y, m - 1, d));
+            }}
             className="w-full p-2 bg-zinc-800 border border-white/10 rounded-xl text-white"
           />
         </div>
@@ -147,7 +150,10 @@ export default function App() {
   const { user, signOut } = useAuth();
   const { currentSpace, spaces, setCurrentSpace } = useSpace();
 
-  const [viewDate, setViewDate] = useState(new Date());
+  const [viewDate, setViewDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const isInternalUpdate = useRef(false);
 
@@ -336,7 +342,7 @@ export default function App() {
         indent: current.indent, 
         parent: current.parent, 
         text: line,
-        percent: 0, 
+        percent: undefined, 
         planTime: 0, 
         actTime: 0, 
         isTimerOn: false, 
@@ -630,27 +636,31 @@ export default function App() {
   };
 
   const onTaskClickWithRange = useCallback((e: React.MouseEvent, taskId: number, index: number) => {
-      if (e.shiftKey && selectedTaskIds.size > 0) {
+      e.stopPropagation(); // Prevent global click handler from deselecting
+      
+      if (e.shiftKey && lastClickedIndex.current !== null) {
           const allIds = tasks.map(t => t.id);
-          const endIdx = allIds.indexOf(taskId);
-          const selectedIndices = allIds.map((id, idx) => selectedTaskIds.has(id) ? idx : -1).filter(i => i !== -1);
-          if (selectedIndices.length > 0) {
-              const min = Math.min(...selectedIndices, endIdx);
-              const max = Math.max(...selectedIndices, endIdx);
-              setSelectedTaskIds(new Set(allIds.slice(min, max + 1)));
-          } else {
-              setSelectedTaskIds(new Set([taskId]));
-          }
+          const startIdx = lastClickedIndex.current;
+          const endIdx = index;
+          
+          const min = Math.min(startIdx, endIdx);
+          const max = Math.max(startIdx, endIdx);
+          
+          const rangeIds = allIds.slice(min, max + 1);
+          setSelectedTaskIds(new Set(rangeIds));
       } else if (e.ctrlKey || e.metaKey) {
           setSelectedTaskIds(prev => {
               const newSet = new Set(prev);
               if (newSet.has(taskId)) newSet.delete(taskId); else newSet.add(taskId);
               return newSet;
           });
+          lastClickedIndex.current = index;
+      } else {
+          // Clear selection on single click and set as new starting point for shift-click
+          setSelectedTaskIds(new Set([taskId]));
+          lastClickedIndex.current = index;
       }
-      // No single click selection - only shift and ctrl
-      lastClickedIndex.current = index;
-  }, [selectedTaskIds, tasks]);
+  }, [tasks]);
 
   const handleSpaceChange = useCallback((space: any) => {
     setCurrentSpace(space);
@@ -747,30 +757,110 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
   const projects = useMemo(() => {
-    // A project is a task with depth 0 that has subtasks (tasks with depth > 0 following it)
-    // Or simply any task with depth 0 in 'project' view.
-    // For simplicity, let's treat all depth 0 tasks as potential projects.
-    return tasks.filter(t => (t.depth || 0) === 0);
-  }, [tasks]);
+    // A project is any task that has an explicit percentage value (number)
+    const projectMap = new Map<string, Task>();
+
+    // 1. Iterate through every log in logs (from allLogs)
+    logs.forEach(log => {
+      if (log.tasks && Array.isArray(log.tasks)) {
+        log.tasks.forEach(t => {
+          if (typeof t.percent === 'number') {
+            const name = (t.name || t.text || '').trim();
+            if (name) {
+              // We want to keep a unique list by name. 
+              // If multiple entries exist, we keep the one with the most recent date or just the first one found.
+              // Since we want a global list, we just need the name.
+              if (!projectMap.has(name)) {
+                projectMap.set(name, t);
+              }
+            }
+          }
+        });
+      }
+    });
+
+    // 2. Also include projects from the current tasks state
+    if (tasks && Array.isArray(tasks)) {
+      tasks.forEach(t => {
+        if (typeof t.percent === 'number') {
+          const name = (t.name || t.text || '').trim();
+          if (name && !projectMap.has(name)) {
+            projectMap.set(name, t);
+          }
+        }
+      });
+    }
+
+    const result = Array.from(projectMap.values());
+    console.log('Global Projects List:', result.map(p => p.name || p.text));
+    return result;
+  }, [logs, tasks]);
 
   const selectedProject = useMemo(() => {
-    return projects.find(p => p.id === selectedProjectId) || projects[0];
+    if (!selectedProjectId) return projects[0];
+    // First try to find by ID
+    let found = projects.find(p => p.id === selectedProjectId);
+    if (found) return found;
+    
+    // If not found by ID (e.g. it's from a different date), try to find by name
+    // We need to know the name of the project that was selected.
+    // Since we don't store the name, let's just return the first one or null.
+    return projects[0];
   }, [projects, selectedProjectId]);
+
+  // Log viewDate changes to verify project list persistence
+  useEffect(() => {
+    console.log('viewDate changed to:', viewDate.toDateString());
+    console.log('Current projects count:', projects.length);
+  }, [viewDate, projects.length]);
 
   const projectSubtasks = useMemo(() => {
     if (!selectedProject) return [];
-    const idx = tasks.findIndex(t => t.id === selectedProject.id);
-    if (idx === -1) return [];
-    const subtasks: Task[] = [];
-    for (let i = idx + 1; i < tasks.length; i++) {
-      if ((tasks[i].depth || 0) > 0) {
-        subtasks.push(tasks[i]);
-      } else {
-        break;
+    const projectName = (selectedProject.name || selectedProject.text || '').trim();
+    
+    const allSubtasks: (Task & { date?: string })[] = [];
+
+    // 1. Aggregate from allLogs
+    logs.forEach(log => {
+      const sourceTasks = log.tasks || [];
+      const projectInLog = sourceTasks.find((t: Task) => (t.name || t.text || '').trim() === projectName);
+      
+      if (projectInLog) {
+        const idx = sourceTasks.findIndex((t: Task) => t.id === projectInLog.id);
+        for (let i = idx + 1; i < sourceTasks.length; i++) {
+          if ((sourceTasks[i].depth || 0) > (projectInLog.depth || 0)) {
+            allSubtasks.push({ ...sourceTasks[i], date: log.date });
+          } else {
+            break;
+          }
+        }
+      }
+    });
+
+    // 2. Aggregate from current tasks (if not already in logs for today)
+    const todayStr = viewDate.toDateString();
+    const projectInTasks = tasks.find((t: Task) => (t.name || t.text || '').trim() === projectName);
+    if (projectInTasks) {
+      const idx = tasks.findIndex((t: Task) => t.id === projectInTasks.id);
+      for (let i = idx + 1; i < tasks.length; i++) {
+        if ((tasks[i].depth || 0) > (projectInTasks.depth || 0)) {
+          // Avoid duplicates if the same subtask is already in allSubtasks for today
+          const exists = allSubtasks.some(st => st.id === tasks[i].id);
+          if (!exists) {
+            allSubtasks.push({ ...tasks[i], date: todayStr });
+          }
+        } else {
+          break;
+        }
       }
     }
-    return subtasks;
-  }, [tasks, selectedProject]);
+
+    // Sort by date descending
+    return allSubtasks.sort((a, b) => {
+      if (!a.date || !b.date) return 0;
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+  }, [logs, tasks, selectedProject, viewDate]);
 
   // --- Flow View Handlers ---
   // Flow view updates multiple dates, which isn't directly supported by the single-date useTasks hook.
@@ -810,10 +900,34 @@ export default function App() {
       }
   }, [viewDate, handleMoveUp, handleMoveDown]);
 
+  useEffect(() => {
+    const handleOpenHistory = (e: any) => {
+      const taskName = e.detail.taskName;
+      if (taskName) {
+        setShowHistoryTarget(taskName);
+      }
+    };
+    window.addEventListener('open-history', handleOpenHistory);
+    return () => window.removeEventListener('open-history', handleOpenHistory);
+  }, []);
+
   return (
-    <div className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden" style={{ height: 'var(--app-height, 100vh)' }}>
+    <div 
+      className="flex flex-col h-full bg-[#050505] text-[#e0e0e0] font-sans overflow-hidden" 
+      style={{ height: 'var(--app-height, 100vh)' }}
+      onClick={(e) => {
+        // Only deselect if clicking directly on the background container
+        if (e.target === e.currentTarget) {
+          setSelectedTaskIds(new Set());
+          setFocusedTaskId(null);
+        }
+      }}
+    >
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
-      <nav className="flex-none flex items-center justify-between px-2 py-3 md:p-4 max-w-xl mx-auto w-full flex-nowrap overflow-x-auto no-scrollbar">
+      <nav 
+        className="flex-none flex items-center justify-between px-2 py-3 md:p-4 max-w-xl mx-auto w-full flex-nowrap overflow-x-auto no-scrollbar"
+        onClick={(e) => e.stopPropagation()}
+      >
         <SpaceSelector onSpaceChange={handleSpaceChange} />
         <div className="flex gap-2 md:gap-3 items-center flex-nowrap flex-shrink-0">
           <div className="flex bg-[#1a1a1f] rounded-lg p-0.5 border border-white/10 flex-shrink-0">
@@ -827,18 +941,27 @@ export default function App() {
         </div>
       </nav>
       <div className="flex-1 overflow-y-auto no-scrollbar relative">
-        <div className="max-w-xl mx-auto flex flex-col px-2 md:px-4 pb-4">
+        <div 
+          className="max-w-xl mx-auto flex flex-col px-2 md:px-4 pb-4"
+          onClick={(e) => e.stopPropagation()}
+        >
         {viewMode === 'day' ? (
             <>
                 <div className={`calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`} onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
                    <div className="relative flex justify-between items-center mb-5 px-1">
                      <button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button>
-                     <div className="text-center cursor-pointer" onClick={() => setViewDate(new Date())}>
+                     <div className="text-center cursor-pointer" onClick={() => {
+                       const now = new Date();
+                       setViewDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+                     }}>
                        <div className="text-[11px] text-gray-500 uppercase tracking-widest font-bold">{year}</div>
                        <div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div>
                      </div>
                      <button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button>
-                     <button onClick={() => setViewDate(new Date())} className="absolute top-3 right-12 p-2 hover:bg-white/5 rounded-full text-gray-400 transition-colors flex items-center justify-center">
+                     <button onClick={() => {
+                       const now = new Date();
+                       setViewDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+                     }} className="absolute top-3 right-12 p-2 hover:bg-white/5 rounded-full text-gray-400 transition-colors flex items-center justify-center">
                        <div className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
                      </button>
                    </div>
@@ -848,7 +971,9 @@ export default function App() {
                        // Check logs for completion status
                        const l = logs.find(log => log.date === d.toDateString());
                        const hasCompleted = l?.tasks.some(t => t.status === 'completed');
-                       const isToday = d.toDateString() === new Date().toDateString();
+                       const now = new Date();
+                       const todayStr = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toDateString();
+                       const isToday = d.toDateString() === todayStr;
                        const isSelected = d.toDateString() === viewDate.toDateString();
                        
                         const streakCount = getStreakAtDate(d);
@@ -921,35 +1046,37 @@ export default function App() {
                   <div>
                       <div className="flex items-center justify-between mb-2 px-6">
                           <div className="flex items-center gap-3">
-                            <button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 }; setFocusedTaskId(n.id); updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo }); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
+                            <button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: undefined, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 }; setFocusedTaskId(n.id); updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo }); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
                           </div>
                       </div>
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                           <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                              {tasks.map((t, i) => (
-                                  <UnifiedTaskItem
-                                      key={t.id}
-                                      task={t}
-                                      index={i}
-                                      updateTask={handleUpdateTask}
-                                      setFocusedTaskId={setFocusedTaskId}
-                                      focusedTaskId={focusedTaskId}
-                                      onTaskClick={onTaskClickWithRange}
-                                      logs={logs}
-                                      onAddTaskAtCursor={handleAddTaskAtCursor}
-                                      selectedTaskIds={selectedTaskIds}
-                                      onMergeWithPrevious={handleMergeWithPrevious}
-                                      onMergeWithNext={handleMergeWithNext}
-                                      onIndent={handleIndent}
-                                      onOutdent={handleOutdent}
-                                      onMoveUp={handleMoveUp}
-                                      onMoveDown={handleMoveDown}
-                                      onDelete={handleDeleteTask}
-                                      onCopy={handleCopyTask}
-                                      onFocusPrev={handleFocusPrev}
-                                      onFocusNext={handleFocusNext}
-                                  />
-                              ))}
+                              {tasks.map((t, i) => {
+                                  return (
+                                      <UnifiedTaskItem
+                                          key={t.id}
+                                          task={t}
+                                          index={i}
+                                          updateTask={handleUpdateTask}
+                                          setFocusedTaskId={setFocusedTaskId}
+                                          focusedTaskId={focusedTaskId}
+                                          onTaskClick={onTaskClickWithRange}
+                                          logs={logs}
+                                          onAddTaskAtCursor={handleAddTaskAtCursor}
+                                          selectedTaskIds={selectedTaskIds}
+                                          onMergeWithPrevious={handleMergeWithPrevious}
+                                          onMergeWithNext={handleMergeWithNext}
+                                          onIndent={handleIndent}
+                                          onOutdent={handleOutdent}
+                                          onMoveUp={handleMoveUp}
+                                          onMoveDown={handleMoveDown}
+                                          onDelete={handleDeleteTask}
+                                          onCopy={handleCopyTask}
+                                          onFocusPrev={handleFocusPrev}
+                                          onFocusNext={handleFocusNext}
+                                      />
+                                  );
+                              })}
                           </SortableContext>
                       </DndContext>
                   </div>
@@ -976,12 +1103,12 @@ export default function App() {
                     <div className="space-y-2">
                         {projects.map(project => (
                             <button
-                                key={project.id}
+                                key={`${project.id}-${project.name || project.text}`}
                                 onClick={() => setSelectedProjectId(project.id)}
-                                className={`w-full text-left p-3 rounded-2xl transition-all border ${selectedProjectId === project.id ? 'bg-[#7c4dff]/10 border-[#7c4dff]/30' : 'bg-white/5 border-transparent hover:bg-white/10'}`}
+                                className={`w-full text-left p-3 rounded-2xl transition-all border ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'bg-[#7c4dff]/10 border-[#7c4dff]/30' : 'bg-white/5 border-transparent hover:bg-white/10'}`}
                             >
                                 <div className="flex justify-between items-center mb-2">
-                                    <span className={`font-bold text-sm truncate ${selectedProjectId === project.id ? 'text-white' : 'text-gray-400'}`}>{project.name || project.text || 'Untitled Project'}</span>
+                                    <span className={`font-bold text-sm truncate ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'text-white' : 'text-gray-400'}`}>{project.name || project.text || 'Untitled Project'}</span>
                                     <span className="text-[10px] font-black text-[#7c4dff]">{project.percent || 0}%</span>
                                 </div>
                                 <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden">
@@ -992,6 +1119,7 @@ export default function App() {
                         <button 
                             onClick={() => {
                                 const n: Task = { id: Date.now(), name: 'New Project', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: 'New Project', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 };
+                                // Add to current date's tasks to make it a project
                                 updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo });
                                 setSelectedProjectId(n.id);
                             }}
@@ -1016,15 +1144,6 @@ export default function App() {
                                     />
                                     <div className="flex items-center gap-4 mt-2">
                                         <div className="flex items-center gap-2">
-                                            <Calendar size={14} className="text-gray-500" />
-                                            <input 
-                                                type="date"
-                                                value={viewDate.toISOString().split('T')[0]}
-                                                onChange={(e) => setViewDate(new Date(e.target.value))}
-                                                className="bg-transparent text-xs font-bold text-gray-400 outline-none"
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-2">
                                             <BarChart2 size={14} className="text-gray-500" />
                                             <span className="text-xs font-bold text-gray-400">{selectedProject.percent || 0}% Complete</span>
                                         </div>
@@ -1032,38 +1151,70 @@ export default function App() {
                                 </div>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto no-scrollbar space-y-1">
+                            <div className="flex-1 overflow-y-auto no-scrollbar space-y-4">
                                 <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Subtasks</h3>
-                                {projectSubtasks.map((t, i) => (
-                                    <UnifiedTaskItem
-                                        key={t.id}
-                                        task={t}
-                                        index={i}
-                                        updateTask={handleUpdateTask}
-                                        setFocusedTaskId={setFocusedTaskId}
-                                        focusedTaskId={focusedTaskId}
-                                        onTaskClick={onTaskClickWithRange}
-                                        logs={logs}
-                                        onAddTaskAtCursor={handleAddTaskAtCursor}
-                                        selectedTaskIds={selectedTaskIds}
-                                        onMergeWithPrevious={handleMergeWithPrevious}
-                                        onMergeWithNext={handleMergeWithNext}
-                                        onIndent={handleIndent}
-                                        onOutdent={handleOutdent}
-                                        onMoveUp={handleMoveUp}
-                                        onMoveDown={handleMoveDown}
-                                        onDelete={handleDeleteTask}
-                                        onCopy={handleCopyTask}
-                                        onFocusPrev={handleFocusPrev}
-                                        onFocusNext={handleFocusNext}
-                                    />
-                                ))}
+                                {(() => {
+                                    const grouped = projectSubtasks.reduce((acc, task) => {
+                                        const date = task.date || 'Unknown Date';
+                                        if (!acc[date]) acc[date] = [];
+                                        acc[date].push(task);
+                                        return acc;
+                                    }, {} as Record<string, any[]>);
+
+                                    return Object.entries(grouped).map(([date, subtasks]) => (
+                                        <div key={date} className="space-y-1">
+                                            <div className="text-[10px] font-bold text-[#7c4dff]/50 uppercase tracking-tighter px-2 mb-1">{date}</div>
+                                            {subtasks.map((t, i) => (
+                                                <UnifiedTaskItem
+                                                    key={t.id}
+                                                    task={t}
+                                                    index={i}
+                                                    updateTask={handleUpdateTask}
+                                                    setFocusedTaskId={setFocusedTaskId}
+                                                    focusedTaskId={focusedTaskId}
+                                                    onTaskClick={onTaskClickWithRange}
+                                                    logs={logs}
+                                                    onAddTaskAtCursor={handleAddTaskAtCursor}
+                                                    selectedTaskIds={selectedTaskIds}
+                                                    onMergeWithPrevious={handleMergeWithPrevious}
+                                                    onMergeWithNext={handleMergeWithNext}
+                                                    onIndent={handleIndent}
+                                                    onOutdent={handleOutdent}
+                                                    onMoveUp={handleMoveUp}
+                                                    onMoveDown={handleMoveDown}
+                                                    onDelete={handleDeleteTask}
+                                                    onCopy={handleCopyTask}
+                                                    onFocusPrev={handleFocusPrev}
+                                                    onFocusNext={handleFocusNext}
+                                                />
+                                            ))}
+                                        </div>
+                                    ));
+                                })()}
                                 <button 
                                     onClick={() => {
-                                        const idx = tasks.findIndex(t => t.id === selectedProject.id);
-                                        let lastSubtaskIdx = idx;
-                                        for (let j = idx + 1; j < tasks.length; j++) {
-                                            if ((tasks[j].depth || 0) > 0) {
+                                        const projectName = (selectedProject.name || selectedProject.text || '').trim();
+                                        let currentTasks = [...tasks];
+                                        
+                                        // Check if project exists in current date
+                                        let projectInDateIdx = currentTasks.findIndex(t => (t.name || t.text || '').trim() === projectName);
+                                        
+                                        if (projectInDateIdx === -1) {
+                                            // Create project entry for this date
+                                            const newProjectTask: Task = { 
+                                                ...selectedProject, 
+                                                id: Date.now(), 
+                                                space_id: String(currentSpace?.id || ''),
+                                                depth: 0 
+                                            };
+                                            currentTasks.push(newProjectTask);
+                                            projectInDateIdx = currentTasks.length - 1;
+                                        }
+
+                                        const projectInDate = currentTasks[projectInDateIdx];
+                                        let lastSubtaskIdx = projectInDateIdx;
+                                        for (let j = projectInDateIdx + 1; j < currentTasks.length; j++) {
+                                            if ((currentTasks[j].depth || 0) > (projectInDate.depth || 0)) {
                                                 lastSubtaskIdx = j;
                                             } else {
                                                 break;
@@ -1071,10 +1222,22 @@ export default function App() {
                                         }
                                         const insertIdx = lastSubtaskIdx + 1;
                                         
-                                        const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: selectedProject.id, space_id: String(currentSpace?.id || ''), text: '', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 1 };
-                                        const next = [...tasks];
-                                        next.splice(insertIdx, 0, n);
-                                        updateTasks.mutate({ tasks: next, memo: currentMemo });
+                                        const n: Task = { 
+                                            id: Date.now() + 1, 
+                                            name: '', 
+                                            status: 'pending', 
+                                            indent: 0, 
+                                            parent: projectInDate.id, 
+                                            space_id: String(currentSpace?.id || ''), 
+                                            text: '', 
+                                            percent: undefined, 
+                                            planTime: 0, 
+                                            actTime: 0, 
+                                            isTimerOn: false, 
+                                            depth: (projectInDate.depth || 0) + 1 
+                                        };
+                                        currentTasks.splice(insertIdx, 0, n);
+                                        updateTasks.mutate({ tasks: currentTasks, memo: currentMemo });
                                         setFocusedTaskId(n.id);
                                     }}
                                     className="w-full py-2 text-gray-600 hover:text-gray-400 transition-colors flex items-center gap-2 text-sm font-bold"
@@ -1154,8 +1317,10 @@ export default function App() {
                                         min="0"
                                         max="100"
                                         value={activeTask.percent || 0}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onClick={(e) => e.stopPropagation()}
                                         onChange={(e) => handleUpdateTask(activeTask.id, { percent: parseInt(e.target.value) || 0 })}
-                                        className="bg-transparent text-[18px] font-black font-mono text-blue-400 outline-none w-[3ch] text-center"
+                                        className="bg-transparent text-[18px] font-black font-mono text-blue-400 outline-none w-[3ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
                                     <span className="text-[14px] font-black text-blue-400">%</span>
                                 </div>
@@ -1199,8 +1364,10 @@ export default function App() {
                 {Array.from({ length: 35 }).map((_, i) => {
                    const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
                    d.setDate(d.getDate() + (i - d.getDay()));
+                   const now = new Date();
+                   const todayStr = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toDateString();
                    return (
-                    <button key={i} onClick={() => { handleMoveSelectedToDate(d.toDateString()); setShowDatePicker(false); }} className={`aspect-square rounded-lg border flex items-center justify-center ${d.toDateString() === new Date().toDateString() ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>
+                    <button key={i} onClick={() => { handleMoveSelectedToDate(d.toDateString()); setShowDatePicker(false); }} className={`aspect-square rounded-lg border flex items-center justify-center ${d.toDateString() === todayStr ? 'border-blue-500 text-blue-400' : 'border-gray-800 text-gray-400'}`}><span className="text-sm">{d.getDate()}</span></button>
                    );
                 })}
               </div>

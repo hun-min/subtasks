@@ -138,19 +138,29 @@ export const UnifiedTaskItem = React.memo(({
 
   useEffect(() => {
     const taskName = localText; // Use localText
-    if (!isFocused || !taskName.startsWith('/')) { setSuggestions([]); return; }
-    const query = taskName.slice(1).toLowerCase();
-    const matches: Task[] = [];
-    const seen = new Set();
-    [...logs].reverse().forEach(log => log.tasks.forEach(t => {
-      const tName = t.name || t.text || '';
-      if (tName.toLowerCase().includes(query) && !seen.has(tName)) {
-        matches.push(t);
-        seen.add(tName);
-      }
-    }));
-    setSuggestions(matches.slice(0, 5));
-    setSelectedSuggestionIndex(-1);
+    if (!isFocused) { setSuggestions([]); return; }
+    
+    // If it starts with /, it's a command/search
+    if (taskName.startsWith('/')) {
+        const query = taskName.slice(1).toLowerCase();
+        if (query === 'history') {
+            setSuggestions([]); // /history is a command, not a suggestion trigger usually
+            return;
+        }
+        const matches: Task[] = [];
+        const seen = new Set();
+        [...logs].reverse().forEach(log => log.tasks.forEach(t => {
+          const tName = t.name || t.text || '';
+          if (tName.toLowerCase().includes(query) && !seen.has(tName)) {
+            matches.push(t);
+            seen.add(tName);
+          }
+        }));
+        setSuggestions(matches.slice(0, 5));
+        setSelectedSuggestionIndex(-1);
+    } else {
+        setSuggestions([]);
+    }
   }, [localText, isFocused, logs]); // Use localText
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -190,7 +200,7 @@ export const UnifiedTaskItem = React.memo(({
     if (suggestions.length > 0) {
         if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : prev); return; }
         if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1); return; }
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' || e.key === 'Tab') {
             if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
                 e.preventDefault();
                 const selectedName = suggestions[selectedSuggestionIndex].name || suggestions[selectedSuggestionIndex].text || '';
@@ -198,8 +208,32 @@ export const UnifiedTaskItem = React.memo(({
                 updateTask(task.id, { name: selectedName, text: selectedName });
                 setSuggestions([]);
                 return;
+            } else if (e.key === 'Enter' && localText.startsWith('/')) {
+                // If user presses Enter on a /command that isn't a suggestion, 
+                // we might want to handle it or just let it be.
+                // But for /history specifically, we want to trigger the modal.
             }
         }
+    }
+
+    // Handle /history command on Enter
+    if (e.key === 'Enter' && localText.trim() === '/history') {
+        e.preventDefault();
+        // Find the previous task name to show history for
+        // If this task has a name, use it. If not, maybe the one above?
+        // Usually /history is typed on a line that already has a name or we want history for the current line's name.
+        const taskName = (task.name || task.text || '').replace('/history', '').trim();
+        if (taskName) {
+            (window as any).dispatchEvent(new CustomEvent('open-history', { detail: { taskName } }));
+            // Optionally clear the /history part from the task
+            const newName = taskName;
+            setLocalText(newName);
+            updateTask(task.id, { name: newName, text: newName });
+        } else {
+            // If empty /history, maybe show history for the task above?
+            // For now, just do nothing or alert.
+        }
+        return;
     }
 
     // Arrow keys handling
@@ -435,7 +469,7 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : isSelected ? 'bg-white/20' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.06]' : isSelected ? 'bg-white/10' : ''}`}>
 
       {currentDepth > 0 && (
         <div className="flex flex-shrink-0 pt-1.5" onClick={(e) => onTaskClick(e, task.id, index)}>
@@ -484,14 +518,6 @@ export const UnifiedTaskItem = React.memo(({
             placeholder=""
         />
         {isFocused && localText === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
-        {task.percent !== undefined && task.percent > 0 && (
-          <div className="mt-1 h-1 w-full bg-white/5 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-blue-500/50 transition-all duration-500" 
-              style={{ width: `${task.percent}%` }} 
-            />
-          </div>
-        )}
         {suggestions.length > 0 && (
           <div className="absolute left-0 top-full z-[110] mt-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[180px]">
             {suggestions.map((s, idx) => <button key={idx} onClick={() => {
@@ -503,7 +529,7 @@ export const UnifiedTaskItem = React.memo(({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1.5 pt-1.5">
+      <div className="flex flex-col items-end gap-1 pt-1.5 flex-shrink-0">
         {(() => {
           const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
           const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
@@ -517,13 +543,32 @@ export const UnifiedTaskItem = React.memo(({
             if (displayText) displayText += ` / ${completionTimeDisplay}`;
             else displayText = completionTimeDisplay;
           }
-          return displayText ? (
-            <span
-              className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
-            >
-              {displayText}
-            </span>
-          ) : null;
+          return (
+            <div className="flex flex-col items-end gap-1">
+              {displayText && (
+                <span
+                  className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
+                >
+                  {displayText}
+                </span>
+              )}
+              {task.percent !== undefined && task.percent > 0 && (
+                <div 
+                  className="h-1 w-12 bg-white/5 rounded-full overflow-hidden relative"
+                  style={{
+                    background: `linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)`,
+                  }}
+                >
+                  <div 
+                    className="absolute inset-0 bg-[#050505] transition-all duration-500" 
+                    style={{ 
+                      left: `${task.percent}%`,
+                    }} 
+                  />
+                </div>
+              )}
+            </div>
+          );
         })()}
       </div>
     </div>

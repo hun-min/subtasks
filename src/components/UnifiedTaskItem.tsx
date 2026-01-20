@@ -484,6 +484,14 @@ export const UnifiedTaskItem = React.memo(({
             placeholder=""
         />
         {isFocused && localText === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
+        {task.percent !== undefined && task.percent > 0 && (
+          <div className="mt-1 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-blue-500/50 transition-all duration-500" 
+              style={{ width: `${task.percent}%` }} 
+            />
+          </div>
+        )}
         {suggestions.length > 0 && (
           <div className="absolute left-0 top-full z-[110] mt-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[180px]">
             {suggestions.map((s, idx) => <button key={idx} onClick={() => {
@@ -500,7 +508,11 @@ export const UnifiedTaskItem = React.memo(({
           const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
           const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
           let displayText = '';
-          if (timerDisplay) displayText = timerDisplay;
+          if (task.percent !== undefined && task.percent > 0) displayText = `${task.percent}%`;
+          if (timerDisplay) {
+            if (displayText) displayText += ` / ${timerDisplay}`;
+            else displayText = timerDisplay;
+          }
           if (completionTimeDisplay) {
             if (displayText) displayText += ` / ${completionTimeDisplay}`;
             else displayText = completionTimeDisplay;

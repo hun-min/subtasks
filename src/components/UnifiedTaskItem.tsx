@@ -15,6 +15,7 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick,
   logs,
   onAddTaskAtCursor,
+  selectedTaskIds,
 
   onIndent,
   onOutdent,
@@ -32,6 +33,7 @@ export const UnifiedTaskItem = React.memo(({
   onTaskClick: (e: React.MouseEvent, taskId: number, index: number) => void,
   logs: DailyLog[],
   onAddTaskAtCursor: (taskId: number, textBefore: string, textAfter: string) => void,
+  selectedTaskIds: Set<number>,
   onMergeWithPrevious: (taskId: number, currentText: string) => void,
   onMergeWithNext: (taskId: number, currentText: string) => void,
   onIndent: (taskId: number) => void,
@@ -46,6 +48,7 @@ export const UnifiedTaskItem = React.memo(({
   const { setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const currentDepth = task.depth || 0;
   const isFocused = focusedTaskId === task.id;
+  const isSelected = selectedTaskIds.has(task.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorRef = useRef<number | null>(null);
   const isComposing = useRef(false);
@@ -432,7 +435,7 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1 md:gap-2 py-0.5 px-6 transition-colors ${isFocused ? 'bg-white/[0.04]' : isSelected ? 'bg-white/20' : ''}`}>
 
       {currentDepth > 0 && (
         <div className="flex flex-shrink-0 pt-1.5" onClick={(e) => onTaskClick(e, task.id, index)}>

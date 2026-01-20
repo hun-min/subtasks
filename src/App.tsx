@@ -16,45 +16,125 @@ import { useTasks, useAllTaskLogs } from './hooks/useTasks';
 
 // --- [컴포넌트] 태스크 히스토리 모달 ---
 const TaskHistoryModal = React.memo(({ taskName, logs, onClose }: { taskName: string, logs: DailyLog[], onClose: () => void }) => {
-  const today = new Date();
-  const [viewDate, setViewDate] = useState(new Date());
-  const historyMap = useMemo(() => {
-    const map = new Map();
+  const historyList = useMemo(() => {
+    const list: { date: string, task: Task, subTasks: Task[] }[] = [];
     logs.forEach(log => {
       const found = log.tasks.find(t => {
         const tName = t.name || t.text || '';
         return tName.trim() === taskName.trim();
       });
-      if (found) map.set(log.date, { task: found });
+      if (found) {
+        // Include sub-tasks (tasks with parent === found.id or depth > 0)
+        const subTasks = log.tasks.filter((st: Task) => st.parent === found.id || (st.depth && st.depth > 0));
+        list.push({ date: log.date, task: found, subTasks });
+      }
     });
-    return map;
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [logs, taskName]);
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
-  const days = Array.from({ length: firstDay }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1)));
+
   return (
     <div className="fixed inset-0 z-[700] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+      <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-start mb-6">
           <div><h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase mb-1">TASK HISTORY</h2><h1 className="text-xl font-black text-white">"{taskName}"</h1></div>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X /></button>
         </div>
-        <div className="flex justify-between items-center mb-4 px-2">
-          <button onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={20} className="text-gray-400" /></button>
-          <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long' })}</span>
-          <button onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={20} className="text-gray-400" /></button>
+        {historyList.length === 0 ? (
+          <div className="text-center text-gray-500 py-8">No history found.</div>
+        ) : (
+          <div className="space-y-4">
+            {historyList.map(record => {
+              const d = new Date(record.date);
+              const dateLabel = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+              return (
+                <div key={record.date} className="bg-[#1a1a1f] border border-white/5 rounded-xl p-4">
+                  <div className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2">{dateLabel}</div>
+                  <div className="text-white font-bold mb-2">{record.task.name || record.task.text || ''}</div>
+                  {record.subTasks && record.subTasks.length > 0 && (
+                    <div className="space-y-1">
+                      {record.subTasks.map(st => (
+                        <div key={st.id} className="text-gray-400 text-sm ml-4">- {st.name || st.text || ''}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// --- [컴포넌트] 날짜 선택 모달 ---
+const DatePickerModal = React.memo(({ currentDate, onDateSelect, onClose }: { currentDate: Date, onDateSelect: (date: Date) => void, onClose: () => void }) => {
+  const [selectedDate, setSelectedDate] = useState<Date>(currentDate);
+
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
+  };
+
+  const handleSubmit = () => {
+    onDateSelect(selectedDate);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[700] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+        <div className="flex justify-between items-start mb-6">
+          <div><h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase mb-1">DATE SELECTION</h2><h1 className="text-xl font-black text-white">Select a Date</h1></div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X /></button>
         </div>
-        <div className="grid grid-cols-7 gap-2">
-          {['S','M','T','W','T','F','S'].map((d, idx) => <div key={`weekday-${idx}`} className="text-center text-[10px] text-gray-400">{d}</div>)}
-          {days.map((d: any, i) => {
-            if (!d) return <div key={i} />;
-            const dateStr = d.toDateString();
-            const record = historyMap.get(dateStr);
-            return <div key={i} className={`aspect-square rounded-lg border flex items-center justify-center relative ${record ? 'bg-blue-900 border-blue-500' : 'bg-zinc-800 border-transparent'} ${dateStr === today.toDateString() ? 'ring-1 ring-white' : ''}`}><span className={`text-xs ${record ? 'text-white font-black' : 'text-gray-500 font-bold'}`}>{d.getDate()}</span></div>;
-          })}
+        <div className="mb-4">
+          <input
+            type="date"
+            value={selectedDate.toISOString().split('T')[0]}
+            onChange={(e) => handleDateChange(new Date(e.target.value))}
+            className="w-full p-2 bg-zinc-800 border border-white/10 rounded-xl text-white"
+          />
         </div>
+        <div className="flex justify-end space-x-2">
+          <button onClick={onClose} className="px-4 py-2 bg-zinc-800 text-white rounded-xl hover:bg-zinc-700">Cancel</button>
+          <button onClick={handleSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">Select</button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// --- [컴포넌트] 메모 모아보기 모달 ---
+const MemoCollectionModal = React.memo(({ logs, onClose }: { logs: DailyLog[], onClose: () => void }) => {
+  const memoList = useMemo(() => {
+    return logs
+      .filter(log => log.memo && log.memo.trim())
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [logs]);
+
+  return (
+    <div className="fixed inset-0 z-[700] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[80vh] overflow-y-auto">
+        <div className="flex justify-between items-start mb-6">
+          <div><h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase mb-1">MEMO COLLECTION</h2><h1 className="text-xl font-black text-white">All Memos</h1></div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X /></button>
+        </div>
+        {memoList.length === 0 ? (
+          <div className="text-center text-gray-500 py-8">No memos found.</div>
+        ) : (
+          <div className="space-y-4">
+            {memoList.map(log => {
+              const d = new Date(log.date);
+              const dateLabel = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+              return (
+                <div key={log.date} className="bg-[#1a1a1f] border border-white/5 rounded-xl p-4">
+                  <div className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2">{dateLabel}</div>
+                  <div className="text-white whitespace-pre-wrap">{log.memo}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -67,18 +147,8 @@ export default function App() {
   const { user, signOut } = useAuth();
   const { currentSpace, spaces, setCurrentSpace } = useSpace();
 
-  const [viewDate, setRawViewDate] = useState(new Date());
-  const isSwitchingDate = useRef(false);
-
-  const setViewDate = useCallback((newDate: Date | ((prev: Date) => Date)) => {
-      setRawViewDate(prev => {
-          const date = typeof newDate === 'function' ? newDate(prev) : newDate;
-          if (date.getTime() === prev.getTime()) return prev;
-          isSwitchingDate.current = true;
-          return date;
-      });
-  }, []);
-
+  const [viewDate, setViewDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const isInternalUpdate = useRef(false);
 
   // React Query Hooks
@@ -94,11 +164,12 @@ export default function App() {
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
 
   const [showHistoryTarget, setShowHistoryTarget] = useState<string | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  // Removed duplicate state declarations
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const lastClickedIndex = useRef<number | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showMemoCollection, setShowMemoCollection] = useState(false);
   const timeInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null]);
   
   const [history, setHistory] = useState<Task[][]>([]);
@@ -576,13 +647,26 @@ export default function App() {
               if (newSet.has(taskId)) newSet.delete(taskId); else newSet.add(taskId);
               return newSet;
           });
-      } else {
-          setSelectedTaskIds(new Set([taskId]));
       }
+      // No single click selection - only shift and ctrl
       lastClickedIndex.current = index;
   }, [selectedTaskIds, tasks]);
 
-  const handleSpaceChange = useCallback((space: any) => { setCurrentSpace(space); }, [setCurrentSpace]);
+  const handleSpaceChange = useCallback((space: any) => {
+    setCurrentSpace(space);
+    localStorage.setItem('lastSpaceId', String(space.id));
+  }, [setCurrentSpace]);
+
+  // Load last space on mount
+  useEffect(() => {
+    const lastSpaceId = localStorage.getItem('lastSpaceId');
+    if (lastSpaceId && spaces && spaces.length > 0) {
+      const lastSpace = spaces.find(s => String(s.id) === lastSpaceId);
+      if (lastSpace) {
+        setCurrentSpace(lastSpace);
+      }
+    }
+  }, [spaces, setCurrentSpace]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -611,6 +695,7 @@ export default function App() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); handleRedo(); }
+      if (e.shiftKey && e.key === 'M') { e.preventDefault(); setShowMemoCollection(true); }
       if (e.key === '?' && !isInput) { e.preventDefault(); setShowShortcuts(true); }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
@@ -707,7 +792,7 @@ export default function App() {
               <button onClick={() => setViewMode('day')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'day' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>DAY</button>
               <button onClick={() => setViewMode('flow')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
           </div>
-          <button onClick={() => setViewDate(new Date())} className="text-gray-500 hover:text-white p-1 text-xs font-bold border border-gray-700 rounded px-1.5 md:px-2 whitespace-nowrap flex-shrink-0">TODAY</button>
+
           <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1 flex-shrink-0"><HelpCircle size={18} /></button>
           <button onClick={() => user ? signOut() : setShowAuthModal(true)} className="text-xs text-gray-500 hover:text-white whitespace-nowrap flex-shrink-0">{user ? 'Logout' : 'Login'}</button>
         </div>
@@ -717,7 +802,17 @@ export default function App() {
         {viewMode === 'day' ? (
             <>
                 <div className={`calendar-area mb-4 bg-[#0f0f14] p-5 rounded-3xl border border-white/5 shadow-2xl transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`} onTouchStart={(e) => swipeTouchStart.current = e.touches[0].clientX} onTouchEnd={(e) => { if (swipeTouchStart.current === null) return; const diff = swipeTouchStart.current - e.changedTouches[0].clientX; if (Math.abs(diff) > 100) setViewDate(new Date(year, month + (diff > 0 ? 1 : -1), 1)); swipeTouchStart.current = null; }}>
-                   <div className="flex justify-between items-center mb-5 px-1"><button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button><div className="text-center cursor-pointer" onClick={() => setViewDate(new Date())}><div className="text-[11px] text-gray-500 uppercase tracking-widest font-bold">{year}</div><div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div></div><button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button></div>
+                   <div className="relative flex justify-between items-center mb-5 px-1">
+                     <button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronLeft size={22} /></button>
+                     <div className="text-center cursor-pointer" onClick={() => setViewDate(new Date())}>
+                       <div className="text-[11px] text-gray-500 uppercase tracking-widest font-bold">{year}</div>
+                       <div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div>
+                     </div>
+                     <button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button>
+                     <button onClick={() => setViewDate(new Date())} className="absolute top-3 right-12 p-2 hover:bg-white/5 rounded-full text-gray-400 transition-colors flex items-center justify-center">
+                       <div className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                     </button>
+                   </div>
                    <div className="grid grid-cols-7 gap-1">{['S','M','T','W','T','F','S'].map((d, i) => <div key={i} className="text-center text-[10px] text-gray-600 font-black py-1">{d}</div>)}{Array.from({ length: 35 }).map((_, i) => { 
                        const d = new Date(year, month, 1); 
                        d.setDate(d.getDate() + (i - d.getDay())); 
@@ -813,6 +908,7 @@ export default function App() {
                                       onTaskClick={onTaskClickWithRange}
                                       logs={logs}
                                       onAddTaskAtCursor={handleAddTaskAtCursor}
+                                      selectedTaskIds={selectedTaskIds}
                                       onMergeWithPrevious={handleMergeWithPrevious}
                                       onMergeWithNext={handleMergeWithNext}
                                       onIndent={handleIndent}
@@ -841,6 +937,7 @@ export default function App() {
                 setFocusedTaskId={setFocusedTaskId}
                 focusedTaskId={focusedTaskId}
                 onViewDateChange={setViewDate}
+                selectedTaskIds={selectedTaskIds}
             />
         )}
         </div>
@@ -942,6 +1039,20 @@ export default function App() {
           </div>
         )}
         {showHistoryTarget && <TaskHistoryModal taskName={showHistoryTarget} logs={logs} onClose={() => setShowHistoryTarget(null)} />}
+        {showDatePicker && (
+          <DatePickerModal 
+            currentDate={viewDate} 
+            onDateSelect={(date) => {
+              if (selectedTaskIds.size > 0) {
+                handleMoveSelectedToDate(date.toDateString());
+              } else {
+                setViewDate(date);
+              }
+            }} 
+            onClose={() => setShowDatePicker(false)} 
+          />
+        )}
+        {showMemoCollection && <MemoCollectionModal logs={logs} onClose={() => setShowMemoCollection(false)} />}
         {showShortcuts && (
           <div className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
             <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>

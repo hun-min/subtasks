@@ -14,6 +14,7 @@ interface FlowViewProps {
   setFocusedTaskId: (id: number | null) => void;
   focusedTaskId: number | null;
   onViewDateChange?: (date: Date) => void;
+  selectedTaskIds: Set<number>;
 }
 
 export const FlowView: React.FC<FlowViewProps> = ({
@@ -24,7 +25,8 @@ export const FlowView: React.FC<FlowViewProps> = ({
   onMoveTask,
   setFocusedTaskId,
   focusedTaskId,
-  onViewDateChange
+  onViewDateChange,
+  selectedTaskIds
 }) => {
     // 1. Flatten Logs into Active Days (filtering out empty ones)
     const activeDays = useMemo(() => {
@@ -152,6 +154,7 @@ export const FlowView: React.FC<FlowViewProps> = ({
                                    onTaskClick={() => {}}
                                    logs={logs}
                                    onAddTaskAtCursor={(tid, before, after) => onAddTask(log.date, tid, before, after)}
+                                   selectedTaskIds={selectedTaskIds}
                                    onMergeWithPrevious={() => {}}
                                    onMergeWithNext={() => {}}
                                    onIndent={(tid) => onIndentTask(log.date, tid, 'in')}

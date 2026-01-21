@@ -772,6 +772,7 @@ export default function App() {
 
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [selectedProjectName, setSelectedProjectName] = useState<string | null>(null);
+  const [showProjectDetails, setShowProjectDetails] = useState(false); // 모바일에서 프로젝트 상세 페이지 표시 여부
 
   const projects = useMemo(() => {
     // A project is a task that has a percent value (not undefined/null) and has a name/text.
@@ -1152,6 +1153,7 @@ export default function App() {
                                         key={`${project.id}-${project.name || project.text}`}
                                         onClick={() => {
                                             setSelectedProjectId(project.id);
+                                            setShowProjectDetails(true);
                                         }}
                                         className={`w-full text-left p-4 rounded-2xl transition-all border ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'bg-[#7c4dff]/10 border-[#7c4dff]/30' : 'bg-white/5 border-transparent hover:bg-white/10'}`}
                                     >
@@ -1171,9 +1173,17 @@ export default function App() {
                             </div>
 
                             {/* Project Details */}
-                            <div className="lg:col-span-2 overflow-y-auto max-h-[calc(100vh-200px)]">
+                            <div className={`lg:col-span-2 overflow-y-auto max-h-[calc(100vh-200px)] ${showProjectDetails ? 'block' : 'hidden lg:block'}`}>
                                 {selectedProject ? (
                                     <>
+                                        <div className="flex justify-between items-center mb-4 lg:hidden">
+                                            <button
+                                                onClick={() => setShowProjectDetails(false)}
+                                                className="p-2 rounded-xl bg-white/5 text-gray-400 hover:text-white flex items-center gap-2"
+                                            >
+                                                <ChevronLeft size={16} /> Back to Projects
+                                            </button>
+                                        </div>
                                         <div className="flex justify-between items-start mb-6">
                                             <div className="flex-1">
                                                 <input

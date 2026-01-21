@@ -547,6 +547,7 @@ export const UnifiedTaskItem = React.memo(({
           const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
           let displayText = '';
           if (task.percent !== undefined && task.percent > 0) displayText = `${task.percent}%`;
+          if (task.percent === 0) displayText = '-';
           if (timerDisplay) {
             if (displayText) displayText += ` / ${timerDisplay}`;
             else displayText = timerDisplay;

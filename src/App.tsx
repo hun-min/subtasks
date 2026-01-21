@@ -775,7 +775,34 @@ export default function App() {
 
   const projects = useMemo(() => {
     // A project is any task that has an explicit percentage value (number)
+    // Only include tasks with percent > 0 OR tasks with percent === 0 that have other non-default properties
     const projectMap = new Map<string, Task>();
+
+    // Helper function to check if a task should be considered a project
+    const isProject = (t: Task): boolean => {
+      if (typeof t.percent !== 'number') return false;
+      
+      // If percent > 0, it's definitely a project
+      if (t.percent > 0) return true;
+      
+      // If percent === 0, check if it has other non-default properties
+      // that indicate it was explicitly set as a project
+      const hasNonDefaultProps = 
+        (t.actTime !== undefined && t.actTime > 0) ||
+        (t.planTime !== undefined && t.planTime > 0) ||
+        (t.status !== undefined && t.status !== 'pending') ||
+        (t.depth !== undefined && t.depth > 0) ||
+        (t.parent !== null && t.parent !== undefined) ||
+        (t.isTimerOn === true) ||
+        (t.timerStartTime !== undefined && t.timerStartTime > 0) ||
+        (t.end_time !== undefined && t.end_time > 0) ||
+        (t.start_time !== undefined && t.start_time > 0) ||
+        (t.is_starred === true) ||
+        (t.note !== undefined && t.note.trim().length > 0) ||
+        (t.due !== undefined && t.due.trim().length > 0);
+      
+      return hasNonDefaultProps;
+    };
 
     // 1. Iterate through every log in logs (from allLogs)
     // Sort logs by date ascending so that more recent logs overwrite older ones in the map
@@ -784,7 +811,7 @@ export default function App() {
     sortedLogs.forEach(log => {
       if (log.tasks && Array.isArray(log.tasks)) {
         log.tasks.forEach(t => {
-          if (typeof t.percent === 'number') {
+          if (isProject(t)) {
             const name = (t.name || t.text || '').trim();
             if (name) {
               // We want to keep a unique list by name. 
@@ -799,7 +826,7 @@ export default function App() {
     // 2. Also include projects from the current tasks state (most recent)
     if (tasks && Array.isArray(tasks)) {
       tasks.forEach(t => {
-        if (typeof t.percent === 'number') {
+        if (isProject(t)) {
           const name = (t.name || t.text || '').trim();
           if (name) {
             projectMap.set(name, t);
@@ -1125,7 +1152,7 @@ export default function App() {
                             >
                                 <div className="flex justify-between items-center mb-2">
                                     <span className={`font-bold text-sm truncate ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'text-white' : 'text-gray-400'}`}>{project.name || project.text || 'Untitled Project'}</span>
-                                    <span className="text-[10px] font-black text-[#7c4dff]">{project.percent || 0}%</span>
+                                    <span className="text-[10px] font-black text-[#7c4dff]">{project.percent !== undefined && project.percent > 0 ? `${project.percent}%` : '-'}</span>
                                 </div>
                                 <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden">
                                     <div className="h-full bg-[#7c4dff] transition-all" style={{ width: `${project.percent || 0}%` }} />

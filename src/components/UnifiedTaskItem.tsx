@@ -490,17 +490,13 @@ export const UnifiedTaskItem = React.memo(({
           <div key={i} className="h-full" style={{ width: '15px' }} />
         ))}
       </div>
-      <div className="relative flex flex-col items-center justify-start mt-1.5 flex-shrink-0">
-        <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
-          {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
-          {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
-        </button>
+      <div className="relative flex flex-row items-center justify-start mt-1.5 flex-shrink-0 gap-1">
         <button
           onClick={(e) => {
             e.stopPropagation();
             updateTask(task.id, { is_starred: !task.is_starred });
           }}
-          className={`w-[15px] h-[15px] flex items-center justify-center transition-colors group/star cursor-pointer mt-1`}
+          className={`w-[15px] h-[15px] flex items-center justify-center transition-colors group/star cursor-pointer`}
         >
           <Star
             size={13}
@@ -512,6 +508,10 @@ export const UnifiedTaskItem = React.memo(({
                   : 'opacity-0'
             } transition-all`}
           />
+        </button>
+        <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
+          {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
+          {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>
       </div>
       <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
@@ -546,8 +546,13 @@ export const UnifiedTaskItem = React.memo(({
           const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
           const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
           let displayText = '';
-          if (task.percent !== undefined && task.percent > 0) displayText = `${task.percent}%`;
-          if (task.percent === 0) displayText = '-';
+          if (task.percent !== undefined && task.percent !== null) {
+            if (task.percent > 0) {
+              displayText = `${task.percent}%`;
+            } else if (task.percent === 0) {
+              displayText = '0%';
+            }
+          }
           if (timerDisplay) {
             if (displayText) displayText += ` / ${timerDisplay}`;
             else displayText = timerDisplay;

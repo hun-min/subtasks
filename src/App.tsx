@@ -774,27 +774,8 @@ export default function App() {
   const [selectedProjectName, setSelectedProjectName] = useState<string | null>(null);
 
   const projects = useMemo(() => {
-    // A project is any task that has an explicit percentage value (number)
-    // Only include tasks with percent > 0 OR tasks with percent === 0 that have other non-default properties
+    // A project is a task that has a percent value (not undefined/null) and has a name/text.
     const projectMap = new Map<string, Task>();
-
-    // Helper function to check if a task should be considered a project
-    const isProject = (t: Task): boolean => {
-      if (typeof t.percent !== 'number') return false;
-      
-      // If percent > 0, it's definitely a project
-      if (t.percent > 0) return true;
-      
-      // If percent === 0, only consider it a project if it has significant time tracking
-      // Note: We exclude status, is_starred, note, due as they don't indicate project status
-      const hasNonDefaultProps = 
-        (t.actTime !== undefined && t.actTime > 0) ||
-        (t.planTime !== undefined && t.planTime > 0) ||
-        (t.isTimerOn === true) ||
-        (t.timerStartTime !== undefined && t.timerStartTime > 0);
-      
-      return hasNonDefaultProps;
-    };
 
     // 1. Iterate through every log in logs (from allLogs)
     // Sort logs by date ascending so that more recent logs overwrite older ones in the map
@@ -803,13 +784,12 @@ export default function App() {
     sortedLogs.forEach(log => {
       if (log.tasks && Array.isArray(log.tasks)) {
         log.tasks.forEach(t => {
-          if (isProject(t)) {
-            const name = (t.name || t.text || '').trim();
-            if (name) {
-              // We want to keep a unique list by name. 
-              // By sorting logs ascending, the latest date's task will be the final value in the map.
-              projectMap.set(name, t);
-            }
+          const name = (t.name || t.text || '').trim();
+          // Only include tasks that have a percent value (project requirement)
+          if (name && t.percent !== undefined && t.percent !== null) {
+            // We want to keep a unique list by name.
+            // By sorting logs ascending, the latest date's task will be the final value in the map.
+            projectMap.set(name, t);
           }
         });
       }
@@ -818,17 +798,23 @@ export default function App() {
     // 2. Also include projects from the current tasks state (most recent)
     if (tasks && Array.isArray(tasks)) {
       tasks.forEach(t => {
-        if (isProject(t)) {
-          const name = (t.name || t.text || '').trim();
-          if (name) {
-            projectMap.set(name, t);
-          }
+        const name = (t.name || t.text || '').trim();
+        // Only include tasks that have a percent value (project requirement)
+        if (name && t.percent !== undefined && t.percent !== null) {
+          projectMap.set(name, t);
         }
       });
     }
 
     const result = Array.from(projectMap.values());
-    console.log('Global Projects List:', result.map(p => p.name || p.text));
+    // Sort projects by 'updated_at' in descending order (most recently updated first)
+    result.sort((a, b) => {
+      const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+      const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+      return dateB - dateA; // Descending sort
+    });
+
+    console.log('Global Projects List (filtered by percent):', result.map(p => p.name || p.text));
     return result;
   }, [logs, tasks]);
 
@@ -977,8 +963,8 @@ export default function App() {
         </div>
       </nav>
       <div className="flex-1 overflow-y-auto no-scrollbar relative">
-        <div 
-          className="max-w-xl mx-auto flex flex-col px-2 md:px-4 pb-4"
+        <div
+          className="max-w-2xl mx-auto flex flex-col px-2 md:px-4 pb-4"
           onClick={(e) => e.stopPropagation()}
         >
         {viewMode === 'day' ? (
@@ -1085,241 +1071,259 @@ export default function App() {
                             <button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: undefined, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 }; setFocusedTaskId(n.id); updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo }); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
                           </div>
                       </div>
-                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-                          <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                              {tasks.map((t, i) => {
-                                  return (
-                                      <UnifiedTaskItem
-                                          key={t.id}
-                                          task={t}
-                                          index={i}
-                                          updateTask={handleUpdateTask}
-                                          setFocusedTaskId={setFocusedTaskId}
-                                          focusedTaskId={focusedTaskId}
-                                          onTaskClick={onTaskClickWithRange}
-                                          isSelected={selectedTaskIds.has(t.id)}
-                                          logs={logs}
-                                          onAddTaskAtCursor={handleAddTaskAtCursor}
-                                          onMergeWithPrevious={handleMergeWithPrevious}
-                                          onMergeWithNext={handleMergeWithNext}
-                                          onIndent={handleIndent}
-                                          onOutdent={handleOutdent}
-                                          onMoveUp={handleMoveUp}
-                                          onMoveDown={handleMoveDown}
-                                          onDelete={handleDeleteTask}
-                                          onCopy={handleCopyTask}
-                                          onFocusPrev={handleFocusPrev}
-                                          onFocusNext={handleFocusNext}
-                                      />
-                                  );
-                              })}
-                          </SortableContext>
-                      </DndContext>
+                      <div className="-ml-7">
+                          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                              <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                                  {tasks.map((t, i) => {
+                                      return (
+                                          <UnifiedTaskItem
+                                              key={t.id}
+                                              task={t}
+                                              index={i}
+                                              updateTask={handleUpdateTask}
+                                              setFocusedTaskId={setFocusedTaskId}
+                                              focusedTaskId={focusedTaskId}
+                                              onTaskClick={onTaskClickWithRange}
+                                              isSelected={selectedTaskIds.has(t.id)}
+                                              logs={logs}
+                                              onAddTaskAtCursor={handleAddTaskAtCursor}
+                                              onMergeWithPrevious={handleMergeWithPrevious}
+                                              onMergeWithNext={handleMergeWithNext}
+                                              onIndent={handleIndent}
+                                              onOutdent={handleOutdent}
+                                              onMoveUp={handleMoveUp}
+                                              onMoveDown={handleMoveDown}
+                                              onDelete={handleDeleteTask}
+                                              onCopy={handleCopyTask}
+                                              onFocusPrev={handleFocusPrev}
+                                              onFocusNext={handleFocusNext}
+                                          />
+                                      );
+                                  })}
+                              </SortableContext>
+                          </DndContext>
+                      </div>
                   </div>
                 </div>
             </>
         ) : viewMode === 'flow' ? (
-            <FlowView
-                logs={logs}
-                currentSpaceId={String(currentSpace?.id || '')}
-                onUpdateTask={handleUpdateTaskInFlow}
-                onAddTask={handleAddTaskInFlow}
-                onIndentTask={handleIndentTaskInFlow}
-                onMoveTask={handleMoveTaskInFlow}
-                setFocusedTaskId={setFocusedTaskId}
-                focusedTaskId={focusedTaskId}
-                onViewDateChange={setViewDate}
-            />
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-4xl mx-auto">
+                <FlowView
+                    logs={logs}
+                    currentSpaceId={String(currentSpace?.id || '')}
+                    onUpdateTask={handleUpdateTaskInFlow}
+                    onAddTask={handleAddTaskInFlow}
+                    onIndentTask={handleIndentTaskInFlow}
+                    onMoveTask={handleMoveTaskInFlow}
+                    setFocusedTaskId={setFocusedTaskId}
+                    focusedTaskId={focusedTaskId}
+                    onViewDateChange={setViewDate}
+                />
+            </div>
         ) : (
-            <div className="flex h-[calc(100vh-120px)] gap-4 p-4">
-                {/* Left Side: Project List */}
-                <div className="w-1/3 bg-[#0f0f14] rounded-3xl border border-white/5 p-4 overflow-y-auto no-scrollbar">
-                    <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 px-2">Projects</h2>
-                    <div className="space-y-2">
-                        {projects.map(project => (
-                            <button
-                                key={`${project.id}-${project.name || project.text}`}
-                                onClick={() => setSelectedProjectId(project.id)}
-                                className={`w-full text-left p-3 rounded-2xl transition-all border ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'bg-[#7c4dff]/10 border-[#7c4dff]/30' : 'bg-white/5 border-transparent hover:bg-white/10'}`}
-                            >
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className={`font-bold text-sm truncate ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'text-white' : 'text-gray-400'}`}>{project.name || project.text || 'Untitled Project'}</span>
-                                    <span className="text-[10px] font-black text-[#7c4dff]">{project.percent !== undefined && project.percent > 0 ? `${project.percent}%` : '-'}</span>
-                                </div>
-                                <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden">
-                                    <div className="h-full bg-[#7c4dff] transition-all" style={{ width: `${project.percent || 0}%` }} />
-                                </div>
-                            </button>
-                        ))}
-                        <button 
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4">
+                {/* Project List & Details Combined */}
+                <div className="bg-[#0f0f14] rounded-3xl border border-white/5 p-6 flex flex-col overflow-hidden">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Projects</h2>
+                        <button
                             onClick={() => {
                                 const n: Task = { id: Date.now(), name: 'New Project', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: 'New Project', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 };
-                                // Add to current date's tasks to make it a project
                                 updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo });
                                 setSelectedProjectId(n.id);
                             }}
-                            className="w-full p-3 rounded-2xl border border-dashed border-white/10 text-gray-500 hover:text-white hover:border-white/20 transition-all flex items-center justify-center gap-2 text-sm font-bold"
+                            className="p-2 rounded-xl border border-dashed border-white/10 text-gray-500 hover:text-white hover:border-white/20 transition-all flex items-center gap-2 text-sm font-bold"
                         >
                             <Plus size={16} /> Add Project
                         </button>
                     </div>
-                </div>
-
-                {/* Right Side: Project Details & Subtasks */}
-                <div className="flex-1 bg-[#0f0f14] rounded-3xl border border-white/5 p-6 flex flex-col overflow-hidden">
-                    {selectedProject ? (
-                        <>
-                            <div className="flex justify-between items-start mb-6">
-                                <div className="flex-1">
-                                    <input 
-                                        value={selectedProject.name || selectedProject.text || ''}
-                                        onChange={(e) => handleUpdateTask(selectedProject.id, { name: e.target.value, text: e.target.value })}
-                                        className="bg-transparent text-2xl font-black text-white outline-none w-full"
-                                        placeholder="Project Name"
-                                    />
-                                    <div className="flex items-center gap-4 mt-2">
-                                        <div className="flex items-center gap-2">
-                                            <BarChart2 size={14} className="text-gray-500" />
-                                            <div className="flex items-center gap-1">
-                                                <input 
-                                                    type="number"
-                                                    min="0"
-                                                    max="100"
-                                                    value={selectedProject.percent || 0}
-                                                    onChange={(e) => handleUpdateTask(selectedProject.id, { percent: parseInt(e.target.value) || 0 })}
-                                                    className="bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs font-bold text-blue-400 outline-none w-[4ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                />
-                                                <span className="text-xs font-bold text-gray-400">% Complete</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto no-scrollbar space-y-4">
-                                <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Subtasks</h3>
-                                {(() => {
-                                    const grouped = projectSubtasks.reduce((acc, task) => {
-                                        const date = task.date || 'Unknown Date';
-                                        if (!acc[date]) acc[date] = [];
-                                        acc[date].push(task);
-                                        return acc;
-                                    }, {} as Record<string, any[]>);
-
-                                    return Object.entries(grouped).map(([date, subtasks]) => (
-                                        <div key={date} className="space-y-1">
-                                            <div className="text-[10px] font-bold text-[#7c4dff]/50 uppercase tracking-tighter px-2 mb-1">{date}</div>
-                                            <div>
-                                                {subtasks.map((t, i) => (
-                                                    <div key={t.id}>
-                                                        <UnifiedTaskItem
-                                                            task={{...t, depth: Math.max(0, (t.depth || 0) - (selectedProject.depth || 0))}}
-                                                            index={i}
-                                                            updateTask={handleUpdateTask}
-                                                            setFocusedTaskId={setFocusedTaskId}
-                                                            focusedTaskId={focusedTaskId}
-                                                            onTaskClick={onTaskClickWithRange}
-                                                            logs={logs}
-                                                            onAddTaskAtCursor={handleAddTaskAtCursor}
-                                                            onMergeWithPrevious={handleMergeWithPrevious}
-                                                            onMergeWithNext={handleMergeWithNext}
-                                                            isSelected={selectedTaskIds.has(t.id)}
-                                                            onIndent={handleIndent}
-                                                            onOutdent={handleOutdent}
-                                                            onMoveUp={handleMoveUp}
-                                                            onMoveDown={handleMoveDown}
-                                                            onDelete={handleDeleteTask}
-                                                            onCopy={handleCopyTask}
-                                                            onFocusPrev={handleFocusPrev}
-                                                            onFocusNext={handleFocusNext}
-                                                        />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ));
-                                })()}
-                                <button 
-                                    onClick={() => {
-                                        const projectName = (selectedProject.name || selectedProject.text || '').trim();
-                                        
-                                        // [FIX] Ensure we are adding to "Today"
-                                        const now = new Date();
-                                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                                        
-                                        // If current viewDate is not Today, we need to switch or handle it.
-                                        // The requirement says it should default to "Today".
-                                        // If we want it to appear in Day view for Today, we should probably ensure viewDate is Today
-                                        // or at least update the tasks for Today.
-                                        
-                                        if (viewDate.toDateString() !== today.toDateString()) {
-                                            setViewDate(today);
-                                            // Note: setViewDate is async, so we might need to wait or use the 'today' tasks.
-                                            // However, the useTasks hook will re-fetch for the new viewDate.
-                                            // To be safe and immediate, we can't easily update "today's" tasks if they aren't loaded.
-                                            // But usually, the user expects to see it.
-                                        }
-
-                                        let currentTasks = [...tasks];
-                                        
-                                        // If we just changed viewDate, 'tasks' might still be from the old date.
-                                        // This is a bit tricky with React state. 
-                                        // But if we assume the user is already on Today or we just want to fix the logic:
-                                        
-                                        // Check if project exists in current date
-                                        let projectInDateIdx = currentTasks.findIndex(t => (t.name || t.text || '').trim() === projectName);
-                                        
-                                        if (projectInDateIdx === -1) {
-                                            // Create project entry for this date
-                                            const newProjectTask: Task = { 
-                                                ...selectedProject, 
-                                                id: Date.now(), 
-                                                space_id: String(currentSpace?.id || ''),
-                                                depth: 0 
-                                            };
-                                            currentTasks.push(newProjectTask);
-                                            projectInDateIdx = currentTasks.length - 1;
-                                        }
-
-                                        const projectInDate = currentTasks[projectInDateIdx];
-                                        let lastSubtaskIdx = projectInDateIdx;
-                                        for (let j = projectInDateIdx + 1; j < currentTasks.length; j++) {
-                                            if ((currentTasks[j].depth || 0) > (projectInDate.depth || 0)) {
-                                                lastSubtaskIdx = j;
-                                            } else {
-                                                break;
-                                            }
-                                        }
-                                        const insertIdx = lastSubtaskIdx + 1;
-                                        
-                                        const n: Task = { 
-                                            id: Date.now() + 1, 
-                                            name: '', 
-                                            status: 'pending', 
-                                            indent: 0, 
-                                            parent: projectInDate.id, 
-                                            space_id: String(currentSpace?.id || ''), 
-                                            text: '', 
-                                            percent: undefined, 
-                                            planTime: 0, 
-                                            actTime: 0, 
-                                            isTimerOn: false, 
-                                            depth: (projectInDate.depth || 0) + 1 
-                                        };
-                                        currentTasks.splice(insertIdx, 0, n);
-                                        updateTasks.mutate({ tasks: currentTasks, memo: currentMemo });
-                                        setFocusedTaskId(n.id);
-                                    }}
-                                    className="w-full py-2 text-gray-600 hover:text-gray-400 transition-colors flex items-center gap-2 text-sm font-bold"
-                                >
-                                    <Plus size={14} /> Add Subtask
-                                </button>
-                            </div>
-                        </>
-                    ) : (
+                    
+                    {projects.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-600">
                             <BarChart2 size={48} className="mb-4 opacity-20" />
-                            <p className="font-bold">Select a project to view details</p>
+                            <p className="font-bold">No projects yet. Create your first project!</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {/* Project List */}
+                            <div className="lg:col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
+                                {projects.map(project => (
+                                    <button
+                                        key={`${project.id}-${project.name || project.text}`}
+                                        onClick={() => {
+                                            setSelectedProjectId(project.id);
+                                        }}
+                                        className={`w-full text-left p-4 rounded-2xl transition-all border ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'bg-[#7c4dff]/10 border-[#7c4dff]/30' : 'bg-white/5 border-transparent hover:bg-white/10'}`}
+                                    >
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className={`font-bold text-sm truncate ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'text-white' : 'text-gray-400'}`}>{project.name || project.text || 'Untitled Project'}</span>
+                                            {project.percent !== undefined && project.percent !== null && project.percent > 0 && (
+                                                <span className="text-xs font-bold text-blue-400">
+                                                    {project.percent}%
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden">
+                                            <div className="h-full bg-[#7c4dff] transition-all" style={{ width: `${project.percent || 0}%` }} />
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Project Details */}
+                            <div className="lg:col-span-2 overflow-y-auto max-h-[calc(100vh-200px)]">
+                                {selectedProject ? (
+                                    <>
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div className="flex-1">
+                                                <input
+                                                    value={selectedProject.name || selectedProject.text || ''}
+                                                    onChange={(e) => handleUpdateTask(selectedProject.id, { name: e.target.value, text: e.target.value })}
+                                                    className="bg-transparent text-2xl font-black text-white outline-none w-full"
+                                                    placeholder="Project Name"
+                                                />
+                                                <div className="flex items-center gap-4 mt-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <BarChart2 size={14} className="text-gray-500" />
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={selectedProject.percent || 0}
+                                                                onChange={(e) => handleUpdateTask(selectedProject.id, { percent: parseInt(e.target.value) || 0 })}
+                                                                className="bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs font-bold text-blue-400 outline-none w-[4ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                            />
+                                                            <span className="text-xs font-bold text-gray-400">% Complete</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <button
+                                            onClick={() => {
+                                                if (window.confirm("Delete this project?")) {
+                                                    const next = tasks.filter(t => t.id !== selectedProject.id);
+                                                    updateTasks.mutate({ tasks: next, memo: currentMemo });
+                                                    setSelectedProjectId(null);
+                                                }
+                                            }}
+                                            className="ml-4 p-2 rounded-xl hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Subtasks</h3>
+                                            {(() => {
+                                                const grouped = projectSubtasks.reduce((acc, task) => {
+                                                    const date = task.date || 'Unknown Date';
+                                                    if (!acc[date]) acc[date] = [];
+                                                    acc[date].push(task);
+                                                    return acc;
+                                                }, {} as Record<string, any[]>);
+
+                                                return Object.entries(grouped).map(([date, subtasks]) => (
+                                                    <div key={date} className="space-y-1">
+                                                        <div className="text-[10px] font-bold text-[#7c4dff]/50 uppercase tracking-tighter px-2 mb-1">{date}</div>
+                                                        <div className="-ml-7">
+                                                            {subtasks.map((t, i) => (
+                                                                <div key={t.id}>
+                                                                    <UnifiedTaskItem
+                                                                        task={{...t, depth: Math.max(0, (t.depth || 0) - (selectedProject.depth || 0))}}
+                                                                        index={i}
+                                                                        updateTask={handleUpdateTask}
+                                                                        setFocusedTaskId={setFocusedTaskId}
+                                                                        focusedTaskId={focusedTaskId}
+                                                                        onTaskClick={onTaskClickWithRange}
+                                                                        logs={logs}
+                                                                        onAddTaskAtCursor={handleAddTaskAtCursor}
+                                                                        onMergeWithPrevious={handleMergeWithPrevious}
+                                                                        onMergeWithNext={handleMergeWithNext}
+                                                                        isSelected={selectedTaskIds.has(t.id)}
+                                                                        onIndent={handleIndent}
+                                                                        onOutdent={handleOutdent}
+                                                                        onMoveUp={handleMoveUp}
+                                                                        onMoveDown={handleMoveDown}
+                                                                        onDelete={handleDeleteTask}
+                                                                        onCopy={handleCopyTask}
+                                                                        onFocusPrev={handleFocusPrev}
+                                                                        onFocusNext={handleFocusNext}
+                                                                    />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ));
+                                            })()}
+                                                <button
+                                                    onClick={() => {
+                                                        const projectName = (selectedProject.name || selectedProject.text || '').trim();
+
+                                                        const now = new Date();
+                                                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+                                                        if (viewDate.toDateString() !== today.toDateString()) {
+                                                            setViewDate(today);
+                                                        }
+
+                                                        let currentTasks = [...tasks];
+
+                                                        let projectInDateIdx = currentTasks.findIndex(t => (t.name || t.text || '').trim() === projectName);
+
+                                                        if (projectInDateIdx === -1) {
+                                                            const newProjectTask: Task = {
+                                                                ...selectedProject,
+                                                                id: Date.now(),
+                                                                space_id: String(currentSpace?.id || ''),
+                                                                depth: 0
+                                                            };
+                                                            currentTasks.push(newProjectTask);
+                                                            projectInDateIdx = currentTasks.length - 1;
+                                                        }
+
+                                                        const projectInDate = currentTasks[projectInDateIdx];
+                                                        let lastSubtaskIdx = projectInDateIdx;
+                                                        for (let j = projectInDateIdx + 1; j < currentTasks.length; j++) {
+                                                            if ((currentTasks[j].depth || 0) > (projectInDate.depth || 0)) {
+                                                                lastSubtaskIdx = j;
+                                                            } else {
+                                                                break;
+                                                            }
+                                                        }
+                                                        const insertIdx = lastSubtaskIdx + 1;
+
+                                                        const n: Task = {
+                                                            id: Date.now() + 1,
+                                                            name: '',
+                                                            status: 'pending',
+                                                            indent: 0,
+                                                            parent: projectInDate.id,
+                                                            space_id: String(currentSpace?.id || ''),
+                                                            text: '',
+                                                            percent: undefined,
+                                                            planTime: 0,
+                                                            actTime: 0,
+                                                            isTimerOn: false,
+                                                            depth: (projectInDate.depth || 0) + 1
+                                                        };
+                                                        currentTasks.splice(insertIdx, 0, n);
+                                                        updateTasks.mutate({ tasks: currentTasks, memo: currentMemo });
+                                                        setFocusedTaskId(n.id);
+                                                    }}
+                                                    className="w-full py-2 text-gray-600 hover:text-gray-400 transition-colors flex items-center gap-2 text-sm font-bold"
+                                                >
+                                                    <Plus size={14} /> Add Subtask
+                                                </button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-gray-600">
+                                        <BarChart2 size={48} className="mb-4 opacity-20" />
+                                        <p className="font-bold">Select a project to view details</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1382,11 +1386,11 @@ export default function App() {
                             <div className="flex flex-col items-center">
                                 <span className="text-[9px] text-gray-500 font-black uppercase">Progress</span>
                                 <div className="flex items-center gap-1">
-                                    <input 
+                                    <input
                                         type="number"
                                         min="0"
                                         max="100"
-                                        value={activeTask.percent || 0}
+                                        value={activeTask.percent !== undefined ? activeTask.percent : ''}
                                         onMouseDown={(e) => e.stopPropagation()}
                                         onClick={(e) => e.stopPropagation()}
                                         onChange={(e) => handleUpdateTask(activeTask.id, { percent: parseInt(e.target.value) || 0 })}

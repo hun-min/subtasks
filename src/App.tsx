@@ -787,12 +787,11 @@ export default function App() {
       
       // If percent === 0, check if it has other non-default properties
       // that indicate it was explicitly set as a project
+      // Note: parent, depth are not included as they indicate subtask structure, not project status
       const hasNonDefaultProps = 
         (t.actTime !== undefined && t.actTime > 0) ||
         (t.planTime !== undefined && t.planTime > 0) ||
         (t.status !== undefined && t.status !== 'pending') ||
-        (t.depth !== undefined && t.depth > 0) ||
-        (t.parent !== null && t.parent !== undefined) ||
         (t.isTimerOn === true) ||
         (t.timerStartTime !== undefined && t.timerStartTime > 0) ||
         (t.end_time !== undefined && t.end_time > 0) ||

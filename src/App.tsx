@@ -965,7 +965,7 @@ export default function App() {
       </nav>
       <div className="flex-1 overflow-y-auto no-scrollbar relative">
         <div
-          className="max-w-2xl mx-auto flex flex-col px-2 md:px-4 pb-4"
+          className="max-w-xl mx-auto flex flex-col px-2 md:px-4 pb-4"
           onClick={(e) => e.stopPropagation()}
         >
         {viewMode === 'day' ? (
@@ -1065,7 +1065,7 @@ export default function App() {
                       className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none"
                     />
                 </div>
-                <div className={`flex-1 space-y-8 pb-48 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
+                <div className={`flex-1 space-y-8 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
                   <div>
                       <div className="flex items-center justify-between mb-2 px-2">
                           <div className="flex items-center gap-3">
@@ -1122,7 +1122,7 @@ export default function App() {
                 />
             </div>
         ) : (
-            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4">
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-[240rem] mx-auto">
                 {/* Project List & Details Combined */}
                 <div className="bg-[#0f0f14] rounded-3xl border border-white/5 p-6 flex flex-col overflow-hidden">
                     <div className="flex justify-between items-center mb-6">

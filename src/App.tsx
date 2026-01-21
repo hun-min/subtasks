@@ -785,20 +785,13 @@ export default function App() {
       // If percent > 0, it's definitely a project
       if (t.percent > 0) return true;
       
-      // If percent === 0, check if it has other non-default properties
-      // that indicate it was explicitly set as a project
-      // Note: parent, depth are not included as they indicate subtask structure, not project status
+      // If percent === 0, only consider it a project if it has significant time tracking
+      // Note: We exclude status, is_starred, note, due as they don't indicate project status
       const hasNonDefaultProps = 
         (t.actTime !== undefined && t.actTime > 0) ||
         (t.planTime !== undefined && t.planTime > 0) ||
-        (t.status !== undefined && t.status !== 'pending') ||
         (t.isTimerOn === true) ||
-        (t.timerStartTime !== undefined && t.timerStartTime > 0) ||
-        (t.end_time !== undefined && t.end_time > 0) ||
-        (t.start_time !== undefined && t.start_time > 0) ||
-        (t.is_starred === true) ||
-        (t.note !== undefined && t.note.trim().length > 0) ||
-        (t.due !== undefined && t.due.trim().length > 0);
+        (t.timerStartTime !== undefined && t.timerStartTime > 0);
       
       return hasNonDefaultProps;
     };

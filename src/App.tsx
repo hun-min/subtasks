@@ -1148,7 +1148,7 @@ export default function App() {
                             {/* Project List */}
                             <div className="lg:col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
                                 {projects.map(project => (
-                                    <button
+                                        <button
                                         key={`${project.id}-${project.name || project.text}`}
                                         onClick={() => {
                                             setSelectedProjectId(project.id);

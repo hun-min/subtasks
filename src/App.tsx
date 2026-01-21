@@ -1108,7 +1108,7 @@ export default function App() {
                 </div>
             </>
         ) : viewMode === 'flow' ? (
-            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-4xl mx-auto">
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-[240rem] mx-auto">
                 <FlowView
                     logs={logs}
                     currentSpaceId={String(currentSpace?.id || '')}

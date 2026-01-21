@@ -965,7 +965,7 @@ export default function App() {
       </nav>
       <div className="flex-1 overflow-y-auto no-scrollbar relative">
         <div
-          className="max-w-xl mx-auto flex flex-col px-2 md:px-4 pb-4"
+          className="max-w-4xl mx-auto flex flex-col px-2 md:px-4 pb-4"
           onClick={(e) => e.stopPropagation()}
         >
         {viewMode === 'day' ? (
@@ -1108,7 +1108,7 @@ export default function App() {
                 </div>
             </>
         ) : viewMode === 'flow' ? (
-            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-[240rem] mx-auto">
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 px-2 max-w-none mx-auto">
                 <FlowView
                     logs={logs}
                     currentSpaceId={String(currentSpace?.id || '')}
@@ -1122,7 +1122,7 @@ export default function App() {
                 />
             </div>
         ) : (
-            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-[240rem] mx-auto">
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-2xl mx-auto">
                 {/* Project List & Details Combined */}
                 <div className="bg-[#0f0f14] rounded-3xl border border-white/5 p-6 flex flex-col overflow-hidden">
                     <div className="flex justify-between items-center mb-6">

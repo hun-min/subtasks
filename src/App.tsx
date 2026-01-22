@@ -358,20 +358,20 @@ export default function App() {
       if (idx === -1) return;
 
       const current = tasks[idx];
-      
+
       // 2. 새 항목 생성 (아랫줄)
       const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
         id: Date.now() + i + Math.random(), // 유니크 ID
         name: line,
-        status: 'pending', 
-        indent: current.indent, 
-        parent: current.parent, 
+        status: 'pending',
+        indent: current.indent,
+        parent: current.parent,
         text: line,
-        percent: undefined, 
-        planTime: 0, 
-        actTime: 0, 
-        isTimerOn: false, 
-        depth: current.depth || 0, 
+        percent: undefined,
+        planTime: 0,
+        actTime: 0,
+        isTimerOn: false,
+        depth: current.depth || 0,
         space_id: String(currentSpace?.id || ''),
       }));
 
@@ -386,6 +386,14 @@ export default function App() {
       const nextFocusId = newTasksToAdd.length > 0 ? newTasksToAdd[0].id : null;
       if (nextFocusId) {
         setFocusedTaskId(nextFocusId);
+
+        // Fix: Automatically focus on time input when new task is created
+        setTimeout(() => {
+          if (timeInputRefs.current[0]) {
+            timeInputRefs.current[0].focus();
+            timeInputRefs.current[0].select();
+          }
+        }, 100);
       }
 
       // [CRITICAL FIX] 엔터 키 데이터 유실 방지를 위한 즉시 캐시 업데이트
@@ -402,7 +410,7 @@ export default function App() {
 
       // 5. 서버 동기화 요청
       updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
-      
+
   }, [tasks, currentMemo, updateTasks, currentSpace, queryClient, viewDate, user]);
 
 
@@ -1186,7 +1194,7 @@ export default function App() {
                   <div>
                       <div className="flex items-center justify-between mb-2 px-2">
                           <div className="flex items-center gap-3">
-                            <button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: undefined, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 }; setFocusedTaskId(n.id); updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo }); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
+                            <button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: undefined, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 }; setFocusedTaskId(n.id); updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo }); setTimeout(() => { if (timeInputRefs.current[0]) { timeInputRefs.current[0].focus(); timeInputRefs.current[0].select(); } }, 100); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
                           </div>
                       </div>
                       <div className="-ml-7">

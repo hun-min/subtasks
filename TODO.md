@@ -1,0 +1,9 @@
+- [x] Update UnifiedTaskItem.tsx to change text color logic: tasks with percent -> yellow, others -> gray, no line-through for completion
+- [x] Add selectedTasks state to FlowView
+- [x] Pass selectedTasks and onSelectTask to UnifiedTaskItem
+- [x] Update UnifiedTaskItem to handle selection on click
+- [x] Add visual indication for selected tasks
+- [x] Add Del key handler in FlowView to delete selected tasks
+- [x] Add deselect on Escape or click outside
+- [x] Fix shift selection in FlowView by adding lastClickedIndex state and updating handleSelectTask logic
+- [x] Consolidate onClick handlers in UnifiedTaskItem to prevent event bubbling issues

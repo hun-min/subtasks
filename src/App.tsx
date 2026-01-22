@@ -6,13 +6,14 @@ import { AuthModal } from './components/AuthModal';
 import { SpaceSelector } from './components/SpaceSelector';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Play, Pause, BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, ChevronUp, Trash2, Copy, Flame, RotateCcw, RotateCw } from 'lucide-react';
+import { BarChart2, X, ChevronLeft, ChevronRight, Plus, ArrowRight, ArrowLeft, Calendar, HelpCircle, ChevronDown, ChevronUp, Trash2, Copy, Flame, RotateCcw, RotateCw } from 'lucide-react';
 import { Task, DailyLog } from './types';
 import { UnifiedTaskItem } from './components/UnifiedTaskItem';
 import { FlowView } from './components/FlowView';
 
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
 import { useTasks, useAllTaskLogs } from './hooks/useTasks';
+import { supabase } from './supabase';
 
 // --- [컴포넌트] 태스크 히스토리 모달 ---
 const TaskHistoryModal = React.memo(({ taskName, logs, onClose }: { taskName: string, logs: DailyLog[], onClose: () => void }) => {
@@ -208,45 +209,6 @@ export default function App() {
     return undefined;
   }, [tasks, logs, focusedTaskId]);
 
-  // 플로팅 바 타이머 UI 업데이트를 위한 로컬 상태
-  const [activeTimerElapsed, setActiveTimerElapsed] = useState(0);
-
-  useEffect(() => {
-    let interval: any;
-    if (activeTask?.isTimerOn && activeTask.timerStartTime) {
-        const update = () => {
-             const now = Date.now();
-             const seconds = Math.floor((now - activeTask.timerStartTime!) / 1000);
-             setActiveTimerElapsed(seconds);
-        };
-        update();
-        interval = setInterval(update, 1000);
-    } else {
-        setActiveTimerElapsed(0);
-    }
-    return () => clearInterval(interval);
-  }, [activeTask?.isTimerOn, activeTask?.timerStartTime, activeTask?.id]);
-
-  // Floating bar timer input real-time update
-  useEffect(() => {
-    if (activeTask?.isTimerOn && activeTask.timerStartTime) {
-      const update = () => {
-        const now = Date.now();
-        const seconds = Math.floor((now - activeTask.timerStartTime!) / 1000);
-        const total = (activeTask.actTime || 0) + seconds;
-        const h = Math.floor(total / 3600).toString().padStart(2, '0');
-        const m = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
-        const s = (total % 60).toString().padStart(2, '0');
-        if (timeInputRefs.current[0]) timeInputRefs.current[0].value = h;
-        if (timeInputRefs.current[1]) timeInputRefs.current[1].value = m;
-        if (timeInputRefs.current[2]) timeInputRefs.current[2].value = s;
-      };
-      update();
-      const interval = setInterval(update, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [activeTask?.isTimerOn, activeTask?.timerStartTime, activeTask?.actTime]);
-
   useEffect(() => {
     // 1. dvh 지원 여부 확인 및 폴백 설정
     const setAppHeight = () => {
@@ -311,6 +273,7 @@ export default function App() {
 
   const handleUpdateTask = useCallback((taskId: number, updates: Partial<Task>) => {
     const isStatusUpdate = 'status' in updates;
+    const isPercentUpdate = 'percent' in updates;
     const isSelectionUpdate = selectedTaskIds.has(taskId) && isStatusUpdate;
 
     // If updating a project's percentage or time, we might want to sync it across all instances of that project name
@@ -336,11 +299,57 @@ export default function App() {
             if (isStatusUpdate && updates.status === 'completed' && t.status !== 'completed') {
                 updatedTask.end_time = Date.now();
             }
+            
+            // Update status based on percentage
+            if (isPercentUpdate) {
+                // If percent is undefined, remove it (set to undefined)
+                if (updates.percent === undefined) {
+                    updatedTask.percent = undefined;
+                    // If task was completed, change it back to pending
+                    if (t.status === 'completed') {
+                        updatedTask.status = 'pending';
+                    }
+                } else {
+                    // Clamp percentage between 0 and 100
+                    const clampedPercent = Math.max(0, Math.min(100, updates.percent));
+                    updatedTask.percent = clampedPercent;
+                    
+                    // Set end_time whenever percentage is entered
+                    updatedTask.end_time = Date.now();
+                    
+                    if (clampedPercent === 100) {
+                        updatedTask.status = 'completed';
+                    } else if (clampedPercent < 100 && t.status === 'completed') {
+                        updatedTask.status = 'pending';
+                    }
+                }
+            }
+            
             return updatedTask;
         }
         return t;
     });
-    updateTasks.mutate({ tasks: nextTasks, memo: currentMemo });
+
+    // Sort tasks: completed tasks go to bottom, pending tasks stay at top
+    // This ensures that when a task is completed (100%), it moves to the bottom
+    // and when it's changed back to incomplete (50%), it moves back up
+    const sortedTasks = [...nextTasks].sort((a, b) => {
+        // Check if task is completed based on status or percent
+        const aIsCompleted = a.status === 'completed' || a.percent === 100;
+        const bIsCompleted = b.status === 'completed' || b.percent === 100;
+        
+        // If both are completed or both are pending, maintain original order
+        if (aIsCompleted && bIsCompleted) return 0;
+        if (!aIsCompleted && !bIsCompleted) return 0;
+        
+        // Completed tasks go to bottom
+        if (aIsCompleted) return 1;
+        if (bIsCompleted) return -1;
+        
+        return 0;
+    });
+
+    updateTasks.mutate({ tasks: sortedTasks, memo: currentMemo });
   }, [tasks, currentMemo, updateTasks, selectedTaskIds]);
 
   const handleAddTaskAtCursor = useCallback((taskId: number, textBefore: string, textAfter: string) => {
@@ -595,51 +604,7 @@ export default function App() {
     navigator.clipboard.writeText(text);
   }, []);
 
-  // Timer logic
-  useEffect(() => {
-    const timer = setInterval(() => {
-        const now = Date.now();
-        let changed = false;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const next = tasks.map(t => { 
-            if (t.isTimerOn && t.timerStartTime) { 
-                const elapsed = (now - t.timerStartTime) / 1000; 
-                changed = true; 
-                return { ...t, actTime: (t.actTime || 0) + elapsed, timerStartTime: now }; 
-            } 
-            return t; 
-        });
-        // 타이머 업데이트는 로컬 상태 변경으로 처리할 수 있지만, 
-        // 여기서는 useTasks 훅 구조상 tasks 상태가 훅 내부에서 오므로
-        // 매 초마다 mutation을 호출하는 것은 너무 비효율적입니다.
-        // 따라서 타이머 업데이트는 UI에서만 반영되거나, 
-        // 일정 주기로만 저장되도록 수정하는 것이 좋으나,
-        // 기존 로직 유지를 위해 여기서는 setTasks 대신 updateTasks를 호출하되,
-        // 너무 잦은 호출 방지가 필요합니다. (TODO: Debounce or Local State for Timer)
-        // 일단은 1초마다 저장은 너무 잦으므로, 타이머 틱은 별도 로컬 state로 관리하거나
-        // updateTasks를 호출하되 서버 부하를 고려해야 합니다.
-        // 현재 구조상 setTasks가 없으므로 updateTasks를 호출해야 합니다.
-        if (changed) {
-             console.debug('Timer tick', next);
-            // updateTasks.mutate({ tasks: next, memo: currentMemo }); // 너무 잦은 호출 위험
-            // 임시 방편: 타이머는 실시간 저장을 하지 않고, 
-            // 멈출 때나 다른 액션 시에 저장되도록 하는 것이 일반적입니다.
-            // 하지만 사용자 경험을 위해 여기서는 생략하고, 
-            // Play/Pause 토글 시에만 시간이 저장되도록 수정하는 것이 좋습니다.
-            // (기존 코드에서도 setTasks만 하고 saveToSupabase는 안했을 수도 있음 - 확인 필요)
-            // 기존 코드: setTasks 호출 -> useEffect에 의해 saveToSupabase 호출될 수도 있음.
-            // 확인 결과 기존 코드는 setTasks 후 saveToSupabase를 호출하지 않음 (useEffect가 tasks 변경 감지 안함? 아님)
-            // 기존 useEffect[tasks] 가 없었고, handleUpdateTask 등에서만 saveToSupabase 호출함.
-            // Timer useEffect에서는 setTasks만 호출했음.
-            // 따라서 여기서는 UI 업데이트만 필요함. 하지만 tasks는 이제 prop으로 옴.
-            // 결론: 타이머 기능은 React Query와 같은 서버 상태 동기화 구조에서는 
-            // 로컬 상태로 분리하거나, 별도 처리가 필요함.
-            // 여기서는 일단 주석 처리하고, 타이머 토글 시에만 저장되도록 함.
-        }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [tasks, currentMemo, updateTasks]); 
-  // TODO: 타이머 실시간 UI 업데이트 로직 구현 필요 (서버 저장 없이)
+
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -808,15 +773,22 @@ export default function App() {
     }
 
     const result = Array.from(projectMap.values());
+    // Filter out projects older than 6 months
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const filteredResult = result.filter(p => {
+      const updatedAt = p.updated_at ? new Date(p.updated_at) : null;
+      return !updatedAt || updatedAt >= sixMonthsAgo;
+    });
     // Sort projects by 'updated_at' in descending order (most recently updated first)
-    result.sort((a, b) => {
+    filteredResult.sort((a, b) => {
       const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
       const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
       return dateB - dateA; // Descending sort
     });
 
-    console.log('Global Projects List (filtered by percent):', result.map(p => p.name || p.text));
-    return result;
+    console.log('Global Projects List (filtered by percent and 6 months):', filteredResult.map(p => p.name || p.text));
+    return filteredResult;
   }, [logs, tasks]);
 
   const selectedProject = useMemo(() => {
@@ -897,9 +869,154 @@ export default function App() {
       if (date === viewDate.toDateString()) {
           handleUpdateTask(taskId, updates);
       } else {
-          console.warn("Updating tasks in other dates from Flow View not fully implemented via hook.");
+          // For other dates, we need to handle 100% completion differently
+          // Find the task in logs for that date
+          const log = logs.find(l => l.date === date);
+          if (!log) return;
+          
+          const taskIndex = log.tasks.findIndex(t => t.id === taskId);
+          if (taskIndex === -1) return;
+          
+          const task = log.tasks[taskIndex];
+          const updatedTask = { ...task, ...updates };
+          
+          // Update status based on percentage
+          if ('percent' in updates) {
+              // If percent is undefined, remove it (set to undefined)
+              if (updates.percent === undefined) {
+                  updatedTask.percent = undefined;
+                  // If task was completed, change it back to pending
+                  if (task.status === 'completed') {
+                      updatedTask.status = 'pending';
+                  }
+              } else {
+                  // Clamp percentage between 0 and 100
+                  const clampedPercent = Math.max(0, Math.min(100, updates.percent));
+                  updatedTask.percent = clampedPercent;
+                  
+                  // Set end_time whenever percentage is entered
+                  updatedTask.end_time = Date.now();
+                  
+                  if (clampedPercent === 100) {
+                      updatedTask.status = 'completed';
+                  } else if (clampedPercent < 100 && task.status === 'completed') {
+                      updatedTask.status = 'pending';
+                  }
+              }
+          }
+          
+          // 100% 완료 시 해당 날짜 내에서 맨 밑으로 이동
+          // 50% 이하로 변경 시 맨 위로 이동
+          const wasCompleted = task.percent === 100 || task.status === 'completed';
+          const isCompleted = updatedTask.percent === 100 || updatedTask.status === 'completed';
+          
+          if (wasCompleted && !isCompleted) {
+              // Changed from completed to incomplete - move to top
+              const filteredTasks = log.tasks.filter(t => t.id !== taskId);
+              const movedTasks = [updatedTask, ...filteredTasks];
+              
+              // Update the log with sorted tasks
+              const updatedLog = { ...log, tasks: movedTasks };
+              
+              // Update the cache
+              const queryKey = ['tasks', date, user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+              queryClient.setQueryData(queryKey, updatedLog);
+              
+              // Also update all_logs cache
+              queryClient.setQueryData(['all_tasks', user?.id, currentSpace?.id ? String(currentSpace.id) : undefined], (old: DailyLog[] | undefined) => {
+                  if (!old) return old;
+                  const index = old.findIndex(l => l.date === date);
+                  if (index === -1) return old;
+                  const newLogs = [...old];
+                  newLogs[index] = updatedLog;
+                  return newLogs;
+              });
+              
+              // Save to server
+              const saveData = async () => {
+                  if (!user?.id || !currentSpace?.id) return;
+                  const { error } = await supabase.from('task_logs').upsert({
+                      user_id: user.id,
+                      space_id: String(currentSpace.id),
+                      date: date,
+                      tasks: JSON.stringify(movedTasks),
+                      memo: log.memo || '',
+                  }, { onConflict: 'user_id,space_id,date' });
+                  if (error) console.error('Error saving task:', error);
+              };
+              saveData();
+          } else if (!wasCompleted && isCompleted) {
+              // Changed from incomplete to completed - move to bottom
+              const filteredTasks = log.tasks.filter(t => t.id !== taskId);
+              const movedTasks = [...filteredTasks, updatedTask];
+              
+              // Update the log with sorted tasks
+              const updatedLog = { ...log, tasks: movedTasks };
+              
+              // Update the cache
+              const queryKey = ['tasks', date, user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+              queryClient.setQueryData(queryKey, updatedLog);
+              
+              // Also update all_logs cache
+              queryClient.setQueryData(['all_tasks', user?.id, currentSpace?.id ? String(currentSpace.id) : undefined], (old: DailyLog[] | undefined) => {
+                  if (!old) return old;
+                  const index = old.findIndex(l => l.date === date);
+                  if (index === -1) return old;
+                  const newLogs = [...old];
+                  newLogs[index] = updatedLog;
+                  return newLogs;
+              });
+              
+              // Save to server
+              const saveData = async () => {
+                  if (!user?.id || !currentSpace?.id) return;
+                  const { error } = await supabase.from('task_logs').upsert({
+                      user_id: user.id,
+                      space_id: String(currentSpace.id),
+                      date: date,
+                      tasks: JSON.stringify(movedTasks),
+                      memo: log.memo || '',
+                  }, { onConflict: 'user_id,space_id,date' });
+                  if (error) console.error('Error saving task:', error);
+              };
+              saveData();
+          } else {
+              // No sorting needed, just update
+              const filteredTasks = log.tasks.map(t => t.id === taskId ? updatedTask : t);
+              
+              // Update the log
+              const updatedLog = { ...log, tasks: filteredTasks };
+              
+              // Update the cache
+              const queryKey = ['tasks', date, user?.id, currentSpace?.id ? String(currentSpace.id) : undefined];
+              queryClient.setQueryData(queryKey, updatedLog);
+              
+              // Also update all_logs cache
+              queryClient.setQueryData(['all_tasks', user?.id, currentSpace?.id ? String(currentSpace.id) : undefined], (old: DailyLog[] | undefined) => {
+                  if (!old) return old;
+                  const index = old.findIndex(l => l.date === date);
+                  if (index === -1) return old;
+                  const newLogs = [...old];
+                  newLogs[index] = updatedLog;
+                  return newLogs;
+              });
+              
+              // Save to server
+              const saveData = async () => {
+                  if (!user?.id || !currentSpace?.id) return;
+                  const { error } = await supabase.from('task_logs').upsert({
+                      user_id: user.id,
+                      space_id: String(currentSpace.id),
+                      date: date,
+                      tasks: JSON.stringify(filteredTasks),
+                      memo: log.memo || '',
+                  }, { onConflict: 'user_id,space_id,date' });
+                  if (error) console.error('Error saving task:', error);
+              };
+              saveData();
+          }
       }
-  }, [viewDate, handleUpdateTask]);
+  }, [viewDate, handleUpdateTask, logs, user, currentSpace, queryClient]);
 
   const handleAddTaskInFlow = useCallback((date: string, taskId: number, textBefore: string, textAfter: string) => {
      if (date === viewDate.toDateString()) {
@@ -1189,21 +1306,33 @@ export default function App() {
                                                 <input
                                                     value={selectedProject.name || selectedProject.text || ''}
                                                     onChange={(e) => handleUpdateTask(selectedProject.id, { name: e.target.value, text: e.target.value })}
-                                                    className="bg-transparent text-2xl font-black text-white outline-none w-full"
+                                                    className="bg-transparent text-2xl font-black text-yellow-200 outline-none w-full"
                                                     placeholder="Project Name"
                                                 />
                                                 <div className="flex items-center gap-4 mt-2">
                                                     <div className="flex items-center gap-2">
                                                         <BarChart2 size={14} className="text-gray-500" />
                                                         <div className="flex items-center gap-1">
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                max="100"
-                                                                value={selectedProject.percent || 0}
-                                                                onChange={(e) => handleUpdateTask(selectedProject.id, { percent: parseInt(e.target.value) || 0 })}
-                                                                className="bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs font-bold text-blue-400 outline-none w-[4ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                            />
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        value={selectedProject.percent !== undefined ? selectedProject.percent : ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          if (val === '') {
+                                            handleUpdateTask(selectedProject.id, { percent: undefined });
+                                          } else {
+                                            const num = parseInt(val);
+                                            if (!isNaN(num)) {
+                                              // Clamp between 0 and 100
+                                              const clamped = Math.max(0, Math.min(100, num));
+                                              handleUpdateTask(selectedProject.id, { percent: clamped });
+                                            }
+                                          }
+                                        }}
+                                        className="bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs font-bold text-blue-400 outline-none w-[4ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    />
                                                             <span className="text-xs font-bold text-gray-400">% Complete</span>
                                                         </div>
                                                     </div>
@@ -1369,27 +1498,7 @@ export default function App() {
                     activeTask && (
                       <>
                         <div className="flex items-center gap-2 flex-shrink-0 pl-1">
-                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => {
-                                if (activeTask.isTimerOn) {
-                                    // Stop Timer: Calculate elapsed and save
-                                    const elapsed = activeTask.timerStartTime ? Math.floor((Date.now() - activeTask.timerStartTime) / 1000) : 0;
-                                    const newActTime = (activeTask.actTime || 0) + elapsed;
-                                    handleUpdateTask(activeTask.id, {
-                                        isTimerOn: false,
-                                        timerStartTime: undefined,
-                                        actTime: newActTime,
-                                        act_time: newActTime
-                                    });
-                                    console.log('Timer Stopped & Saved:', newActTime);
-                                } else {
-                                    // Start Timer
-                                    handleUpdateTask(activeTask.id, {
-                                        isTimerOn: true,
-                                        timerStartTime: Date.now()
-                                    });
-                                }
-                            }} className={`p-3.5 rounded-2xl transition-all ${activeTask.isTimerOn ? 'bg-[#7c4dff] text-white' : 'bg-white/5 text-gray-400'}`}>{activeTask.isTimerOn ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
-                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Execution</span><div className="flex items-center justify-center"><input ref={(el) => timeInputRefs.current[0] = el} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt(e.target.value) || 0; const m = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const s = parseInt((e.target.nextElementSibling?.nextElementSibling?.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(Math.floor(((activeTask.actTime || 0) + activeTimerElapsed) / 3600)).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[1] = el} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt(e.target.value) || 0; const s = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(Math.floor((((activeTask.actTime || 0) + activeTimerElapsed) % 3600) / 60)).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[2] = el} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} onBlur={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling?.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const s = parseInt(e.target.value) || 0; const secs = h * 3600 + m * 60 + s; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} defaultValue={String(((activeTask.actTime || 0) + activeTimerElapsed) % 60).padStart(2, '0')} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[2.2ch] text-center" maxLength={2} /></div></div>
+                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Input Time</span><div className="flex items-center justify-center"><input ref={(el) => timeInputRefs.current[0] = el} value={String(Math.floor((activeTask.actTime || 0) / 3600)).padStart(2, '0')} onChange={(e) => { const h = parseInt(e.target.value) || 0; const m = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[3ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[1] = el} value={String(Math.floor(((activeTask.actTime || 0) % 3600) / 60)).padStart(2, '0')} onChange={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt(e.target.value) || 0; const secs = h * 3600 + m * 60; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[3ch] text-center" maxLength={2} /></div></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-1 flex-shrink-0">
@@ -1403,7 +1512,19 @@ export default function App() {
                                         value={activeTask.percent !== undefined ? activeTask.percent : ''}
                                         onMouseDown={(e) => e.stopPropagation()}
                                         onClick={(e) => e.stopPropagation()}
-                                        onChange={(e) => handleUpdateTask(activeTask.id, { percent: parseInt(e.target.value) || 0 })}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          if (val === '') {
+                                            handleUpdateTask(activeTask.id, { percent: undefined });
+                                          } else {
+                                            const num = parseInt(val);
+                                            if (!isNaN(num)) {
+                                              // Clamp between 0 and 100
+                                              const clamped = Math.max(0, Math.min(100, num));
+                                              handleUpdateTask(activeTask.id, { percent: clamped });
+                                            }
+                                          }
+                                        }}
                                         className="bg-transparent text-[18px] font-black font-mono text-blue-400 outline-none w-[3ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
                                     <span className="text-[14px] font-black text-blue-400">%</span>

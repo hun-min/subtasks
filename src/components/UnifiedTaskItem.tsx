@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, Star } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { Task, DailyLog } from '../types';
-import { formatTimeShort, formatCompletionTime } from '../utils';
+import { formatCompletionTime } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 
 export const UnifiedTaskItem = React.memo(({
@@ -58,29 +58,11 @@ export const UnifiedTaskItem = React.memo(({
   const updateTimeoutRef = useRef<any>(null);
   const skipSyncRef = useRef(false);
 
-  // Timer logic
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
-  useEffect(() => {
-    let intervalId: any;
-    if (task.isTimerOn && task.timerStartTime) {
-      const updateTimer = () => {
-        const now = Date.now();
-        const start = task.timerStartTime || now;
-        const seconds = Math.floor((now - start) / 1000);
-        setElapsedSeconds(seconds);
-      };
-
-      updateTimer();
-      intervalId = setInterval(updateTimer, 1000);
-    } else {
-      setElapsedSeconds(0);
-    }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [task.isTimerOn, task.timerStartTime]);
+  // Time editing logic
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [editHours, setEditHours] = useState('');
+  const [editMinutes, setEditMinutes] = useState('');
+  const [editSeconds, setEditSeconds] = useState('');
 
   useEffect(() => {
     localTextRef.current = localText;
@@ -362,12 +344,12 @@ export const UnifiedTaskItem = React.memo(({
       return;
     }
 
-    // Ctrl + Space: Toggle Completion
-    if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) {
-      e.preventDefault();
-      const newStatus = task.status === 'completed' ? 'pending' : 'completed';
-      updateTask(task.id, { status: newStatus, isTimerOn: false });
-    }
+    // Ctrl + Space: Toggle Completion (REMOVED per user requirement)
+    // if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) {
+    //   e.preventDefault();
+    //   const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+    //   updateTask(task.id, { status: newStatus, isTimerOn: false });
+    // }
 
     // Shift + Space: Toggle Timer
     if (e.shiftKey && (e.key === ' ' || e.code === 'Space')) {
@@ -430,11 +412,6 @@ export const UnifiedTaskItem = React.memo(({
     }
   };
 
-  const getStatusColor = () => {
-    if (task.isTimerOn) return 'bg-[#7c4dff] border-[#7c4dff] shadow-[0_0_8px_rgba(124,77,255,0.6)]';
-    if (task.status === 'completed') return 'bg-[#4caf50] border-[#4caf50]';
-    return 'bg-transparent border-gray-600 hover:border-gray-400';
-  };
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     // Composition 중일 때는 업데이트를 건너뛰거나 최소한의 처리만
@@ -509,12 +486,14 @@ export const UnifiedTaskItem = React.memo(({
             } transition-all`}
           />
         </button>
-        <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
-          {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
-          {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
-        </button>
+        {/* 상위/하위 할일 완료 표시 */}
+        {task.status === 'completed' && (
+          <div className="w-[15px] h-[15px] flex items-center justify-center">
+            <div className="w-2 h-2 bg-yellow-400 rounded-full" />
+          </div>
+        )}
       </div>
-      <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
+        <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
         <AutoResizeTextarea
             inputRef={textareaRef}
             value={localText}
@@ -526,7 +505,7 @@ export const UnifiedTaskItem = React.memo(({
             onPaste={handlePaste}
             onCompositionStart={() => { isComposing.current = true; }}
             onCompositionEnd={() => { isComposing.current = false; }}
-            className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`}
+            className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${(task.depth === 0 || task.depth === undefined) ? 'text-yellow-400' : (task.percent !== undefined && task.percent !== null) ? 'text-yellow-400' : 'text-[#e0e0e0]'}`}
             placeholder=""
         />
         {isFocused && localText === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
@@ -540,55 +519,114 @@ export const UnifiedTaskItem = React.memo(({
             }} className={`w-full px-3 py-1.5 text-left text-sm ${selectedSuggestionIndex === idx ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.name || s.text || ''}</button>)}
           </div>
         )}
-      </div>
-      <div className="flex flex-col items-end gap-1 pt-1.5 flex-shrink-0">
-        {(() => {
-          const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
-          const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
-          let displayText = '';
-          if (task.percent !== undefined && task.percent !== null) {
-            if (task.percent > 0) {
-              displayText = `${task.percent}%`;
-            } else if (task.percent === 0) {
-              displayText = '0%';
+        </div>
+        <div className="flex flex-col items-end gap-1 pt-1.5 flex-shrink-0">
+          {(() => {
+            // Show completion time (end_time) in "at HH:MM" format
+            // Show for any task that has end_time set (completed or has time entered)
+            const completionTimeDisplay = task.end_time ? `at ${formatCompletionTime(task.end_time)}` : null;
+            let displayText = '';
+            if (task.percent !== undefined && task.percent !== null) {
+              if (task.percent > 0) {
+                displayText = `${task.percent}%`;
+              } else if (task.percent === 0) {
+                displayText = '0%';
+              }
             }
-          }
-          if (timerDisplay) {
-            if (displayText) displayText += ` / ${timerDisplay}`;
-            else displayText = timerDisplay;
-          }
-          if (completionTimeDisplay) {
-            if (displayText) displayText += ` / ${completionTimeDisplay}`;
-            else displayText = completionTimeDisplay;
-          }
-          return (
-            <div className="flex flex-col items-end gap-1">
-              {displayText && (
-                <span
-                  className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
-                >
-                  {displayText}
-                </span>
-              )}
-              {task.percent !== undefined && task.percent > 0 && (
-                <div 
-                  className="h-1 w-12 bg-white/5 rounded-full overflow-hidden relative"
-                  style={{
-                    background: `linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)`,
-                  }}
-                >
-                  <div 
-                    className="absolute inset-0 bg-[#050505] transition-all duration-500" 
-                    style={{ 
-                      left: `${task.percent}%`,
-                    }} 
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })()}
-      </div>
+            if (completionTimeDisplay) {
+              if (displayText) displayText += ` / ${completionTimeDisplay}`;
+              else displayText = completionTimeDisplay;
+            }
+            return (
+              <div className="flex flex-col items-end gap-1">
+                {isEditingTime ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="0"
+                      value={editHours}
+                      onChange={(e) => setEditHours(e.target.value)}
+                      className="w-6 text-[10px] font-mono bg-transparent text-gray-500/80 outline-none"
+                      placeholder="H"
+                    />
+                    :
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={editMinutes}
+                      onChange={(e) => setEditMinutes(e.target.value)}
+                      className="w-6 text-[10px] font-mono bg-transparent text-gray-500/80 outline-none"
+                      placeholder="M"
+                    />
+                    :
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={editSeconds}
+                      onChange={(e) => setEditSeconds(e.target.value)}
+                      className="w-6 text-[10px] font-mono bg-transparent text-gray-500/80 outline-none"
+                      placeholder="S"
+                      onBlur={() => {
+                        const h = parseInt(editHours) || 0;
+                        const m = parseInt(editMinutes) || 0;
+                        const s = parseInt(editSeconds) || 0;
+                        const totalSeconds = h * 3600 + m * 60 + s;
+                        updateTask(task.id, { actTime: totalSeconds, act_time: totalSeconds });
+                        setIsEditingTime(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const h = parseInt(editHours) || 0;
+                          const m = parseInt(editMinutes) || 0;
+                          const s = parseInt(editSeconds) || 0;
+                          const totalSeconds = h * 3600 + m * 60 + s;
+                          updateTask(task.id, { actTime: totalSeconds, act_time: totalSeconds });
+                          setIsEditingTime(false);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  displayText && (
+                    <span
+                      className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'} cursor-pointer`}
+                      onClick={() => {
+                        // Show input time for editing (not timer elapsed time)
+                        const totalSeconds = task.actTime || 0;
+                        const h = Math.floor(totalSeconds / 3600);
+                        const m = Math.floor((totalSeconds % 3600) / 60);
+                        const s = totalSeconds % 60;
+                        setEditHours(h.toString());
+                        setEditMinutes(m.toString());
+                        setEditSeconds(s.toString());
+                        setIsEditingTime(true);
+                      }}
+                    >
+                      {displayText}
+                    </span>
+                  )
+                )}
+                {task.percent !== undefined && task.percent > 0 && (
+                  <div
+                    className="h-1 w-12 bg-white/5 rounded-full overflow-hidden relative"
+                    style={{
+                      background: `linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)`,
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0 bg-[#050505] transition-all duration-500"
+                      style={{
+                        left: `${task.percent}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
     </div>
   );
 });

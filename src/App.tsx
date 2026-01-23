@@ -1349,7 +1349,7 @@ export default function App() {
                                                 <input
                                                     value={selectedProject.name || selectedProject.text || ''}
                                                     onChange={(e) => handleUpdateTask(selectedProject.id, { name: e.target.value, text: e.target.value })}
-                                                    className="bg-transparent text-2xl font-black text-yellow-200 outline-none w-full pl-4"
+                                                    className="bg-transparent text-2xl font-black text-yellow-200 outline-none w-full pl-0"
                                                     placeholder="Project Name"
                                                 />
                                                 <div className="flex items-center gap-4 mt-2">

@@ -306,11 +306,13 @@ export const UnifiedTaskItem = React.memo(({
         }
     }
 
-    // Ctrl + Enter: Toggle Completion
+    // Ctrl + Enter: Toggle Completion (100%)
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      const newStatus = task.status === 'completed' ? 'pending' : 'completed';
-      updateTask(task.id, { status: newStatus, isTimerOn: false });
+      const isCompleted = task.status === 'completed';
+      const newPercent = isCompleted ? undefined : 100;
+      const newStatus = isCompleted ? 'pending' : 'completed';
+      updateTask(task.id, { percent: newPercent, status: newStatus, isTimerOn: false });
       return;
     }
 
@@ -460,11 +462,12 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 md:gap-3 py-0.5 px-2 transition-colors ${isFocused ? 'bg-zinc-800/20' : ''} ${(isSelected || false) ? 'bg-zinc-800/40' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-2 md:gap-3 py-0.5 px-2 transition-colors ${isFocused ? 'bg-zinc-800/20' : ''} ${(isSelected || false) ? 'bg-zinc-800/40' : ''} ${currentDepth === 0 ? 'bg-yellow-500/10 rounded-lg p-2 mb-2 ml-4' : ''}`}>
 
       <div className="flex flex-shrink-0" onClick={(e) => onTaskClick(e, task.id, index)}>
+        {/* Indentation spaces */}
         {Array.from({ length: currentDepth }).map((_, i) => (
-          <div key={i} className="h-full" style={{ width: '15px' }} />
+          <div key={i} className="h-full" style={{ width: currentDepth === 0 ? '0px' : '30px' }} />
         ))}
       </div>
       <div className="relative flex flex-row items-center justify-start mt-1.5 flex-shrink-0 gap-1">
@@ -494,7 +497,24 @@ export const UnifiedTaskItem = React.memo(({
         )}
       </div>
         <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
-        <AutoResizeTextarea
+        {currentDepth === 0 ? (
+          // Main task: text input only
+          <AutoResizeTextarea
+            inputRef={textareaRef}
+            value={localText}
+            autoFocus={isFocused}
+            onFocus={() => setFocusedTaskId(task.id)}
+            onBlur={handleBlur}
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onCompositionStart={() => { isComposing.current = true; }}
+            onCompositionEnd={() => { isComposing.current = false; }}
+            className="w-full text-[15px] font-bold leading-[1.2] py-1 text-yellow-400"
+            placeholder="원하는 것"
+          />
+        ) : (
+          <AutoResizeTextarea
             inputRef={textareaRef}
             value={localText}
             autoFocus={isFocused}
@@ -507,9 +527,10 @@ export const UnifiedTaskItem = React.memo(({
             onCompositionEnd={() => { isComposing.current = false; }}
             className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${(task.depth === 0 || task.depth === undefined) ? 'text-yellow-400' : (task.percent !== undefined && task.percent !== null) ? 'text-yellow-400' : 'text-[#e0e0e0]'}`}
             placeholder=""
-        />
-        {isFocused && localText === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
-        {suggestions.length > 0 && (
+          />
+        )}
+        {isFocused && localText === '' && currentDepth > 0 && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
+        {suggestions.length > 0 && currentDepth > 0 && (
           <div className="absolute left-0 top-full z-[110] mt-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[180px]">
             {suggestions.map((s, idx) => <button key={idx} onClick={() => {
                 const newName = s.name || s.text || '';
@@ -526,20 +547,24 @@ export const UnifiedTaskItem = React.memo(({
             // Show for any task that has end_time set (completed or has time entered)
             const completionTimeDisplay = task.end_time ? `at ${formatCompletionTime(task.end_time)}` : null;
             let displayText = '';
-            if (task.percent !== undefined && task.percent !== null) {
-              if (task.percent > 0) {
-                displayText = `${task.percent}%`;
-              } else if (task.percent === 0) {
-                displayText = '0%';
+            if (currentDepth === 0) {
+              // Main task: show percent
+              if (task.percent !== undefined && task.percent !== null) {
+                if (task.percent > 0) {
+                  displayText = `${task.percent}%`;
+                } else if (task.percent === 0) {
+                  displayText = '0%';
+                }
               }
-            }
-            if (completionTimeDisplay) {
-              if (displayText) displayText += ` / ${completionTimeDisplay}`;
-              else displayText = completionTimeDisplay;
+            } else {
+              // Sub task: show time only
+              if (completionTimeDisplay) {
+                displayText = completionTimeDisplay;
+              }
             }
             return (
               <div className="flex flex-col items-end gap-1">
-                {isEditingTime ? (
+                {currentDepth === 0 && isEditingTime ? (
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -590,25 +615,25 @@ export const UnifiedTaskItem = React.memo(({
                   </div>
                 ) : (
                   displayText && (
-                    <span
-                      className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'} cursor-pointer`}
-                      onClick={() => {
-                        // Show input time for editing (not timer elapsed time)
-                        const totalSeconds = task.actTime || 0;
-                        const h = Math.floor(totalSeconds / 3600);
-                        const m = Math.floor((totalSeconds % 3600) / 60);
-                        const s = totalSeconds % 60;
-                        setEditHours(h.toString());
-                        setEditMinutes(m.toString());
-                        setEditSeconds(s.toString());
-                        setIsEditingTime(true);
-                      }}
-                    >
+                    <div className={`text-[11px] font-mono text-gray-500/80 ${currentDepth === 0 ? 'cursor-pointer' : ''}`}
+                         onClick={() => {
+                           if (currentDepth === 0) {
+                             // Show input time for editing (not timer elapsed time)
+                             const totalSeconds = task.actTime || 0;
+                             const h = Math.floor(totalSeconds / 3600);
+                             const m = Math.floor((totalSeconds % 3600) / 60);
+                             const s = totalSeconds % 60;
+                             setEditHours(h.toString());
+                             setEditMinutes(m.toString());
+                             setEditSeconds(s.toString());
+                             setIsEditingTime(true);
+                           }
+                         }}>
                       {displayText}
-                    </span>
+                    </div>
                   )
                 )}
-                {task.percent !== undefined && task.percent > 0 && (
+                {currentDepth === 0 && task.percent !== undefined && task.percent > 0 && (
                   <div
                     className="h-1 w-12 bg-white/5 rounded-full overflow-hidden relative"
                     style={{

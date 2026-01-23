@@ -196,7 +196,7 @@ export default function App() {
   }, [currentMemo]);
 
   // New State: View Mode
-  const [viewMode, setViewMode] = useState<'day' | 'flow' | 'project'>('day');
+  const [viewMode, setViewMode] = useState<'day' | 'list' | 'flow'>('day');
 
   const activeTask = useMemo(() => {
     if (!focusedTaskId) return undefined;
@@ -310,13 +310,14 @@ export default function App() {
                         updatedTask.status = 'pending';
                     }
                 } else {
-                    // Clamp percentage between 0 and 100
+                    // Clamp percentage between 0 and 100 (allow up to 100% only)
                     const clampedPercent = Math.max(0, Math.min(100, updates.percent));
                     updatedTask.percent = clampedPercent;
                     
                     // Set end_time whenever percentage is entered
                     updatedTask.end_time = Date.now();
                     
+                    // If percent is 100, mark as completed
                     if (clampedPercent === 100) {
                         updatedTask.status = 'completed';
                     } else if (clampedPercent < 100 && t.status === 'completed') {
@@ -330,22 +331,52 @@ export default function App() {
         return t;
     });
 
-    // Sort tasks: completed tasks go to bottom, pending tasks stay at top
-    // This ensures that when a task is completed (100%), it moves to the bottom
-    // and when it's changed back to incomplete (50%), it moves back up
+// Sort tasks: completed groups go to bottom
     const sortedTasks = [...nextTasks].sort((a, b) => {
-        // Check if task is completed based on status or percent
-        const aIsCompleted = a.status === 'completed' || a.percent === 100;
-        const bIsCompleted = b.status === 'completed' || b.percent === 100;
-        
-        // If both are completed or both are pending, maintain original order
-        if (aIsCompleted && bIsCompleted) return 0;
-        if (!aIsCompleted && !bIsCompleted) return 0;
-        
-        // Completed tasks go to bottom
-        if (aIsCompleted) return 1;
-        if (bIsCompleted) return -1;
-        
+        // Helper function to get the group ID for a task (the root task of its hierarchy)
+        const getGroupId = (task: Task): number => {
+            let currentIndex = nextTasks.findIndex(t => t.id === task.id);
+            
+            // For depth 0 tasks, they are their own group
+            if (task.depth === 0) {
+                return task.id;
+            }
+            
+            // For tasks with depth > 0, find the closest parent with lower depth
+            for (let i = currentIndex - 1; i >= 0; i--) {
+                const potentialParent = nextTasks[i];
+                if ((potentialParent.depth || 0) < (task.depth || 0)) {
+                    return getGroupId(potentialParent);
+                }
+            }
+            
+            // If no parent found, return the task's own ID
+            return task.id;
+        };
+
+        // Get group IDs for both tasks
+        const aGroupId = getGroupId(a);
+        const bGroupId = getGroupId(b);
+
+        // If they belong to the same group, maintain relative order
+        if (aGroupId === bGroupId) return 0;
+
+        // Check if groups are completed (if any task in the group is completed)
+        const getGroupCompleted = (groupId: number): boolean => {
+            return nextTasks.some(t => getGroupId(t) === groupId && (t.status === 'completed' || (t.percent !== undefined && t.percent >= 100)));
+        };
+
+        const aGroupCompleted = getGroupCompleted(aGroupId);
+        const bGroupCompleted = getGroupCompleted(bGroupId);
+
+        // If both groups are completed or both are pending, maintain original order
+        if (aGroupCompleted && bGroupCompleted) return 0;
+        if (!aGroupCompleted && !bGroupCompleted) return 0;
+
+        // Completed groups go to bottom
+        if (aGroupCompleted) return 1;
+        if (bGroupCompleted) return -1;
+
         return 0;
     });
 
@@ -360,20 +391,24 @@ export default function App() {
       const current = tasks[idx];
 
       // 2. 새 항목 생성 (아랫줄)
-      const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => ({
-        id: Date.now() + i + Math.random(), // 유니크 ID
-        name: line,
-        status: 'pending',
-        indent: current.indent,
-        parent: current.parent,
-        text: line,
-        percent: undefined,
-        planTime: 0,
-        actTime: 0,
-        isTimerOn: false,
-        depth: current.depth || 0,
-        space_id: String(currentSpace?.id || ''),
-      }));
+      const newTasksToAdd: Task[] = textAfter.split('\n').map((line, i) => {
+        return {
+          id: Date.now() + i + Math.random(), // 유니크 ID
+          name: line,
+          status: 'pending', // 모든 새 작업은 pending으로 시작
+          indent: 0, // 모든 새 작업은 indent=0부터 시작
+          parent: null,
+          text: line,
+          percent: undefined, // 퍼센트 없음
+          planTime: 0,
+          actTime: 0,
+          isTimerOn: false,
+          depth: 0, // depth=0부터 시작
+          space_id: String(currentSpace?.id || ''),
+          concept_id: undefined,
+          end_time: undefined,
+        };
+      });
 
       // 3. 리스트 재구성: [이전 항목들] + [수정된 현재 항목] + [새 항목들] + [이후 항목들]
       const nextTasks = [...tasks];
@@ -1079,8 +1114,8 @@ export default function App() {
         <SpaceSelector onSpaceChange={handleSpaceChange} />
         <div className="flex gap-2 md:gap-3 items-center flex-nowrap flex-shrink-0">
           <div className="flex bg-[#1a1a1f] rounded-lg p-0.5 border border-white/10 flex-shrink-0">
+              <button onClick={() => setViewMode('list')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'list' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>LIST</button>
               <button onClick={() => setViewMode('day')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'day' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>DAY</button>
-              <button onClick={() => setViewMode('project')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'project' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>PROJECT</button>
               <button onClick={() => setViewMode('flow')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
           </div>
 
@@ -1251,23 +1286,23 @@ export default function App() {
                 {/* Project List & Details Combined */}
                 <div className="bg-[#0f0f14] rounded-3xl border border-white/5 p-6 flex flex-col overflow-hidden">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Projects</h2>
+                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Lists</h2>
                         <button
                             onClick={() => {
-                                const n: Task = { id: Date.now(), name: 'New Project', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: 'New Project', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 };
+                                const n: Task = { id: Date.now(), name: 'New List', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: 'New List', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 };
                                 updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo });
                                 setSelectedProjectId(n.id);
                             }}
                             className="p-2 rounded-xl border border-dashed border-white/10 text-gray-500 hover:text-white hover:border-white/20 transition-all flex items-center gap-2 text-sm font-bold"
                         >
-                            <Plus size={16} /> Add Project
+                            <Plus size={16} /> Add List
                         </button>
                     </div>
                     
                     {projects.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-600">
                             <BarChart2 size={48} className="mb-4 opacity-20" />
-                            <p className="font-bold">No projects yet. Create your first project!</p>
+                            <p className="font-bold">No lists yet. Create your first list!</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1283,7 +1318,7 @@ export default function App() {
                                         className={`w-full text-left p-4 rounded-2xl transition-all border ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'bg-[#7c4dff]/10 border-[#7c4dff]/30' : 'bg-white/5 border-transparent hover:bg-white/10'}`}
                                     >
                                         <div className="flex justify-between items-center mb-2">
-                                            <span className={`font-bold text-sm truncate ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'text-white' : 'text-gray-400'}`}>{project.name || project.text || 'Untitled Project'}</span>
+                                            <span className={`font-bold text-sm truncate ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'text-white' : 'text-gray-400'}`}>{project.name || project.text || 'Untitled List'}</span>
                                             {project.percent !== undefined && project.percent !== null && project.percent > 0 && (
                                                 <span className="text-xs font-bold text-blue-400">
                                                     {project.percent}%
@@ -1314,7 +1349,7 @@ export default function App() {
                                                 <input
                                                     value={selectedProject.name || selectedProject.text || ''}
                                                     onChange={(e) => handleUpdateTask(selectedProject.id, { name: e.target.value, text: e.target.value })}
-                                                    className="bg-transparent text-2xl font-black text-yellow-200 outline-none w-full"
+                                                    className="bg-transparent text-2xl font-black text-yellow-200 outline-none w-full pl-4"
                                                     placeholder="Project Name"
                                                 />
                                                 <div className="flex items-center gap-4 mt-2">
@@ -1452,7 +1487,8 @@ export default function App() {
                                                             planTime: 0,
                                                             actTime: 0,
                                                             isTimerOn: false,
-                                                            depth: (projectInDate.depth || 0) + 1
+                                                            depth: (projectInDate.depth || 0) + 1,
+                                                            concept_id: projectInDate.id
                                                         };
                                                         currentTasks.splice(insertIdx, 0, n);
                                                         updateTasks.mutate({ tasks: currentTasks, memo: currentMemo });
@@ -1557,7 +1593,7 @@ export default function App() {
                                       handleUpdateTask(activeTask.id, { percent: 0 });
                                   }
                                   setSelectedProjectName(name);
-                                  setViewMode('project');
+                                  setViewMode('list');
                               } else {
                                   setShowMemoCollection(true);
                               }

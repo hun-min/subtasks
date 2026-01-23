@@ -403,7 +403,7 @@ export default function App() {
           planTime: 0,
           actTime: 0,
           isTimerOn: false,
-          depth: 0, // depth=0부터 시작
+          depth: current.depth || 0, // 현재 태스크의 depth를 그대로 사용
           space_id: String(currentSpace?.id || ''),
           concept_id: undefined,
           end_time: undefined,
@@ -421,14 +421,6 @@ export default function App() {
       const nextFocusId = newTasksToAdd.length > 0 ? newTasksToAdd[0].id : null;
       if (nextFocusId) {
         setFocusedTaskId(nextFocusId);
-
-        // Fix: Automatically focus on time input when new task is created
-        setTimeout(() => {
-          if (timeInputRefs.current[0]) {
-            timeInputRefs.current[0].focus();
-            timeInputRefs.current[0].select();
-          }
-        }, 100);
       }
 
       // [CRITICAL FIX] 엔터 키 데이터 유실 방지를 위한 즉시 캐시 업데이트

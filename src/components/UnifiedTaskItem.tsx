@@ -327,7 +327,7 @@ export const UnifiedTaskItem = React.memo(({
         e.preventDefault();
         e.stopPropagation(); // 이벤트 전파 방지
 
-        // 다음 줄에 새 빈 태스크 생성하고 포커스 이동
+        // 하위 할일에서 엔터 시 depth 0으로 설정하지 않음
         onAddTaskAtCursor(task.id, localTextRef.current, '');
       }
       return;
@@ -549,12 +549,8 @@ export const UnifiedTaskItem = React.memo(({
             let displayText = '';
             if (currentDepth === 0) {
               // Main task: show percent
-              if (task.percent !== undefined && task.percent !== null) {
-                if (task.percent > 0) {
-                  displayText = `${task.percent}%`;
-                } else if (task.percent === 0) {
-                  displayText = '0%';
-                }
+              if (task.percent !== undefined && task.percent !== null && task.percent > 0) {
+                displayText = `${task.percent}%`;
               }
             } else {
               // Sub task: show time only

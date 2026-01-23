@@ -1325,7 +1325,7 @@ export default function App() {
                             </div>
 
                             {/* Project Details */}
-                            <div className={`lg:col-span-2 overflow-y-auto max-h-[calc(100vh-200px)] ${showProjectDetails ? 'block' : 'hidden lg:block'}`}>
+                            <div className={`lg:col-span-2 overflow-y-auto max-h-[calc(100vh-200px)] ${showProjectDetails ? 'block' : 'hidden'}`}>
                                 {selectedProject ? (
                                     <>
                                         <div className="flex justify-between items-center mb-4 lg:hidden">

@@ -407,6 +407,7 @@ export default function App() {
           space_id: String(currentSpace?.id || ''),
           concept_id: undefined,
           end_time: undefined,
+          created_at: new Date().toISOString()
         };
       });
 
@@ -1480,7 +1481,8 @@ export default function App() {
                                                             actTime: 0,
                                                             isTimerOn: false,
                                                             depth: (projectInDate.depth || 0) + 1,
-                                                            concept_id: projectInDate.id
+                                                            concept_id: projectInDate.id,
+                                                            created_at: new Date().toISOString()
                                                         };
                                                         currentTasks.splice(insertIdx, 0, n);
                                                         updateTasks.mutate({ tasks: currentTasks, memo: currentMemo });

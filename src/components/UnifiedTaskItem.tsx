@@ -550,19 +550,14 @@ export const UnifiedTaskItem = React.memo(({
                 displayText = `${task.percent}%`;
               }
             } else {
-              // Sub task: show creation time or current time as fallback
+              // Sub task: only show creation time if it exists
               if (task.created_at) {
                 const createdTime = new Date(task.created_at);
                 const hours = createdTime.getHours().toString().padStart(2, '0');
                 const minutes = createdTime.getMinutes().toString().padStart(2, '0');
                 displayText = `at ${hours}:${minutes}`;
-              } else {
-                // Fallback: show current time for tasks without created_at
-                const now = new Date();
-                const hours = now.getHours().toString().padStart(2, '0');
-                const minutes = now.getMinutes().toString().padStart(2, '0');
-                displayText = `at ${hours}:${minutes}`;
               }
+              // If no created_at, don't show any time (fixed time display)
             }
             return (
               <div className="flex flex-col items-end gap-1">

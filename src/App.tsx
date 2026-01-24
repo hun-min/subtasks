@@ -1534,7 +1534,37 @@ export default function App() {
                     activeTask && (
                       <>
                         <div className="flex items-center gap-2 flex-shrink-0 pl-1">
-                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Input Time</span><div className="flex items-center justify-center"><input ref={(el) => timeInputRefs.current[0] = el} value={String(Math.floor((activeTask.actTime || 0) / 3600)).padStart(2, '0')} onChange={(e) => { const h = parseInt(e.target.value) || 0; const m = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[3ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[1] = el} value={String(Math.floor(((activeTask.actTime || 0) % 3600) / 60)).padStart(2, '0')} onChange={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt(e.target.value) || 0; const secs = h * 3600 + m * 60; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[3ch] text-center" maxLength={2} /></div></div>
+                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Creation Time</span><div className="flex items-center justify-center"><input ref={(el) => timeInputRefs.current[0] = el} value={(() => {
+                                // For subtasks, show creation time if no actTime, otherwise show actTime
+                                if (activeTask.depth && activeTask.depth > 0) {
+                                    if (activeTask.actTime && activeTask.actTime > 0) {
+                                        return String(Math.floor(activeTask.actTime / 3600)).padStart(2, '0');
+                                    } else if (activeTask.created_at) {
+                                        // Proper UTC to local time conversion
+                                        const createdTime = new Date(activeTask.created_at);
+                                        return createdTime.getHours().toString().padStart(2, '0');
+                                    } else {
+                                        return '--'; // No creation time available
+                                    }
+                                } else {
+                                    return String(Math.floor((activeTask.actTime || 0) / 3600)).padStart(2, '0');
+                                }
+                            })()} onChange={(e) => { const h = parseInt(e.target.value) || 0; const m = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[3ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[1] = el} value={(() => {
+                                // For subtasks, show creation time if no actTime, otherwise show actTime
+                                if (activeTask.depth && activeTask.depth > 0) {
+                                    if (activeTask.actTime && activeTask.actTime > 0) {
+                                        return String(Math.floor((activeTask.actTime % 3600) / 60)).padStart(2, '0');
+                                    } else if (activeTask.created_at) {
+                                        // Proper UTC to local time conversion
+                                        const createdTime = new Date(activeTask.created_at);
+                                        return createdTime.getMinutes().toString().padStart(2, '0');
+                                    } else {
+                                        return '--'; // No creation time available
+                                    }
+                                } else {
+                                    return String(Math.floor(((activeTask.actTime || 0) % 3600) / 60)).padStart(2, '0');
+                                }
+                            })()} onChange={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt(e.target.value) || 0; const secs = h * 3600 + m * 60; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[3ch] text-center" maxLength={2} /></div></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-1 flex-shrink-0">

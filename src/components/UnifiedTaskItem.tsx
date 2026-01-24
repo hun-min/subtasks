@@ -503,7 +503,7 @@ export const UnifiedTaskItem = React.memo(({
             onCompositionStart={() => { isComposing.current = true; }}
             onCompositionEnd={() => { isComposing.current = false; }}
             className={`w-full text-[15px] font-bold leading-[1.2] py-1 text-yellow-400 ${task.status === 'completed' ? 'line-through' : ''}`}
-            placeholder="원하는 것"
+            placeholder=""
           />
         ) : (
           <AutoResizeTextarea

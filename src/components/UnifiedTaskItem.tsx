@@ -3,7 +3,6 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Star } from 'lucide-react';
 import { Task, DailyLog } from '../types';
-import { formatCompletionTime } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 
 export const UnifiedTaskItem = React.memo(({
@@ -543,9 +542,7 @@ export const UnifiedTaskItem = React.memo(({
         </div>
         <div className="flex flex-col items-end gap-1 pt-1.5 flex-shrink-0">
           {(() => {
-            // Show completion time (end_time) in "at HH:MM" format
-            // Show for any task that has end_time set (completed or has time entered)
-            const completionTimeDisplay = task.end_time ? `at ${formatCompletionTime(task.end_time)}` : null;
+            // Show creation time for subtasks
             let displayText = '';
             if (currentDepth === 0) {
               // Main task: show percent
@@ -553,9 +550,18 @@ export const UnifiedTaskItem = React.memo(({
                 displayText = `${task.percent}%`;
               }
             } else {
-              // Sub task: show time only
-              if (completionTimeDisplay) {
-                displayText = completionTimeDisplay;
+              // Sub task: show creation time or current time as fallback
+              if (task.created_at) {
+                const createdTime = new Date(task.created_at);
+                const hours = createdTime.getHours().toString().padStart(2, '0');
+                const minutes = createdTime.getMinutes().toString().padStart(2, '0');
+                displayText = `at ${hours}:${minutes}`;
+              } else {
+                // Fallback: show current time for tasks without created_at
+                const now = new Date();
+                const hours = now.getHours().toString().padStart(2, '0');
+                const minutes = now.getMinutes().toString().padStart(2, '0');
+                displayText = `at ${hours}:${minutes}`;
               }
             }
             return (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Star } from 'lucide-react';
+import { Star, ChevronRight } from 'lucide-react';
 import { Task, DailyLog } from '../types';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 
@@ -460,7 +460,7 @@ export const UnifiedTaskItem = React.memo(({
   }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1.5 md:gap-2 py-0.5 px-2 transition-colors ${isFocused ? 'bg-zinc-800/20' : ''} ${(isSelected || false) ? 'bg-zinc-800/40' : ''} ${currentDepth === 0 ? 'bg-yellow-500/10 rounded-lg p-2 mb-2' : ''} overflow-hidden`}>
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1.5 md:gap-2 py-0.5 px-2 transition-colors ${isFocused ? 'bg-zinc-800/20' : ''} ${(isSelected || false) ? 'bg-zinc-800/40' : ''} ${currentDepth === 0 ? 'bg-gradient-to-r from-yellow-500/10 to-orange-500/5 rounded-lg p-2 mb-2 border-l-4 border-yellow-500/30' : 'bg-gray-900/20 rounded-md p-1 mb-1'} overflow-hidden`}>
 
       <div className="flex flex-shrink-0" onClick={(e) => onTaskClick(e, task.id, index)}>
         {/* Indentation spaces */}
@@ -468,6 +468,17 @@ export const UnifiedTaskItem = React.memo(({
           <div key={i} className="h-full" style={{ width: currentDepth === 0 ? '0px' : '20px' }} />
         ))}
       </div>
+      {currentDepth === 0 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            // Toggle collapse logic here
+          }}
+          className="w-[16px] h-[16px] flex items-center justify-center text-yellow-400 hover:text-yellow-300 transition-colors flex-shrink-0"
+        >
+          <ChevronRight size={14} />
+        </button>
+      )}
       <div className="relative flex flex-row items-center justify-start mt-1.5 flex-shrink-0 gap-0.5">
         <button
           onClick={(e) => {

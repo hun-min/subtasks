@@ -817,11 +817,19 @@ export default function App() {
       const updatedAt = p.updated_at ? new Date(p.updated_at) : null;
       return !updatedAt || updatedAt >= sixMonthsAgo;
     });
-    // Sort projects by 'updated_at' in descending order (most recently updated first)
+    // Sort projects: most recently updated first, but 100% complete at bottom
     filteredResult.sort((a, b) => {
+      // If one is 100% and the other is not, 100% goes last
+      const aIsComplete = a.percent === 100;
+      const bIsComplete = b.percent === 100;
+      
+      if (aIsComplete && !bIsComplete) return 1;  // a goes after b
+      if (!aIsComplete && bIsComplete) return -1; // a goes before b
+      
+      // Both are complete or both are incomplete, sort by updated_at
       const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
       const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-      return dateB - dateA; // Descending sort
+      return dateB - dateA; // Descending sort (most recent first)
     });
 
     console.log('Global Projects List (filtered by percent and 6 months):', filteredResult.map(p => p.name || p.text));
@@ -1315,6 +1323,10 @@ export default function App() {
                                                 </span>
                                             )}
                                         </div>
+                                        <div className="flex justify-between items-center text-xs text-gray-500">
+                                            <span>Created: {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'Unknown'}</span>
+                                            <span>Modified: {project.updated_at ? new Date(project.updated_at).toLocaleDateString() : 'Unknown'}</span>
+                                        </div>
                                         <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden">
                                             <div className="h-full bg-[#7c4dff] transition-all" style={{ width: `${project.percent || 0}%` }} />
                                         </div>
@@ -1603,7 +1615,7 @@ export default function App() {
                         {(!activeTask.depth || activeTask.depth === 0) && (
                         <div className="flex items-center gap-1 flex-shrink-0">
                             <div className="flex flex-col items-center">
-                                <span className="text-[9px] text-gray-500 font-black uppercase">Progress</span>
+                                <span className="text-[9px] text-gray-500 font-black uppercase">%</span>
                                 <div className="flex items-center gap-1">
                                     <input
                                         type="number"
@@ -1632,7 +1644,7 @@ export default function App() {
                                             }
                                           }
                                         }}
-                                        className="bg-transparent text-[24px] font-black font-mono text-blue-400 outline-none w-[3ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        className="bg-transparent text-[24px] font-black font-mono text-blue-400 outline-none w-[5ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
                                     <span className="text-[20px] font-black text-blue-400">%</span>
                                 </div>

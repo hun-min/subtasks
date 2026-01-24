@@ -465,14 +465,18 @@ export const UnifiedTaskItem = React.memo(({
       <div className="flex flex-shrink-0" onClick={(e) => onTaskClick(e, task.id, index)}>
         {/* Indentation spaces */}
         {Array.from({ length: currentDepth }).map((_, i) => (
-          <div key={i} className="h-full" style={{ width: currentDepth === 0 ? '0px' : '20px' }} />
+          <div key={i} className="h-full flex items-start justify-end" style={{ width: currentDepth === 0 ? '0px' : '20px' }}>
+            {currentDepth > 0 && i === currentDepth - 1 && (
+              <div className="w-px h-full bg-yellow-400/40 min-h-[20px]"></div>
+            )}
+          </div>
         ))}
       </div>
       {currentDepth === 0 && (
         <button
           onClick={(e) => {
             e.stopPropagation();
-            // Toggle collapse logic here
+            // Toggle collapse logic here - will implement
           }}
           className="w-[16px] h-[16px] flex items-center justify-center text-yellow-400 hover:text-yellow-300 transition-colors flex-shrink-0"
         >

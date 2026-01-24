@@ -18,16 +18,14 @@ import { supabase } from './supabase';
 // --- [컴포넌트] 태스크 히스토리 모달 ---
 const TaskHistoryModal = React.memo(({ taskName, logs, onClose }: { taskName: string, logs: DailyLog[], onClose: () => void }) => {
   const historyList = useMemo(() => {
-    const list: { date: string, task: Task, subTasks: Task[] }[] = [];
+    const list: { date: string, task: Task }[] = [];
     logs.forEach(log => {
       const found = log.tasks.find(t => {
         const tName = t.name || t.text || '';
-        return tName.trim() === taskName.trim();
+        return tName.trim() === taskName.trim() && (!t.depth || t.depth === 0); // Only main tasks
       });
       if (found) {
-        // Include sub-tasks (tasks with parent === found.id or depth > 0)
-        const subTasks = log.tasks.filter((st: Task) => st.parent === found.id || (st.depth && st.depth > 0));
-        list.push({ date: log.date, task: found, subTasks });
+        list.push({ date: log.date, task: found });
       }
     });
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -50,13 +48,9 @@ const TaskHistoryModal = React.memo(({ taskName, logs, onClose }: { taskName: st
               return (
                 <div key={record.date} className="bg-[#1a1a1f] border border-white/5 rounded-xl p-4">
                   <div className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2">{dateLabel}</div>
-                  <div className="text-white font-bold mb-2">{record.task.name || record.task.text || ''}</div>
-                  {record.subTasks && record.subTasks.length > 0 && (
-                    <div className="space-y-1">
-                      {record.subTasks.map(st => (
-                        <div key={st.id} className="text-gray-400 text-sm ml-4">- {st.name || st.text || ''}</div>
-                      ))}
-                    </div>
+                  <div className="text-white font-bold">{record.task.name || record.task.text || ''}</div>
+                  {record.task.percent !== undefined && record.task.percent !== null && (
+                    <div className="text-blue-400 text-sm mt-1">{record.task.percent}%</div>
                   )}
                 </div>
               );
@@ -178,6 +172,8 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showMemoCollection, setShowMemoCollection] = useState(false);
   const timeInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null]);
+  const [localHours, setLocalHours] = useState('');
+  const [localMinutes, setLocalMinutes] = useState('');
   
   const [history, setHistory] = useState<Task[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -317,9 +313,13 @@ export default function App() {
                     // Set end_time whenever percentage is entered
                     updatedTask.end_time = Date.now();
                     
-                    // If percent is 100, mark as completed
+                    // If percent is 100, mark as completed and set created_at
                     if (clampedPercent === 100) {
                         updatedTask.status = 'completed';
+                        // Set created_at to current time when reaching 100%
+                        if (!t.created_at || (t.percent !== undefined && t.percent < 100)) {
+                            updatedTask.created_at = new Date().toISOString();
+                        }
                     } else if (clampedPercent < 100 && t.status === 'completed') {
                         updatedTask.status = 'pending';
                     }
@@ -734,17 +734,18 @@ export default function App() {
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
-  const progressPercent = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
   const getStreakAtDate = useCallback((currentDate: Date) => {
-      const hasCompletedAtDate = (date: Date) => logs.find(log => log.date === date.toDateString())?.tasks.some(t => t.status === 'completed');
-      if (!hasCompletedAtDate(currentDate)) return 0;
+      const hasTasksAtDate = (date: Date) => {
+          const log = logs.find(log => log.date === date.toDateString());
+          return log && log.tasks && log.tasks.length > 0;
+      };
+      if (!hasTasksAtDate(currentDate)) return 0;
       let streak = 1;
       let checkDate = new Date(currentDate);
       checkDate.setDate(checkDate.getDate() - 1);
       for(let k=0; k<365; k++) { 
-          if (hasCompletedAtDate(checkDate)) { streak++; checkDate.setDate(checkDate.getDate() - 1); } else break;
+          if (hasTasksAtDate(checkDate)) { streak++; checkDate.setDate(checkDate.getDate() - 1); } else break;
       }
       return streak;
   }, [logs]);
@@ -1187,7 +1188,7 @@ export default function App() {
                 <div className="px-6 mb-6">
                     <div className="flex items-end justify-between mb-2">
                         <div>
-                            <span className="text-4xl font-black text-white leading-none tracking-tight">{completedTasks} <span className="text-gray-600">/</span> <span className="text-gray-500">{totalTasks}</span></span>
+                            <span className="text-4xl font-black text-white leading-none tracking-tight">{totalTasks}</span>
                         </div>
                         <div className="text-right flex items-end gap-2">
                             {currentStreak > 1 && (
@@ -1196,11 +1197,7 @@ export default function App() {
                                     <span className="text-sm font-black text-white">{currentStreak}</span>
                                 </div>
                             )}
-                            <div className="text-xs font-bold text-[#7c4dff] mb-0.5">{progressPercent}% DONE</div>
                         </div>
-                    </div>
-                    <div className="h-1.5 w-full bg-[#1a1a1f] rounded-full overflow-hidden mb-4">
-                        <div className="h-full bg-[#7c4dff] transition-all duration-500" style={{ width: `${progressPercent}%` }} />
                     </div>
                     <AutoResizeTextarea
                       value={localMemo}
@@ -1218,14 +1215,14 @@ export default function App() {
                       className="w-full bg-transparent text-[16px] text-[#7c4dff]/80 font-bold text-center outline-none"
                     />
                 </div>
-                <div className={`flex-1 space-y-8 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''}`}>
+                <div className={`flex-1 space-y-8 transition-opacity duration-200 ${isLoading ? 'opacity-50' : ''} overflow-hidden`}>
                   <div>
                       <div className="flex items-center justify-between mb-2 px-2">
                           <div className="flex items-center gap-3">
                             <button onClick={() => { const n: Task = { id: Date.now(), name: '', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: '', percent: undefined, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 }; setFocusedTaskId(n.id); updateTasks.mutate({ tasks: [...tasks, n], memo: currentMemo }); setTimeout(() => { if (timeInputRefs.current[0]) { timeInputRefs.current[0].focus(); timeInputRefs.current[0].select(); } }, 100); }} className="text-gray-500 hover:text-[#7c4dff]"><Plus size={18} /></button>
                           </div>
                       </div>
-                      <div className="-ml-7">
+                      <div className="ml-0">
                           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                               <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                                   {tasks.map((t, i) => {
@@ -1300,7 +1297,7 @@ export default function App() {
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {/* Project List */}
-                            <div className="lg:col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
+                            <div className={`lg:col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)] ${showProjectDetails ? 'hidden lg:block' : 'block'}`}>
                                 {projects.map(project => (
                                         <button
                                         key={`${project.id}-${project.name || project.text}`}
@@ -1521,54 +1518,89 @@ export default function App() {
                            <span className="text-sm">Selected</span>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1" />
-                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => {
+                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => {
                             const selectedTasks = tasks.filter(t => selectedTaskIds.has(t.id));
                             navigator.clipboard.writeText(selectedTasks.map(t => t.name || t.text || '').join('\n'));
                             alert(`Copied ${selectedTasks.length} tasks`);
                             setSelectedTaskIds(new Set());
                         }} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Copy size={16} /> Copy</button>
-                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setShowDatePicker(true)} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Calendar size={16} /> Move</button>
-                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => { if(confirm(`Delete ${selectedTaskIds.size} tasks?`)) { const next = tasks.filter(t => !selectedTaskIds.has(t.id)); updateTasks.mutate({ tasks: next, memo: currentMemo }); setSelectedTaskIds(new Set()); } }} className="p-3 hover:bg-white/10 rounded-2xl text-red-500 font-bold text-sm px-4 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
+                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => setShowDatePicker(true)} className="p-3 hover:bg-white/10 rounded-2xl text-gray-300 font-bold text-sm px-4 flex items-center gap-2"><Calendar size={16} /> Move</button>
+                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => { if(confirm(`Delete ${selectedTaskIds.size} tasks?`)) { const next = tasks.filter(t => !selectedTaskIds.has(t.id)); updateTasks.mutate({ tasks: next, memo: currentMemo }); setSelectedTaskIds(new Set()); } }} className="p-3 hover:bg-white/10 rounded-2xl text-red-500 font-bold text-sm px-4 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
                         <div className="h-8 w-px bg-white/10 mx-1" />
-                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setSelectedTaskIds(new Set())} className="p-3 hover:bg-white/10 rounded-2xl text-gray-400"><X size={20} /></button>
+                        <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => setSelectedTaskIds(new Set())} className="p-3 hover:bg-white/10 rounded-2xl text-gray-400"><X size={20} /></button>
                      </>
                   ) : (
                     activeTask && (
                       <>
                         <div className="flex items-center gap-2 flex-shrink-0 pl-1">
-                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Creation Time</span><div className="flex items-center justify-center"><input ref={(el) => timeInputRefs.current[0] = el} value={(() => {
-                                // For subtasks, show creation time if no actTime, otherwise show actTime
-                                if (activeTask.depth && activeTask.depth > 0) {
-                                    if (activeTask.actTime && activeTask.actTime > 0) {
-                                        return String(Math.floor(activeTask.actTime / 3600)).padStart(2, '0');
-                                    } else if (activeTask.created_at) {
-                                        // Proper UTC to local time conversion
-                                        const createdTime = new Date(activeTask.created_at);
-                                        return createdTime.getHours().toString().padStart(2, '0');
-                                    } else {
-                                        return '--'; // No creation time available
-                                    }
+                            <div className="flex flex-col ml-1"><span className="text-[9px] text-gray-500 font-black uppercase text-center">Creation Time</span><div className="flex items-center justify-center"><input ref={(el) => timeInputRefs.current[0] = el} value={localHours || (() => {
+                                // All tasks use created_at time
+                                if (activeTask.created_at) {
+                                    // Proper UTC to local time conversion
+                                    const createdTime = new Date(activeTask.created_at);
+                                    return createdTime.getHours().toString().padStart(2, '0');
                                 } else {
-                                    return String(Math.floor((activeTask.actTime || 0) / 3600)).padStart(2, '0');
+                                    return '--'; // No creation time available
                                 }
-                            })()} onChange={(e) => { const h = parseInt(e.target.value) || 0; const m = parseInt((e.target.nextElementSibling?.nextElementSibling as HTMLInputElement)?.value || '0') || 0; const secs = h * 3600 + m * 60; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[3ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[1] = el} value={(() => {
-                                // For subtasks, show creation time if no actTime, otherwise show actTime
-                                if (activeTask.depth && activeTask.depth > 0) {
-                                    if (activeTask.actTime && activeTask.actTime > 0) {
-                                        return String(Math.floor((activeTask.actTime % 3600) / 60)).padStart(2, '0');
-                                    } else if (activeTask.created_at) {
-                                        // Proper UTC to local time conversion
-                                        const createdTime = new Date(activeTask.created_at);
-                                        return createdTime.getMinutes().toString().padStart(2, '0');
-                                    } else {
-                                        return '--'; // No creation time available
-                                    }
+                            })()} onChange={(e) => { 
+                                // Allow input changes
+                                const value = e.target.value;
+                                if (value === '' || (parseInt(value) >= 0 && parseInt(value) <= 23)) {
+                                    setLocalHours(value);
+                                }
+                            }} onBlur={(e) => { 
+                                // All tasks update created_at time
+                                const h = parseInt(e.target.value) || 0; 
+                                const m = parseInt((timeInputRefs.current[1]?.value) || '0') || 0; 
+                                // Create new created_at with current date but specified time
+                                const now = new Date();
+                                const newCreatedAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+                                handleUpdateTask(activeTask.id, { created_at: newCreatedAt.toISOString() });
+                            }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => {
+                                e.target.select();
+                                // Initialize local state when focused
+                                if (activeTask.created_at) {
+                                    const createdTime = new Date(activeTask.created_at);
+                                    setLocalHours(createdTime.getHours().toString().padStart(2, '0'));
+                                }
+                            }} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[4ch] text-center" maxLength={2} /><span className="text-[18px] font-black font-mono text-[#7c4dff]">:</span><input ref={(el) => timeInputRefs.current[1] = el} value={localMinutes || (() => {
+                                // All tasks use created_at time
+                                if (activeTask.created_at) {
+                                    // Proper UTC to local time conversion
+                                    const createdTime = new Date(activeTask.created_at);
+                                    return createdTime.getMinutes().toString().padStart(2, '0');
                                 } else {
-                                    return String(Math.floor(((activeTask.actTime || 0) % 3600) / 60)).padStart(2, '0');
+                                    return '--'; // No creation time available
                                 }
-                            })()} onChange={(e) => { const h = parseInt((e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || '0') || 0; const m = parseInt(e.target.value) || 0; const secs = h * 3600 + m * 60; handleUpdateTask(activeTask.id, { actTime: secs, act_time: secs }); }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[3ch] text-center" maxLength={2} /></div></div>
+                            })()} onChange={(e) => { 
+                                // Allow input changes
+                                const value = e.target.value;
+                                if (value === '' || (parseInt(value) >= 0 && parseInt(value) <= 59)) {
+                                    setLocalMinutes(value);
+                                }
+                            }} onBlur={(e) => { 
+                                // All tasks update created_at time
+                                const h = parseInt((timeInputRefs.current[0]?.value) || '0') || 0; 
+                                const m = parseInt(e.target.value) || 0; 
+                                // Create new created_at with current date but specified time
+                                const now = new Date();
+                                const newCreatedAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+                                handleUpdateTask(activeTask.id, { created_at: newCreatedAt.toISOString() });
+                                // Clear local state after saving
+                                setLocalHours('');
+                                setLocalMinutes('');
+                            }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onFocus={(e) => {
+                                e.target.select();
+                                // Initialize local state when focused
+                                if (activeTask.created_at) {
+                                    const createdTime = new Date(activeTask.created_at);
+                                    setLocalMinutes(createdTime.getMinutes().toString().padStart(2, '0'));
+                                }
+                            }} className="bg-transparent text-[18px] font-black font-mono text-[#7c4dff] outline-none w-[4ch] text-center" maxLength={2} /></div></div>
                         </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
+                        {/* Only show percent input for main tasks */}
+                        {(!activeTask.depth || activeTask.depth === 0) && (
                         <div className="flex items-center gap-1 flex-shrink-0">
                             <div className="flex flex-col items-center">
                                 <span className="text-[9px] text-gray-500 font-black uppercase">Progress</span>
@@ -1589,28 +1621,36 @@ export default function App() {
                                             if (!isNaN(num)) {
                                               // Clamp between 0 and 100
                                               const clamped = Math.max(0, Math.min(100, num));
-                                              handleUpdateTask(activeTask.id, { percent: clamped });
+                                              const updates: any = { percent: clamped };
+                                              
+                                              // If reaching 100%, set created_at to current time
+                                              if (clamped === 100 && (!activeTask.percent || activeTask.percent < 100)) {
+                                                updates.created_at = new Date().toISOString();
+                                              }
+                                              
+                                              handleUpdateTask(activeTask.id, updates);
                                             }
                                           }
                                         }}
-                                        className="bg-transparent text-[18px] font-black font-mono text-blue-400 outline-none w-[3ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        className="bg-transparent text-[24px] font-black font-mono text-blue-400 outline-none w-[3ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
-                                    <span className="text-[14px] font-black text-blue-400">%</span>
+                                    <span className="text-[20px] font-black text-blue-400">%</span>
                                 </div>
                             </div>
                         </div>
+                        )}
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 flex-shrink-0">
-                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button>
-                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button>
-                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleMoveUp(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronUp size={18} /></button>
-                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => handleMoveDown(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronDown size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => handleOutdent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowLeft size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => handleIndent(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ArrowRight size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => handleMoveUp(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronUp size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => handleMoveDown(activeTask.id)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400"><ChevronDown size={18} /></button>
                         </div>
                       <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                       <div className="flex items-center gap-0.5 flex-shrink-0">
-                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Move to Date"><Calendar size={18} /></button>
-                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => { navigator.clipboard.writeText(activeTask.name || activeTask.text || ''); alert("Copied to clipboard"); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Copy Text"><Copy size={18} /></button>
-                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => {
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => setShowDatePicker(true)} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Move to Date"><Calendar size={18} /></button>
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => { navigator.clipboard.writeText(activeTask.name || activeTask.text || ''); alert("Copied to clipboard"); }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Copy Text"><Copy size={18} /></button>
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => {
                               if (activeTask) {
                                   const name = (activeTask.name || activeTask.text || '').trim();
                                   if (typeof activeTask.percent === 'undefined') {
@@ -1622,12 +1662,12 @@ export default function App() {
                                   setShowMemoCollection(true);
                               }
                           }} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400" title="Memo Collection"><BarChart2 size={18} /></button>
-                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => { if (window.confirm("Delete this task?")) { const next = tasks.filter(t => t.id !== activeTask.id); updateTasks.mutate({ tasks: next, memo: currentMemo }); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
+                          <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={() => { if (window.confirm("Delete this task?")) { const next = tasks.filter(t => t.id !== activeTask.id); updateTasks.mutate({ tasks: next, memo: currentMemo }); setFocusedTaskId(null); } }} className="p-2.5 rounded-xl hover:bg-white/5 text-red-500" title="Delete"><Trash2 size={18} /></button>
                       </div>
                         <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
                         <div className="flex items-center gap-0.5 pr-2 flex-shrink-0">
-                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={handleUndo} disabled={historyIndex <= 0} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCcw size={18} /></button>
-                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCw size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={handleUndo} disabled={historyIndex <= 0} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCcw size={18} /></button>
+                            <button onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => { e.preventDefault(); }} onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2.5 rounded-xl hover:bg-white/5 text-gray-400 disabled:opacity-20"><RotateCw size={18} /></button>
                         </div>
                       </>
                     )

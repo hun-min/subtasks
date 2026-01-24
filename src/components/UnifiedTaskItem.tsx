@@ -457,20 +457,60 @@ export const UnifiedTaskItem = React.memo(({
       setTimeout(() => { skipSyncRef.current = false; }, 200);
 
       setFocusedTaskId(null);
-  }, [task.name, task.text, task.id, updateTask, setFocusedTaskId]);
+  }, [task.id, updateTask]);
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1.5 md:gap-2 py-0.5 px-2 transition-colors ${isFocused ? 'bg-zinc-800/20' : ''} ${(isSelected || false) ? 'bg-zinc-800/40' : ''} ${currentDepth === 0 ? 'bg-gradient-to-r from-yellow-500/10 to-orange-500/5 rounded-lg p-2 mb-2 border-l-4 border-yellow-500/30' : 'bg-gray-900/20 rounded-md p-1 mb-1'} overflow-hidden`}>
-
+    <div ref={setNodeRef} style={style} className={`relative group flex items-start gap-1.5 md:gap-2 py-0.5 px-2 transition-colors ${isFocused ? 'bg-zinc-800/20' : ''} ${(isSelected || false) ? 'bg-zinc-800/40' : ''} ${currentDepth === 0 ? 'bg-gradient-to-r from-yellow-500/10 to-orange-500/5 rounded-xl p-2 border border-yellow-500/20' : 'bg-gray-900/20 rounded-xl p-1'} overflow-hidden`}>
       <div className="flex flex-shrink-0" onClick={(e) => onTaskClick(e, task.id, index)}>
-        {/* Indentation spaces */}
+        {/* Indentation spaces with star inside */}
         {Array.from({ length: currentDepth }).map((_, i) => (
-          <div key={i} className="h-full flex items-start justify-end" style={{ width: currentDepth === 0 ? '0px' : '20px' }}>
+          <div key={i} className="h-full flex items-center justify-center" style={{ width: currentDepth === 0 ? '0px' : '30px' }}>
             {currentDepth > 0 && i === currentDepth - 1 && (
-              <div className="w-px h-full bg-yellow-400/40 min-h-[20px]"></div>
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateTask(task.id, { is_starred: !task.is_starred });
+                  }}
+                  className={`w-[15px] h-[15px] flex items-center justify-center transition-colors group/star cursor-pointer`}
+                >
+                  <Star
+                    size={13}
+                    className={`${
+                      task.is_starred
+                        ? 'fill-yellow-400 text-yellow-400 opacity-100'
+                        : isFocused
+                          ? 'text-gray-500 opacity-30 hover:opacity-100'
+                          : 'opacity-0'
+                    } transition-all`}
+                  />
+                </button>
+                <div className="h-8 border-l border-gray-400/60 ml-1"></div>
+              </>
             )}
           </div>
         ))}
+        {/* Star for main task (depth 0) */}
+        {currentDepth === 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              updateTask(task.id, { is_starred: !task.is_starred });
+            }}
+            className={`w-[15px] h-[15px] flex items-center justify-center transition-colors group/star cursor-pointer`}
+          >
+            <Star
+              size={13}
+              className={`${
+                task.is_starred
+                  ? 'fill-yellow-400 text-yellow-400 opacity-100'
+                  : isFocused
+                    ? 'text-gray-500 opacity-30 hover:opacity-100'
+                    : 'opacity-0'
+              } transition-all`}
+            />
+          </button>
+        )}
       </div>
       {currentDepth === 0 && (
         <button
@@ -483,26 +523,6 @@ export const UnifiedTaskItem = React.memo(({
           <ChevronRight size={14} />
         </button>
       )}
-      <div className="relative flex flex-row items-center justify-start mt-1.5 flex-shrink-0 gap-0.5">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            updateTask(task.id, { is_starred: !task.is_starred });
-          }}
-          className={`w-[15px] h-[15px] flex items-center justify-center transition-colors group/star cursor-pointer`}
-        >
-          <Star
-            size={13}
-            className={`${
-              task.is_starred
-                ? 'fill-yellow-400 text-yellow-400 opacity-100'
-                : isFocused
-                  ? 'text-gray-500 opacity-30 hover:opacity-100'
-                  : 'opacity-0'
-            } transition-all`}
-          />
-        </button>
-        </div>
         <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
         {currentDepth === 0 ? (
           // Main task: text input only

@@ -1234,29 +1234,36 @@ export default function App() {
                           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                               <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                                   {tasks.map((t, i) => {
+                                      const prevTask = i > 0 ? tasks[i - 1] : null;
+                                      const needsDivider = prevTask && (prevTask.depth !== undefined && prevTask.depth > 0) && (t.depth === 0 || t.depth === undefined);
+                                      
                                       return (
-                                          <UnifiedTaskItem
-                                              key={t.id}
-                                              task={t}
-                                              index={i}
-                                              updateTask={handleUpdateTask}
-                                              setFocusedTaskId={setFocusedTaskId}
-                                              focusedTaskId={focusedTaskId}
-                                              onTaskClick={onTaskClickWithRange}
-                                              isSelected={selectedTaskIds.has(t.id)}
-                                              logs={logs}
-                                              onAddTaskAtCursor={handleAddTaskAtCursor}
-                                              onMergeWithPrevious={handleMergeWithPrevious}
-                                              onMergeWithNext={handleMergeWithNext}
-                                              onIndent={handleIndent}
-                                              onOutdent={handleOutdent}
-                                              onMoveUp={handleMoveUp}
-                                              onMoveDown={handleMoveDown}
-                                              onDelete={handleDeleteTask}
-                                              onCopy={handleCopyTask}
-                                              onFocusPrev={handleFocusPrev}
-                                              onFocusNext={handleFocusNext}
-                                          />
+                                          <div key={t.id}>
+                                              {needsDivider && (
+                                                  <div className="h-px bg-gray-700/50 my-2 mx-4"></div>
+                                              )}
+                                              <UnifiedTaskItem
+                                                  task={t}
+                                                  index={i}
+                                                  updateTask={handleUpdateTask}
+                                                  setFocusedTaskId={setFocusedTaskId}
+                                                  focusedTaskId={focusedTaskId}
+                                                  onTaskClick={onTaskClickWithRange}
+                                                  isSelected={selectedTaskIds.has(t.id)}
+                                                  logs={logs}
+                                                  onAddTaskAtCursor={handleAddTaskAtCursor}
+                                                  onMergeWithPrevious={handleMergeWithPrevious}
+                                                  onMergeWithNext={handleMergeWithNext}
+                                                  onIndent={handleIndent}
+                                                  onOutdent={handleOutdent}
+                                                  onMoveUp={handleMoveUp}
+                                                  onMoveDown={handleMoveDown}
+                                                  onDelete={handleDeleteTask}
+                                                  onCopy={handleCopyTask}
+                                                  onFocusPrev={handleFocusPrev}
+                                                  onFocusNext={handleFocusNext}
+                                              />
+                                          </div>
                                       );
                                   })}
                               </SortableContext>

@@ -1126,7 +1126,7 @@ export default function App() {
                 {/* Project List & Details Combined */}
                 <div className="bg-[#0f0f14] rounded-3xl border border-white/5 p-6 flex flex-col overflow-hidden">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Projects</h2>
+                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Lists</h2>
                         <button
                             onClick={() => {
                                 const n: Task = { id: Date.now(), name: 'New Project', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: 'New Project', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 };
@@ -1135,19 +1135,19 @@ export default function App() {
                             }}
                             className="p-2 rounded-xl border border-dashed border-white/10 text-gray-500 hover:text-white hover:border-white/20 transition-all flex items-center gap-2 text-sm font-bold"
                         >
-                            <Plus size={16} /> Add Project
+                            <Plus size={16} /> Add List
                         </button>
                     </div>
                     
                     {projects.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-600">
                             <BarChart2 size={48} className="mb-4 opacity-20" />
-                            <p className="font-bold">No projects yet. Create your first project!</p>
+                            <p className="font-bold">No lists yet. Create your first list!</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                             {/* Project List */}
-                            <div className="lg:col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
+                            <div className="col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
                                 {projects.map(project => (
                                         <button
                                         key={`${project.id}-${project.name || project.text}`}
@@ -1158,7 +1158,7 @@ export default function App() {
                                         className={`w-full text-left p-4 rounded-2xl transition-all border ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'bg-[#7c4dff]/10 border-[#7c4dff]/30' : 'bg-white/5 border-transparent hover:bg-white/10'}`}
                                     >
                                         <div className="flex justify-between items-center mb-2">
-                                            <span className={`font-bold text-sm truncate ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'text-white' : 'text-gray-400'}`}>{project.name || project.text || 'Untitled Project'}</span>
+                                            <span className={`font-bold text-sm truncate ${selectedProjectId === project.id || (selectedProject && (selectedProject.name || selectedProject.text) === (project.name || project.text)) ? 'text-white' : 'text-gray-400'} ${project.is_bold ? 'font-black' : ''}`}>{project.name || project.text || 'Untitled Project'}</span>
                                             {project.percent !== undefined && project.percent !== null && project.percent > 0 && (
                                                 <span className="text-xs font-bold text-blue-400">
                                                     {project.percent}%
@@ -1173,15 +1173,15 @@ export default function App() {
                             </div>
 
                             {/* Project Details */}
-                            <div className={`lg:col-span-2 overflow-y-auto max-h-[calc(100vh-200px)] ${showProjectDetails ? 'block' : 'hidden lg:block'}`}>
+                            <div className={`col-span-2 overflow-y-auto max-h-[calc(100vh-200px)] ${showProjectDetails ? 'block' : 'block'}`}>
                                 {selectedProject ? (
                                     <>
-                                        <div className="flex justify-between items-center mb-4 lg:hidden">
+                                        <div className="flex justify-between items-center mb-4 block">
                                             <button
                                                 onClick={() => setShowProjectDetails(false)}
                                                 className="p-2 rounded-xl bg-white/5 text-gray-400 hover:text-white flex items-center gap-2"
                                             >
-                                                <ChevronLeft size={16} /> Back to Projects
+                                                <ChevronLeft size={16} /> Back to Lists
                                             </button>
                                         </div>
                                         <div className="flex justify-between items-start mb-6">
@@ -1190,7 +1190,7 @@ export default function App() {
                                                     value={selectedProject.name || selectedProject.text || ''}
                                                     onChange={(e) => handleUpdateTask(selectedProject.id, { name: e.target.value, text: e.target.value })}
                                                     className="bg-transparent text-2xl font-black text-white outline-none w-full"
-                                                    placeholder="Project Name"
+                                                    placeholder="List Name"
                                                 />
                                                 <div className="flex items-center gap-4 mt-2">
                                                     <div className="flex items-center gap-2">
@@ -1200,8 +1200,18 @@ export default function App() {
                                                                 type="number"
                                                                 min="0"
                                                                 max="100"
-                                                                value={selectedProject.percent || 0}
-                                                                onChange={(e) => handleUpdateTask(selectedProject.id, { percent: parseInt(e.target.value) || 0 })}
+                                                                value={selectedProject.percent ?? ''}
+                                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    if (value === '') {
+                                                        handleUpdateTask(selectedProject.id, { percent: undefined });
+                                                    } else {
+                                                        const numValue = parseInt(value);
+                                                        if (!isNaN(numValue)) {
+                                                            handleUpdateTask(selectedProject.id, { percent: numValue });
+                                                        }
+                                                    }
+                                                }}
                                                                 className="bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs font-bold text-blue-400 outline-none w-[4ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                             />
                                                             <span className="text-xs font-bold text-gray-400">% Complete</span>
@@ -1403,7 +1413,17 @@ export default function App() {
                                         value={activeTask.percent !== undefined ? activeTask.percent : ''}
                                         onMouseDown={(e) => e.stopPropagation()}
                                         onClick={(e) => e.stopPropagation()}
-                                        onChange={(e) => handleUpdateTask(activeTask.id, { percent: parseInt(e.target.value) || 0 })}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            if (value === '') {
+                                                handleUpdateTask(activeTask.id, { percent: undefined });
+                                            } else {
+                                                const numValue = parseInt(value);
+                                                if (!isNaN(numValue)) {
+                                                    handleUpdateTask(activeTask.id, { percent: numValue });
+                                                }
+                                            }
+                                        }}
                                         className="bg-transparent text-[18px] font-black font-mono text-blue-400 outline-none w-[3ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
                                     <span className="text-[14px] font-black text-blue-400">%</span>

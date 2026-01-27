@@ -139,7 +139,7 @@ export const FlowView: React.FC<FlowViewProps> = ({
                        )}
                        <div className="h-px flex-1 bg-white/10" />
                    </div>
-                   <div className="px-0">
+                   <div className="-ml-7">
                        <SortableContext items={log.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                            {log.tasks.map((t, i) => (
                                <UnifiedTaskItem

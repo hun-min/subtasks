@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, Star } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { Task, DailyLog } from '../types';
 import { formatTimeShort, formatCompletionTime } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
@@ -355,10 +355,10 @@ export const UnifiedTaskItem = React.memo(({
       return;
     }
 
-    // Ctrl + D: Toggle Star
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+    // Ctrl + B: Toggle Bold
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
       e.preventDefault();
-      updateTask(task.id, { is_starred: !task.is_starred });
+      updateTask(task.id, { is_bold: !task.is_bold });
       return;
     }
 
@@ -491,24 +491,7 @@ export const UnifiedTaskItem = React.memo(({
         ))}
       </div>
       <div className="relative flex flex-row items-center justify-start mt-1.5 flex-shrink-0 gap-1">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            updateTask(task.id, { is_starred: !task.is_starred });
-          }}
-          className={`w-[15px] h-[15px] flex items-center justify-center transition-colors group/star cursor-pointer`}
-        >
-          <Star
-            size={13}
-            className={`${
-              task.is_starred
-                ? 'fill-yellow-400 text-yellow-400 opacity-100'
-                : isFocused
-                  ? 'text-gray-500 opacity-30 hover:opacity-100'
-                  : 'opacity-0'
-            } transition-all`}
-          />
-        </button>
+        <div className="w-[15px]" />
         <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
@@ -526,7 +509,7 @@ export const UnifiedTaskItem = React.memo(({
             onPaste={handlePaste}
             onCompositionStart={() => { isComposing.current = true; }}
             onCompositionEnd={() => { isComposing.current = false; }}
-            className={`w-full text-[15px] font-medium leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'}`}
+            className={`w-full text-[15px] leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'} ${task.is_bold ? 'font-black' : 'font-medium'}`}
             placeholder=""
         />
         {isFocused && localText === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
@@ -546,12 +529,8 @@ export const UnifiedTaskItem = React.memo(({
           const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
           const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
           let displayText = '';
-          if (task.percent !== undefined && task.percent !== null) {
-            if (task.percent > 0) {
-              displayText = `${task.percent}%`;
-            } else if (task.percent === 0) {
-              displayText = '0%';
-            }
+          if (task.percent !== undefined && task.percent !== null && task.percent > 0) {
+            displayText = `${task.percent}%`;
           }
           if (timerDisplay) {
             if (displayText) displayText += ` / ${timerDisplay}`;

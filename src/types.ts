@@ -25,6 +25,7 @@ export type Task = {
   subtasks?: Task[];
   depth?: number;
   is_starred?: boolean;
+  is_bold?: boolean;
 };
 
 export type DailyLog = {

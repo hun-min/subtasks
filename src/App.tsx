@@ -195,7 +195,65 @@ export default function App() {
   }, [currentMemo]);
 
   // New State: View Mode
-  const [viewMode, setViewMode] = useState<'day' | 'flow' | 'project'>('day');
+  const [viewMode, setViewMode] = useState<'day' | 'flow' | 'project' | 'todo'>('day');
+
+  // Todo view logic - show all tasks with Ctrl+B marked ones as headers
+  const todoTasks = useMemo(() => {
+    const result: (Task & { date?: string })[] = [];
+    const allTasks: (Task & { date?: string })[] = [...tasks];
+    
+    // Also include tasks from all logs for comprehensive todo view
+    logs.forEach(log => {
+      if (log.tasks && Array.isArray(log.tasks)) {
+        allTasks.push(...log.tasks.map(t => ({ ...t, date: log.date })));
+      }
+    });
+    
+    // Remove duplicates by ID, keeping the most recent version
+    const uniqueTasks = new Map<number, Task & { date?: string }>();
+    allTasks.forEach(task => {
+      const existing = uniqueTasks.get(task.id);
+      if (!existing || task.date && (!existing.date || new Date(task.date) > new Date(existing.date))) {
+        uniqueTasks.set(task.id, task);
+      }
+    });
+    
+    const finalTasks = Array.from(uniqueTasks.values());
+    const boldTasks = finalTasks.filter(t => t.is_bold);
+    
+    boldTasks.forEach(boldTask => {
+      // Add the bold task as a header
+      result.push(boldTask);
+      
+      // Find all subtasks (tasks with greater depth that come after the bold task)
+      const boldIndex = finalTasks.findIndex(t => t.id === boldTask.id);
+      const boldDepth = boldTask.depth || 0;
+      
+      for (let i = boldIndex + 1; i < finalTasks.length; i++) {
+        const currentTask = finalTasks[i];
+        const currentDepth = currentTask.depth || 0;
+        
+        // If we encounter another bold task at same or shallower depth, stop
+        if (currentTask.is_bold && currentDepth <= boldDepth) {
+          break;
+        }
+        
+        // Only include tasks that are deeper than the bold task
+        if (currentDepth > boldDepth) {
+          result.push(currentTask);
+        }
+      }
+    });
+    
+    // Sort: completed tasks at bottom, then by order (Todoist-like behavior)
+    result.sort((a, b) => {
+      if (a.status === 'completed' && b.status !== 'completed') return 1;
+      if (a.status !== 'completed' && b.status === 'completed') return -1;
+      return 0; // Keep original order
+    });
+    
+    return result;
+  }, [tasks, logs]);
 
   const activeTask = useMemo(() => {
     if (!focusedTaskId) return undefined;
@@ -786,8 +844,8 @@ export default function App() {
       if (log.tasks && Array.isArray(log.tasks)) {
         log.tasks.forEach(t => {
           const name = (t.name || t.text || '').trim();
-          // Only include tasks that have a percent value (project requirement)
-          if (name && t.percent !== undefined && t.percent !== null) {
+          // Only include bold tasks (Ctrl+B) for list view
+          if (name && t.is_bold) {
             // We want to keep a unique list by name.
             // By sorting logs ascending, the latest date's task will be the final value in the map.
             projectMap.set(name, t);
@@ -800,22 +858,49 @@ export default function App() {
     if (tasks && Array.isArray(tasks)) {
       tasks.forEach(t => {
         const name = (t.name || t.text || '').trim();
-        // Only include tasks that have a percent value (project requirement)
-        if (name && t.percent !== undefined && t.percent !== null) {
+        // Only include bold tasks (Ctrl+B) for list view
+        if (name && t.is_bold) {
           projectMap.set(name, t);
         }
       });
     }
 
     const result = Array.from(projectMap.values());
-    // Sort projects by 'updated_at' in descending order (most recently updated first)
+    
+    // Calculate daily percentage for each project
+    result.forEach(project => {
+      // Find today's log for this project
+      const todayLog = logs.find(log => log.date === viewDate.toDateString());
+      if (todayLog && todayLog.tasks) {
+        const todayProject = todayLog.tasks.find(t => 
+          (t.name || t.text || '').trim() === (project.name || project.text || '').trim()
+        );
+        if (todayProject) {
+          // Use today's percent if available, otherwise use 0
+          project.percent = todayProject.percent || 0;
+        } else {
+          // If project not found in today's log, set percent to 0
+          project.percent = 0;
+        }
+      } else {
+        // No tasks for today, set percent to 0
+        project.percent = 0;
+      }
+    });
+    
+    // Sort projects: 100% completed at bottom, then by updated_at descending (most recent first)
     result.sort((a, b) => {
+      // If one is 100% and the other is not, put 100% at bottom
+      if (a.percent === 100 && b.percent !== 100) return 1;
+      if (a.percent !== 100 && b.percent === 100) return -1;
+      
+      // Otherwise sort by updated_at descending (most recent first)
       const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
       const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-      return dateB - dateA; // Descending sort
+      return dateB - dateA;
     });
 
-    console.log('Global Projects List (filtered by percent):', result.map(p => p.name || p.text));
+    console.log('Global Projects List (filtered by bold):', result.map(p => p.name || p.text));
     return result;
   }, [logs, tasks]);
 
@@ -955,8 +1040,9 @@ export default function App() {
         <div className="flex gap-2 md:gap-3 items-center flex-nowrap flex-shrink-0">
           <div className="flex bg-[#1a1a1f] rounded-lg p-0.5 border border-white/10 flex-shrink-0">
               <button onClick={() => setViewMode('day')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'day' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>DAY</button>
-              <button onClick={() => setViewMode('project')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'project' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>PROJECT</button>
               <button onClick={() => setViewMode('flow')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'flow' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>FLOW</button>
+              <button onClick={() => setViewMode('todo')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'todo' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>TODO</button>
+              <button onClick={() => setViewMode('project')} className={`px-2 md:px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${viewMode === 'project' ? 'bg-[#7c4dff] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>LIST</button>
           </div>
 
           <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-gray-500 hover:text-white p-1 flex-shrink-0"><HelpCircle size={18} /></button>
@@ -1108,7 +1194,7 @@ export default function App() {
                 </div>
             </>
         ) : viewMode === 'flow' ? (
-            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-4xl mx-auto">
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4">
                 <FlowView
                     logs={logs}
                     currentSpaceId={String(currentSpace?.id || '')}
@@ -1118,8 +1204,50 @@ export default function App() {
                     onMoveTask={handleMoveTaskInFlow}
                     setFocusedTaskId={setFocusedTaskId}
                     focusedTaskId={focusedTaskId}
-                    onViewDateChange={setViewDate}
+                    onViewDateChange={(date) => {
+                        setViewDate(date);
+                        setViewMode('day');
+                    }}
                 />
+            </div>
+        ) : viewMode === 'todo' ? (
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-4xl mx-auto">
+                <div className="bg-[#0f0f14] rounded-3xl border border-white/5 p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Todos</h2>
+                    </div>
+                    <div className="-ml-7">
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={onDragEnd}
+                        >
+                            <SortableContext items={todoTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                                {todoTasks.map((t, i) => (
+                                    <UnifiedTaskItem
+                                        key={t.id}
+                                        task={t}
+                                        index={i}
+                                        updateTask={handleUpdateTask}
+                                        setFocusedTaskId={setFocusedTaskId}
+                                        focusedTaskId={focusedTaskId}
+                                        onTaskClick={onTaskClickWithRange}
+                                        logs={logs}
+                                        onAddTaskAtCursor={handleAddTaskAtCursor}
+                                        onMergeWithPrevious={handleMergeWithPrevious}
+                                        onMergeWithNext={handleMergeWithNext}
+                                        onIndent={handleIndent}
+                                        onOutdent={handleOutdent}
+                                        onMoveUp={handleMoveUp}
+                                        onMoveDown={handleMoveDown}
+                                        onFocusPrev={handleFocusPrev}
+                                        onFocusNext={handleFocusNext}
+                                    />
+                                ))}
+                            </SortableContext>
+                        </DndContext>
+                    </div>
+                </div>
             </div>
         ) : (
             <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4">
@@ -1145,9 +1273,9 @@ export default function App() {
                             <p className="font-bold">No lists yet. Create your first list!</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="flex gap-4">
                             {/* Project List */}
-                            <div className="col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
+                            <div className="w-1/3 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
                                 {projects.map(project => (
                                         <button
                                         key={`${project.id}-${project.name || project.text}`}
@@ -1165,15 +1293,19 @@ export default function App() {
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden">
-                                            <div className="h-full bg-[#7c4dff] transition-all" style={{ width: `${project.percent || 0}%` }} />
+                                        <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden"
+                                            style={{
+                                                background: `linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)`,
+                                            }}
+                                        >
+                                            <div className="h-full bg-[#050505] transition-all duration-500" style={{ left: `${project.percent || 0}%` }} />
                                         </div>
                                     </button>
                                 ))}
                             </div>
 
                             {/* Project Details */}
-                            <div className={`col-span-2 overflow-y-auto max-h-[calc(100vh-200px)] ${showProjectDetails ? 'block' : 'block'}`}>
+                            <div className={`flex-1 overflow-y-auto max-h-[calc(100vh-200px)] ${showProjectDetails ? 'block' : 'hidden'}`}>
                                 {selectedProject ? (
                                     <>
                                         <div className="flex justify-between items-center mb-4 block">

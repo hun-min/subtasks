@@ -16,6 +16,7 @@ export const UnifiedTaskItem = React.memo(({
   logs,
   onAddTaskAtCursor,
   isSelected,
+  date,
 
   onIndent,
   onOutdent,
@@ -36,6 +37,7 @@ export const UnifiedTaskItem = React.memo(({
   onMergeWithPrevious: (taskId: number, currentText: string) => void,
   onMergeWithNext: (taskId: number, currentText: string) => void,
   isSelected?: boolean,
+  date?: string,
   onIndent: (taskId: number) => void,
   onOutdent: (taskId: number) => void,
   onMoveUp: (taskId: number) => void,
@@ -529,8 +531,13 @@ export const UnifiedTaskItem = React.memo(({
           const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
           const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
           let displayText = '';
+          if (date) {
+            const dateObj = new Date(date);
+            displayText = dateObj.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+          }
           if (task.percent !== undefined && task.percent !== null && task.percent > 0) {
-            displayText = `${task.percent}%`;
+            if (displayText) displayText += ` / ${task.percent}%`;
+            else displayText = `${task.percent}%`;
           }
           if (timerDisplay) {
             if (displayText) displayText += ` / ${timerDisplay}`;

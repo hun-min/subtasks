@@ -1206,17 +1206,15 @@ export default function App() {
                     focusedTaskId={focusedTaskId}
                     onViewDateChange={(date) => {
                         setViewDate(date);
-                        setViewMode('day');
                     }}
                 />
             </div>
         ) : viewMode === 'todo' ? (
-            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 max-w-4xl mx-auto">
-                <div className="bg-[#0f0f14] rounded-3xl border border-white/5 p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Todos</h2>
-                    </div>
-                    <div className="-ml-7">
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Todos</h2>
+                </div>
+                <div className="-ml-7">
                         <DndContext
                             sensors={sensors}
                             collisionDetection={closestCenter}
@@ -1247,14 +1245,12 @@ export default function App() {
                             </SortableContext>
                         </DndContext>
                     </div>
-                </div>
             </div>
         ) : (
             <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4">
                 {/* Project List & Details Combined */}
-                <div className="bg-[#0f0f14] rounded-3xl border border-white/5 p-6 flex flex-col overflow-hidden">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Lists</h2>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Lists</h2>
                         <button
                             onClick={() => {
                                 const n: Task = { id: Date.now(), name: 'New Project', status: 'pending', indent: 0, parent: null, space_id: String(currentSpace?.id || ''), text: 'New Project', percent: 0, planTime: 0, actTime: 0, isTimerOn: false, depth: 0 };
@@ -1265,9 +1261,9 @@ export default function App() {
                         >
                             <Plus size={16} /> Add List
                         </button>
-                    </div>
-                    
-                    {projects.length === 0 ? (
+                </div>
+                
+                {projects.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-600">
                             <BarChart2 size={48} className="mb-4 opacity-20" />
                             <p className="font-bold">No lists yet. Create your first list!</p>
@@ -1293,12 +1289,12 @@ export default function App() {
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden"
+                                        <div className="h-1 w-20 bg-white/5 rounded-full overflow-hidden relative"
                                             style={{
                                                 background: `linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)`,
                                             }}
                                         >
-                                            <div className="h-full bg-[#050505] transition-all duration-500" style={{ left: `${project.percent || 0}%` }} />
+                                            <div className="absolute inset-0 bg-[#050505] transition-all duration-500" style={{ left: `${project.percent || 0}%` }} />
                                         </div>
                                     </button>
                                 ))}
@@ -1326,7 +1322,6 @@ export default function App() {
                                                 />
                                                 <div className="flex items-center gap-4 mt-2">
                                                     <div className="flex items-center gap-2">
-                                                        <BarChart2 size={14} className="text-gray-500" />
                                                         <div className="flex items-center gap-1">
                                                             <input
                                                                 type="number"
@@ -1478,7 +1473,6 @@ export default function App() {
                             </div>
                         </div>
                     )}
-                </div>
             </div>
         )}
         </div>

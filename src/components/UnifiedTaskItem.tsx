@@ -52,7 +52,8 @@ export const UnifiedTaskItem = React.memo(({
   const isFocused = focusedTaskId === task.id;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorRef = useRef<number | null>(null);
-  const isComposing = useRef(false);
+  const isComposingRef = useRef(false);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Local state for text input to prevent IME issues
   const [localText, setLocalText] = useState(task.name || task.text || '');
@@ -168,7 +169,7 @@ export const UnifiedTaskItem = React.memo(({
   }, [localText, isFocused, logs]); // Use localText
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (isComposing.current) return;
+    if (isComposingRef.current) return;
 
     // Handle backspace/delete for empty tasks or end-of-line merging
     if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -337,7 +338,7 @@ export const UnifiedTaskItem = React.memo(({
     if (e.key === 'Enter') {
       if (!e.shiftKey) {
         // 중복 입력 방지 (IME 조합 중이거나, 너무 빠른 연타)
-        if (isComposing.current || e.nativeEvent.isComposing) {
+        if (isComposingRef.current || e.nativeEvent.isComposing) {
             e.preventDefault(); // 조합 중 엔터도 막아서 이상 동작 방지
             return;
         }
@@ -440,7 +441,7 @@ export const UnifiedTaskItem = React.memo(({
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     // Composition 중일 때는 업데이트를 건너뛰거나 최소한의 처리만
-    if (isComposing.current) {
+    if (isComposingRef.current) {
         setLocalText(e.target.value);
         return;
     }
@@ -458,8 +459,28 @@ export const UnifiedTaskItem = React.memo(({
     }, 500); // 500ms debounce
   }, [task.id, updateTask]);
 
+  const handleTouchStart = useCallback(() => {
+    longPressTimer.current = setTimeout(() => {
+      updateTask(task.id, { is_bold: !task.is_bold });
+    }, 500); // 500ms long press
+  }, [task.id, task.is_bold, updateTask]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
   const handleBlur = useCallback((e: React.FocusEvent) => {
-      isComposing.current = false;
+      isComposingRef.current = false;
 
       // 플로팅 바로 포커스 이동하는 경우 focusedTaskId 유지
       if (e.relatedTarget?.closest?.('.floating-bar')) {
@@ -499,7 +520,12 @@ export const UnifiedTaskItem = React.memo(({
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>
       </div>
-      <div className="flex-1 relative" onClick={(e) => onTaskClick(e, task.id, index)}>
+      <div className="flex-1 relative" 
+           onClick={(e) => onTaskClick(e, task.id, index)}
+           onTouchStart={handleTouchStart}
+           onTouchEnd={handleTouchEnd}
+           onTouchMove={handleTouchMove}
+      >
         <AutoResizeTextarea
             inputRef={textareaRef}
             value={localText}
@@ -509,8 +535,8 @@ export const UnifiedTaskItem = React.memo(({
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            onCompositionStart={() => { isComposing.current = true; }}
-            onCompositionEnd={() => { isComposing.current = false; }}
+            onCompositionStart={() => { isComposingRef.current = true; }}
+            onCompositionEnd={() => { isComposingRef.current = false; }}
             className={`w-full text-[15px] leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'} ${task.is_bold ? 'font-black' : 'font-medium'}`}
             placeholder=""
         />
@@ -558,7 +584,7 @@ export const UnifiedTaskItem = React.memo(({
               )}
               {task.percent !== undefined && task.percent > 0 && (
                 <div 
-                  className="h-1 w-12 bg-white/5 rounded-full overflow-hidden relative"
+                  className="h-1 w-20 bg-white/5 rounded-full overflow-hidden relative"
                   style={{
                     background: `linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)`,
                   }}

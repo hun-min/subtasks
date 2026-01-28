@@ -207,9 +207,10 @@ export const useTasks = ({ currentDate, userId, spaceId }: UseTasksProps) => {
 };
 
 // --- 전체 로그 조회 훅 (캘린더, FlowView용) ---
-export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
+export const useAllTaskLogs = (userId?: string, spaceId?: string, options?: { limit?: number; offset?: number }) => {
+  const { limit = 50, offset = 0 } = options || {};
   return useQuery({
-    queryKey: ['all_tasks', userId, spaceId],
+    queryKey: ['all_tasks', userId, spaceId, limit, offset],
     queryFn: async () => {
       if (!userId || !spaceId) {
         // 비로그인 상태일 경우 로컬 스토리지에서 모든 tasks_ 키를 찾아 반환
@@ -235,12 +236,16 @@ export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
         }
       }
       
-      console.log('Fetching ALL task logs for projects list...');
-      const { data, error } = await supabase
+      console.log(`Fetching task logs with limit=${limit}, offset=${offset}...`);
+      let query = supabase
         .from('task_logs')
         .select('*')
         .eq('user_id', userId)
-        .eq('space_id', spaceId);
+        .eq('space_id', spaceId)
+        .order('date', { ascending: false })
+        .range(offset, offset + limit - 1);
+      
+      const { data, error } = await query;
         
       if (error) throw error;
       
@@ -248,7 +253,7 @@ export const useAllTaskLogs = (userId?: string, spaceId?: string) => {
         ...row,
         tasks: migrateTasks(typeof row.tasks === 'string' ? JSON.parse(row.tasks) : row.tasks),
       })) as DailyLog[];
-      console.log(`Fetched ${logs.length} logs`);
+      console.log(`Fetched ${logs.length} logs${limit ? ` (limited to ${limit})` : ''}`);
       return logs;
     },
     enabled: true,

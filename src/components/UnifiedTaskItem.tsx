@@ -3,7 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Check } from 'lucide-react';
 import { Task, DailyLog } from '../types';
-import { formatTimeShort, formatCompletionTime } from '../utils';
+import { formatTimeShort } from '../utils';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 
 export const UnifiedTaskItem = React.memo(({
@@ -16,7 +16,6 @@ export const UnifiedTaskItem = React.memo(({
   logs,
   onAddTaskAtCursor,
   isSelected,
-  date,
 
   onIndent,
   onOutdent,
@@ -37,7 +36,7 @@ export const UnifiedTaskItem = React.memo(({
   onMergeWithPrevious: (taskId: number, currentText: string) => void,
   onMergeWithNext: (taskId: number, currentText: string) => void,
   isSelected?: boolean,
-  date?: string,
+  date?: string, // 다른 날짜에서 완료 시간 숨기용
   onIndent: (taskId: number) => void,
   onOutdent: (taskId: number) => void,
   onMoveUp: (taskId: number) => void,
@@ -153,9 +152,8 @@ export const UnifiedTaskItem = React.memo(({
         const seen = new Set();
         [...logs].reverse().forEach(log => log.tasks.forEach(t => {
           const tName = (t.name || t.text || '').trim();
-          if (tName.toLowerCase().includes(query) && !seen.has(tName)) {
-            // [FIX] Strip leading / if it exists in the suggestion name (though usually it doesn't)
-            // The requirement is: "the suggestions should not include the leading slash (/). It should just show the task name."
+          // Only show bold tasks in suggestions (요구사항: 자동 완성은 무조건 두꺼운 글씨만)
+          if (t.is_bold && tName.toLowerCase().includes(query) && !seen.has(tName)) {
             const displayName = tName.startsWith('/') ? tName.slice(1) : tName;
             matches.push({ ...t, name: displayName, text: displayName });
             seen.add(tName);
@@ -231,6 +229,14 @@ export const UnifiedTaskItem = React.memo(({
                 // But for /history specifically, we want to trigger the modal.
             }
         }
+    }
+
+    // Alt + 1~9: Switch space
+    if (e.altKey && /^[1-9]$/.test(e.key)) {
+      e.preventDefault();
+      const index = parseInt(e.key) - 1;
+      (window as any).dispatchEvent(new CustomEvent('switch-space', { detail: { index } }));
+      return;
     }
 
     // Handle /history command on Enter
@@ -362,6 +368,20 @@ export const UnifiedTaskItem = React.memo(({
     if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
       e.preventDefault();
       updateTask(task.id, { is_bold: !task.is_bold });
+      // Play bold toggle sound
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 800;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.1);
+      } catch (e) {}
       return;
     }
 
@@ -515,7 +535,7 @@ export const UnifiedTaskItem = React.memo(({
       </div>
       <div className="relative flex flex-row items-center justify-start mt-1.5 flex-shrink-0 gap-1">
         <div className="w-[15px]" />
-        <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
+        <button onClick={() => { const newStatus = task.status === 'completed' ? 'pending' : 'completed'; updateTask(task.id, { status: newStatus, isTimerOn: false }); }} className={`flex-shrink-0 w-[15px] h-[15px] ml-[2px] border-[1.2px] rounded-[3px] flex items-center justify-center transition-all ${getStatusColor()}`}>
           {task.status === 'completed' && <Check size={11} className="text-white stroke-[3]" />}
           {task.isTimerOn && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
         </button>
@@ -537,7 +557,7 @@ export const UnifiedTaskItem = React.memo(({
             onPaste={handlePaste}
             onCompositionStart={() => { isComposingRef.current = true; }}
             onCompositionEnd={() => { isComposingRef.current = false; }}
-            className={`w-full text-[15px] leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'} ${task.is_bold ? 'font-black' : 'font-medium'}`}
+            className={`w-full text-[15px] leading-[1.2] py-1 ${task.status === 'completed' ? 'text-gray-500 line-through decoration-[1.5px]' : 'text-[#e0e0e0]'} ${task.is_bold ? 'font-black text-yellow-400' : 'font-medium'}`}
             placeholder=""
         />
         {isFocused && localText === '' && <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-gray-700 tracking-widest uppercase opacity-40">/ history</div>}
@@ -555,12 +575,9 @@ export const UnifiedTaskItem = React.memo(({
       <div className="flex flex-col items-end gap-1 pt-1.5 flex-shrink-0">
         {(() => {
           const timerDisplay = ((task.actTime || 0) + elapsedSeconds > 0 || task.isTimerOn) ? formatTimeShort((task.actTime || 0) + elapsedSeconds) : null;
-          const completionTimeDisplay = (task.status === 'completed' && task.end_time) ? `at ${formatCompletionTime(task.end_time)}` : null;
           let displayText = '';
-          if (date) {
-            const dateObj = new Date(date);
-            displayText = dateObj.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
-          }
+          // date가 있을 때 (다른 날 작업 볼 때) 날짜 표시 안함
+          // if (date) { ... }
           if (task.percent !== undefined && task.percent !== null && task.percent > 0) {
             if (displayText) displayText += ` / ${task.percent}%`;
             else displayText = `${task.percent}%`;
@@ -569,15 +586,11 @@ export const UnifiedTaskItem = React.memo(({
             if (displayText) displayText += ` / ${timerDisplay}`;
             else displayText = timerDisplay;
           }
-          if (completionTimeDisplay) {
-            if (displayText) displayText += ` / ${completionTimeDisplay}`;
-            else displayText = completionTimeDisplay;
-          }
           return (
             <div className="flex flex-col items-end gap-1">
               {displayText && (
                 <span
-                  className={`text-[10px] font-mono whitespace-nowrap ${task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
+                  className={`text-[10px] font-mono whitespace-nowrap ${task.is_bold ? 'text-yellow-400 font-bold' : task.isTimerOn ? 'text-[#7c4dff] font-bold' : 'text-gray-500/80'}`}
                 >
                   {displayText}
                 </span>

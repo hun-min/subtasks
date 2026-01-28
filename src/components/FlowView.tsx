@@ -26,6 +26,60 @@ export const FlowView: React.FC<FlowViewProps> = ({
   focusedTaskId,
   onViewDateChange
 }) => {
+    const touchStartX = useRef<number | null>(null);
+    const touchStartY = useRef<number | null>(null);
+    const mouseStartX = useRef<number | null>(null);
+    const minSwipeDistance = 50;
+
+    const changeDate = (direction: 'prev' | 'next') => {
+        if (!onViewDateChange || logs.length === 0) return;
+        const latestDate = new Date(logs[0].date);
+        const newDate = new Date(latestDate);
+        if (direction === 'prev') {
+            newDate.setDate(newDate.getDate() - 1);
+        } else {
+            newDate.setDate(newDate.getDate() + 1);
+        }
+        onViewDateChange(newDate);
+    };
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        touchStartX.current = e.touches[0].clientX;
+        touchStartY.current = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (touchStartX.current === null || touchStartY.current === null) return;
+        
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        
+        const deltaX = touchEndX - touchStartX.current;
+        const deltaY = touchEndY - touchStartY.current;
+        
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > minSwipeDistance) {
+            if (deltaX > 0) changeDate('prev');
+            else if (deltaX < 0) changeDate('next');
+        }
+        
+        touchStartX.current = null;
+        touchStartY.current = null;
+    };
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        mouseStartX.current = e.clientX;
+    };
+
+    const handleMouseUp = (e: React.MouseEvent) => {
+        if (mouseStartX.current === null) return;
+        const deltaX = e.clientX - mouseStartX.current;
+        if (Math.abs(deltaX) > minSwipeDistance) {
+            if (deltaX > 0) changeDate('prev');
+            else if (deltaX < 0) changeDate('next');
+        }
+        mouseStartX.current = null;
+    };
+
     // 1. Flatten Logs into Active Days (filtering out empty ones)
     const activeDays = useMemo(() => {
         // Sort logs by date descending (today first)
@@ -117,7 +171,13 @@ export const FlowView: React.FC<FlowViewProps> = ({
 
 
     return (
-        <div className="flex flex-col gap-0 pb-48">
+        <div 
+            className="flex flex-col gap-0 pb-48 select-none"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+        >
            {activeDays.length === 0 && (
                <div className="text-center text-gray-500 py-20">No tasks found. Switch to Day View to add tasks.</div>
            )}
@@ -130,6 +190,18 @@ export const FlowView: React.FC<FlowViewProps> = ({
                return (
                <div key={log.date} className="group mb-8 flow-section" data-date={log.date}>
                    <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-sm py-2 px-6 border-b border-white/5 mb-2 flex items-center gap-4 flow-date-header" data-date={log.date}>
+                       <button 
+                           onClick={() => {
+                               const hasBold = log.tasks.some(t => t.is_bold);
+                               log.tasks.forEach(t => {
+                                   onUpdateTask(log.date, t.id, { is_bold: !hasBold });
+                               });
+                           }}
+                           className={`w-6 h-6 rounded flex items-center justify-center border transition-colors ${log.tasks.some(t => t.is_bold) ? 'bg-yellow-400 border-yellow-500 text-black' : 'border-gray-600 text-gray-600 hover:border-gray-400'}`}
+                           title="이 날짜의 모든 작업을 두껍게/보통으로"
+                       >
+                           <span className="text-xs font-black">B</span>
+                       </button>
                        <h3 className="text-xl font-black text-white">{dateLabel}</h3>
                        {streakAtDate > 1 && (
                            <div className="flex items-center gap-0.5 ml-2">

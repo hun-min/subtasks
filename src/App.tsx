@@ -115,6 +115,19 @@ const MemoCollectionModal = React.memo(({ logs, onClose }: { logs: DailyLog[], o
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [logs]);
 
+  // 두껍게 작업들만 추출
+  const boldTasks = useMemo(() => {
+    const tasks: { date: string; task: Task }[] = [];
+    logs.forEach(log => {
+      log.tasks.forEach(t => {
+        if (t.is_bold) {
+          tasks.push({ date: log.date, task: t });
+        }
+      });
+    });
+    return tasks.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [logs]);
+
   return (
     <div className="fixed inset-0 z-[700] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[80vh] overflow-y-auto">
@@ -122,8 +135,30 @@ const MemoCollectionModal = React.memo(({ logs, onClose }: { logs: DailyLog[], o
           <div><h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase mb-1">MEMO COLLECTION</h2><h1 className="text-xl font-black text-white">All Memos</h1></div>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X /></button>
         </div>
-        {memoList.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">No memos found.</div>
+        
+        {/* 두껍게 작업 섹션 */}
+        {boldTasks.length > 0 && (
+          <div className="mb-6">
+            <div className="text-xs text-yellow-400 font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-yellow-400 rounded-full" />
+              Bold Tasks
+            </div>
+            <div className="space-y-2">
+              {boldTasks.slice(0, 10).map(({ date, task }) => (
+                <div key={task.id} className="flex items-center gap-2 bg-[#1a1a1f] border border-yellow-400/20 rounded-lg px-3 py-2">
+                  <span className="text-xs text-yellow-400 font-mono">{date}</span>
+                  <span className="text-white font-bold">{task.name || task.text}</span>
+                </div>
+              ))}
+              {boldTasks.length > 10 && (
+                <div className="text-xs text-gray-500 text-center">+{boldTasks.length - 10} more</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {memoList.length === 0 && boldTasks.length === 0 ? (
+          <div className="text-center text-gray-500 py-8">No memos or bold tasks found.</div>
         ) : (
           <div className="space-y-4">
             {memoList.map(log => {
@@ -151,9 +186,25 @@ export default function App() {
   const { currentSpace, spaces, setCurrentSpace } = useSpace();
 
   const [viewDate, setViewDate] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lastViewDate');
+      if (saved) {
+        const parsed = new Date(saved);
+        if (!isNaN(parsed.getTime())) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
+
+  // viewDate가 변경될 때 localStorage에 저장
+  useEffect(() => {
+    try {
+      localStorage.setItem('lastViewDate', viewDate.toISOString());
+    } catch (e) {}
+  }, [viewDate]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const isInternalUpdate = useRef(false);
 
@@ -164,7 +215,7 @@ export default function App() {
       spaceId: currentSpace?.id ? String(currentSpace.id) : undefined
   });
 
-  const { data: allLogs } = useAllTaskLogs(user?.id, currentSpace?.id ? String(currentSpace.id) : undefined);
+  const { data: allLogs } = useAllTaskLogs(user?.id, currentSpace?.id ? String(currentSpace.id) : undefined, { limit: 50 }); // Limit to 50 logs for completed tasks
   const logs = allLogs || [];
 
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
@@ -284,6 +335,30 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [activeTask?.isTimerOn, activeTask?.timerStartTime, activeTask?.id]);
+
+  // Ctrl+M: Toggle Memo Collection Modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
+        e.preventDefault();
+        setShowMemoCollection(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Alt+1~9: Switch space
+  useEffect(() => {
+    const handleSwitchSpace = (e: any) => {
+      const { index } = e.detail;
+      if (spaces && spaces[index]) {
+        setCurrentSpace(spaces[index]);
+      }
+    };
+    window.addEventListener('switch-space', handleSwitchSpace);
+    return () => window.removeEventListener('switch-space', handleSwitchSpace);
+  }, [spaces, setCurrentSpace]);
 
   // Floating bar timer input real-time update
   useEffect(() => {
@@ -1064,7 +1139,7 @@ export default function App() {
                        setViewDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
                      }}>
                        <div className="text-[11px] text-gray-500 uppercase tracking-widest font-bold">{year}</div>
-                       <div className="font-black text-xl text-white">{viewDate.toLocaleString('default', { month: 'long' })}</div>
+                       <div className="font-black text-xl text-white">{viewDate.getFullYear() + '-' + (viewDate.getMonth() + 1) + '-' + viewDate.getDate()}</div>
                      </div>
                      <button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-white/5 rounded-full text-gray-400"><ChevronRight size={22} /></button>
                      <button onClick={() => {
@@ -1210,7 +1285,7 @@ export default function App() {
                 />
             </div>
         ) : viewMode === 'todo' ? (
-            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4">
+            <div className="flex flex-col h-[calc(100vh-120px)] gap-4 p-4 pb-0">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Todos</h2>
                 </div>
@@ -1372,7 +1447,7 @@ export default function App() {
 
                                                 return Object.entries(grouped).map(([date, subtasks]) => (
                                                     <div key={date} className="space-y-1">
-                                                        <div className="text-[10px] font-bold text-[#7c4dff]/50 uppercase tracking-tighter px-2 mb-1">{date}</div>
+                                                        <div className="text-[10px] font-bold text-[#7c4dff]/50 uppercase tracking-tighter px-2 mb-1">{(() => { const d = new Date(date); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); })()}</div>
                                                         <div className="-ml-7">
                                                             {subtasks.map((t, i) => (
                                                                 <div key={t.id}>
@@ -1477,7 +1552,7 @@ export default function App() {
         )}
         </div>
         {(activeTask || showBulkActions) && (
-          <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200 pointer-events-none" style={{ bottom: 'calc(24px + var(--keyboard-offset, 0px))' }}>
+          <div className="fixed left-0 right-0 z-[500] flex justify-center px-4 transition-all duration-200 pointer-events-none" style={{ bottom: 'calc(80px + var(--keyboard-offset, 0px))' }}>
               <div 
                   className="bg-[#121216]/95 backdrop-blur-3xl border border-white/10 rounded-[32px] p-2 flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth shadow-2xl pointer-events-auto floating-bar"
                   onMouseDown={(e) => e.stopPropagation()}
@@ -1597,7 +1672,7 @@ export default function App() {
             <div className="bg-[#0a0a0f]/90 border border-white/10 rounded-3xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}><ChevronLeft size={20} className="text-gray-500" /></button>
-                <span className="font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+                <span className="font-bold text-white">{viewDate.getFullYear() + '-' + (viewDate.getMonth() + 1) + '-' + viewDate.getDate()}</span>
                 <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}><ChevronRight size={20} className="text-gray-500" /></button>
               </div>
               <div className="grid grid-cols-7 gap-2">

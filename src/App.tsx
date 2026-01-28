@@ -1329,16 +1329,16 @@ export default function App() {
                                                                 max="100"
                                                                 value={selectedProject.percent ?? ''}
                                                                 onChange={(e) => {
-                                                    const value = e.target.value;
-                                                    if (value === '') {
-                                                        handleUpdateTask(selectedProject.id, { percent: undefined });
-                                                    } else {
-                                                        const numValue = parseInt(value);
-                                                        if (!isNaN(numValue)) {
-                                                            handleUpdateTask(selectedProject.id, { percent: numValue });
-                                                        }
-                                                    }
-                                                }}
+                                                                    const value = e.target.value;
+                                                                    if (value === '') {
+                                                                        handleUpdateTask(selectedProject.id, { percent: undefined });
+                                                                    } else {
+                                                                        const numValue = parseInt(value);
+                                                                        if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                                                                            handleUpdateTask(selectedProject.id, { percent: numValue });
+                                                                        }
+                                                                    }
+                                                                }}
                                                                 className="bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs font-bold text-blue-400 outline-none w-[4ch] text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                             />
                                                             <span className="text-xs font-bold text-gray-400">% Complete</span>
